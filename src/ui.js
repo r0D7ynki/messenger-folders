@@ -207,16 +207,16 @@
           const btnL = bar.querySelector('.mf-scroll-btn-left');
           if (btnL) {
             btnL.innerHTML = ICONS.chevronLeft;
-            btnL.style.top = '2px';
+            btnL.style.top = '-2px';
             btnL.style.transform = 'none';
-            btnL.style.left = '-4px';
+            btnL.style.left = '-8px';
           }
           const btnR = bar.querySelector('.mf-scroll-btn-right');
           if (btnR) {
             btnR.innerHTML = ICONS.chevronRight;
-            btnR.style.top = '2px';
+            btnR.style.top = '-2px';
             btnR.style.transform = 'none';
-            btnR.style.right = '-4px';
+            btnR.style.right = '-8px';
           }
 
           // Zaktualizuj stan, nazwy, ikony, kolory i liczniki w istniejących elementach
@@ -275,9 +275,9 @@
       btnLeft.className = 'mf-scroll-btn mf-scroll-btn-left';
       btnLeft.setAttribute('aria-label', 'Przewiń foldery w lewo');
       btnLeft.innerHTML = ICONS.chevronLeft;
-      btnLeft.style.top = '2px';
+      btnLeft.style.top = '-2px';
       btnLeft.style.transform = 'none';
-      btnLeft.style.left = '-4px';
+      btnLeft.style.left = '-8px';
 
       // Kontener przewijalny z pigułkami
       const container = document.createElement('div');
@@ -290,9 +290,9 @@
       btnRight.className = 'mf-scroll-btn mf-scroll-btn-right';
       btnRight.setAttribute('aria-label', 'Przewiń foldery w prawo');
       btnRight.innerHTML = ICONS.chevronRight;
-      btnRight.style.top = '2px';
+      btnRight.style.top = '-2px';
       btnRight.style.transform = 'none';
-      btnRight.style.right = '-4px';
+      btnRight.style.right = '-8px';
 
       // Tworzenie pigułek folderów
       folderList.forEach((folder) => {
@@ -488,11 +488,17 @@
 
           const titleElement = rowElement.querySelector('[role="heading"], span[dir="auto"], strong');
           if (titleElement && titleElement.parentElement) {
+            titleElement.parentElement.style.alignItems = 'center';
             titleElement.insertAdjacentElement('afterend', badge);
           } else {
             rowElement.appendChild(badge);
           }
         }
+
+        badge.style.alignSelf = 'center';
+        badge.style.marginTop = 'auto';
+        badge.style.marginBottom = 'auto';
+        badge.style.verticalAlign = 'middle';
 
         const color = currentFolder.color || '#0084FF';
         if (badge.dataset.folderId !== currentFolder.id) {
