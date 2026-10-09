@@ -22,7 +22,8 @@
     unassign: `<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z"/></svg>`,
     palette: `<svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l1.9-1.9C9.22 19.49 10.57 20 12 20c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-5 9c-.83 0-1.5-.67-1.5-1.5S6.17 9 7 9s1.5.67 1.5 1.5S7.83 12 7 12zm3-4c-.83 0-1.5-.67-1.5-1.5S9.17 5 10 5s1.5.67 1.5 1.5S10.83 8 10 8zm4 0c-.83 0-1.5-.67-1.5-1.5S13.17 5 14 5s1.5.67 1.5 1.5S14.83 8 14 8zm3 4c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>`,
     settings: `<svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>`,
-    users: `<svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>`
+    users: `<svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>`,
+    arrowBack: `<svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>`
   };
 
   // Domyślny zestaw emotikonów do wyboru
@@ -494,39 +495,18 @@
         badge.remove();
       }
 
-      // 2. Obsługa przycisku folderu w wierszu (pojawia się przy najechaniu)
-      let actionBtn = rowElement.querySelector('.mf-folder-btn');
-      if (!actionBtn) {
-        actionBtn = document.createElement('button');
-        actionBtn.type = 'button';
-        actionBtn.className = 'mf-folder-btn';
-        actionBtn.setAttribute('data-mf-btn', 'true');
-        actionBtn.title = currentFolder ? 'Zmień folder rozmowy' : 'Przypisz do folderu';
-        actionBtn.setAttribute('aria-label', actionBtn.title);
-        actionBtn.innerHTML = ICONS.folder;
-
-        rowElement.style.position = rowElement.style.position || 'relative';
-        rowElement.appendChild(actionBtn);
+      // 2. Usunięcie przycisku folderu przy chacie (dodawanie osób odbywa się w oknie folderu)
+      const actionBtn = rowElement.querySelector('.mf-folder-btn');
+      if (actionBtn) {
+        actionBtn.remove();
       }
-
-      if (currentFolder && currentFolder.id !== 'all' && currentFolder.id !== 'uncategorized') {
-        actionBtn.style.color = currentFolder.color || '#0084FF';
-      } else {
-        actionBtn.style.color = '';
-      }
-
-      actionBtn.onclick = (event) => {
-        event.stopPropagation();
-        event.preventDefault();
-        if (onAssign) onAssign(actionBtn, threadId);
-      };
 
       // 3. Menu pod prawym przyciskiem myszy na wierszu rozmowy
       rowElement.oncontextmenu = (event) => {
         if (!event.shiftKey) {
           event.preventDefault();
           event.stopPropagation();
-          if (onAssign) onAssign(actionBtn || rowElement, threadId);
+          if (onAssign) onAssign(badge || rowElement, threadId);
         }
       };
     }
@@ -606,9 +586,10 @@
      * @param {Object} options
      * @param {Object|null} options.folder - Obiekt folderu do edycji lub null dla nowego
      * @param {Function} options.onSave - Callback zapisu: ({ id, name, icon, color }) => void
-     * @param {Function} options.onDelete - Callback usunięcia: (folderId) => void
+     * @param {Function} [options.onDelete] - Callback usunięcia: (folderId) => void
+     * @param {Function} [options.onBack] - Callback powrotu do poprzedniego widoku
      */
-    showFolderModal({ folder = null, onSave, onDelete } = {}) {
+    showFolderModal({ folder = null, onSave, onDelete, onBack = null } = {}) {
       this.closeModal();
 
       const isEdit = Boolean(folder && folder.id);
@@ -628,12 +609,39 @@
       // Nagłówek okna
       const header = document.createElement('div');
       header.className = 'mf-modal-header';
-      header.innerHTML = `
-        <h2 class="mf-modal-title">${isEdit ? 'Edytuj folder' : 'Nowy folder'}</h2>
-        <button type="button" class="mf-modal-close-btn" aria-label="Zamknij okno">
-          ${ICONS.close}
-        </button>
-      `;
+
+      const headerLeft = document.createElement('div');
+      headerLeft.className = 'mf-modal-header-left';
+
+      if (onBack) {
+        const backBtn = document.createElement('button');
+        backBtn.type = 'button';
+        backBtn.className = 'mf-modal-back-btn';
+        backBtn.title = 'Wróć do wszystkich folderów';
+        backBtn.setAttribute('aria-label', 'Wróć do wszystkich folderów');
+        backBtn.innerHTML = ICONS.arrowBack;
+        backBtn.onclick = (e) => {
+          e.stopPropagation();
+          this.closeModal();
+          onBack();
+        };
+        headerLeft.appendChild(backBtn);
+      }
+
+      const modalTitle = document.createElement('h2');
+      modalTitle.className = 'mf-modal-title';
+      modalTitle.textContent = isEdit ? 'Edytuj folder' : 'Nowy folder';
+      headerLeft.appendChild(modalTitle);
+
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'mf-modal-close-btn';
+      closeBtn.setAttribute('aria-label', 'Zamknij okno');
+      closeBtn.innerHTML = ICONS.close;
+      closeBtn.onclick = () => this.closeModal();
+
+      header.appendChild(headerLeft);
+      header.appendChild(closeBtn);
 
       // Ciało okna z polami konfiguracji
       const body = document.createElement('div');
@@ -942,7 +950,10 @@
       cancelBtn.type = 'button';
       cancelBtn.className = 'mf-btn mf-btn-secondary';
       cancelBtn.textContent = 'Anuluj';
-      cancelBtn.addEventListener('click', () => this.closeModal());
+      cancelBtn.addEventListener('click', () => {
+        this.closeModal();
+        if (onBack) onBack();
+      });
 
       const saveBtn = document.createElement('button');
       saveBtn.type = 'button';
@@ -1124,6 +1135,9 @@
             onSave: async (newFolder) => {
               if (this.storage) await this.storage.saveFolder(newFolder);
               this.showSettingsModal(options);
+            },
+            onBack: () => {
+              this.showSettingsModal(options);
             }
           });
         };
@@ -1171,6 +1185,9 @@
               },
               onDelete: async (fId) => {
                 if (this.storage) await this.storage.deleteFolder(fId);
+                this.showSettingsModal(options);
+              },
+              onBack: () => {
                 this.showSettingsModal(options);
               }
             });

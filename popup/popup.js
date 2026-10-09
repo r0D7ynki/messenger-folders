@@ -431,6 +431,10 @@
     dom.btnOpenCreate.addEventListener('click', () => openDialog(null));
     dom.dialogBtnCancel.addEventListener('click', closeDialog);
     dom.dialogClose.addEventListener('click', closeDialog);
+    const dialogBackBtn = document.getElementById('mf-dialog-back-btn');
+    if (dialogBackBtn) {
+      dialogBackBtn.addEventListener('click', closeDialog);
+    }
 
     dom.dialogInputName.addEventListener('input', updateDialogPreview);
     if (dom.dialogThreadsSearch) {

@@ -261,11 +261,12 @@ const badge = mockRow.querySelector('.mf-thread-badge');
 assert.ok(badge, 'Plakietka folderu powinna zostać wstrzyknięta');
 assert.strictEqual(badge.querySelector('.mf-thread-badge-text').textContent, 'Praca');
 
+// Przycisk folderu na czacie został usunięty zgodnie z życzeniem użytkownika
 const folderBtn = mockRow.querySelector('.mf-folder-btn');
-assert.ok(folderBtn, 'Przycisk folderu powinien zostać dodany do wiersza');
+assert.strictEqual(folderBtn, null, 'Przycisk folderu przy czacie nie powinien być tworzony');
 
-folderBtn.dispatchEvent({ type: 'click', stopPropagation() {}, preventDefault() {} });
-assert.strictEqual(assignCalled, true, 'Kliknięcie przycisku powinno wywołać onAssign');
+badge.dispatchEvent({ type: 'click', stopPropagation() {}, preventDefault() {} });
+assert.strictEqual(assignCalled, true, 'Kliknięcie plakietki powinno wywołać onAssign');
 console.log('✓ injectFolderBadge() działa poprawnie.');
 
 // 4. renderHeaderPill
@@ -308,6 +309,18 @@ saveModalBtn.dispatchEvent({ type: 'click' });
 assert.ok(savedFolder, 'Folder powinien zostać zapisany');
 assert.strictEqual(savedFolder.name, 'Ważne kontakty');
 assert.strictEqual(ui.activeModal, null, 'Okno modalne powinno zostać zamknięte po zapisie');
+
+// Weryfikacja przycisku powrotu w oknie folderu
+let backCalled = false;
+ui.showFolderModal({
+  folder: sampleFolders[1],
+  onBack: () => { backCalled = true; }
+});
+const backBtn = ui.activeModal.querySelector('.mf-modal-back-btn');
+assert.ok(backBtn, 'Okno modalne folderu musi zawierać przycisk powrotu, gdy przekazano onBack');
+backBtn.dispatchEvent({ type: 'click', stopPropagation() {} });
+assert.strictEqual(backCalled, true, 'Kliknięcie przycisku powrotu powinno wywołać onBack');
+assert.strictEqual(ui.activeModal, null, 'Okno modalne powinno zostać zamknięte po kliknięciu powrotu');
 console.log('✓ showFolderModal() działa poprawnie.');
 
 // 6. showAssignDropdown
@@ -356,6 +369,7 @@ assert.ok(cssContent.includes('--web-wash'), 'content.css musi korzystać ze zmi
 assert.ok(cssContent.includes('--primary-text'), 'content.css musi korzystać ze zmiennej --primary-text');
 assert.ok(cssContent.includes('--secondary-text'), 'content.css musi korzystać ze zmiennej --secondary-text');
 assert.ok(cssContent.includes('.mf-folder-settings-btn'), 'content.css musi stylizować .mf-folder-settings-btn');
+assert.ok(cssContent.includes('.mf-modal-back-btn'), 'content.css musi stylizować .mf-modal-back-btn');
 assert.ok(cssContent.includes('.mf-thread-hidden'), 'content.css musi zawierać regułę .mf-thread-hidden');
 console.log('✓ content.css zawiera wszystkie wymagane selektory i zmienne motywu.');
 

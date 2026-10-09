@@ -206,7 +206,7 @@
   align-items: center !important;
   justify-content: center !important;
   position: absolute !important;
-  top: 7px !important;
+  top: 5px !important;
   bottom: auto !important;
   transform: none !important;
   width: 26px !important;
@@ -243,26 +243,26 @@
   background: var(--mf-bg-wash) !important;
   color: var(--mf-text-primary) !important;
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.24) !important;
-  transform: scale(1.08) !important;
+  transform: scale(1.06) !important;
 }
 
 .mf-scroll-btn-left {
-  left: 3px !important;
+  left: 1px !important;
 }
 
 .mf-scroll-btn-right {
-  right: 3px !important;
+  right: 1px !important;
 }
 
 .mf-scroll-btn svg {
   display: block !important;
-  width: 15px !important;
-  height: 15px !important;
-  min-width: 15px !important;
-  min-height: 15px !important;
-  max-width: 15px !important;
-  max-height: 15px !important;
-  margin: auto !important;
+  width: 14px !important;
+  height: 14px !important;
+  min-width: 14px !important;
+  min-height: 14px !important;
+  max-width: 14px !important;
+  max-height: 14px !important;
+  margin: 0 !important;
   fill: currentColor !important;
   flex-shrink: 0 !important;
   pointer-events: none !important;
@@ -544,49 +544,14 @@
   white-space: nowrap;
 }
 
-/* Przycisk folderu na wierszu rozmowy (zawsze dostępny i widoczny) */
+/* Przycisk folderu na wierszu rozmowy - usunięty zgodnie z życzeniem użytkownika */
 .mf-folder-btn {
-  position: absolute !important;
-  right: 64px !important;
-  top: 50% !important;
-  transform: translateY(-50%) !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  width: 26px !important;
-  height: 26px !important;
-  border-radius: var(--mf-radius-pill) !important;
-  background: var(--mf-bg-surface) !important;
-  color: var(--mf-text-secondary) !important;
-  border: 1px solid var(--mf-border) !important;
-  box-shadow: var(--mf-shadow-sm) !important;
-  cursor: pointer !important;
-  pointer-events: auto !important;
-  opacity: 0.75 !important;
-  visibility: visible !important;
-  z-index: 20 !important;
-  transition: all var(--mf-transition-fast) !important;
-}
-
-[role="row"]:hover .mf-folder-btn,
-[role="gridcell"]:hover .mf-folder-btn,
-[role="listitem"]:hover .mf-folder-btn,
-div:hover > .mf-folder-btn,
-.mf-folder-btn:hover,
-.mf-folder-btn.mf-active {
-  opacity: 1 !important;
-  visibility: visible !important;
-  background: var(--mf-bg-wash) !important;
-  color: var(--mf-primary) !important;
-  border-color: var(--mf-primary) !important;
-  transform: translateY(-50%) scale(1.08) !important;
-  box-shadow: var(--mf-shadow-md) !important;
-}
-
-.mf-folder-btn svg {
-  width: 14px !important;
-  height: 14px !important;
-  fill: currentColor !important;
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
 }
 
 
@@ -914,6 +879,42 @@ div:hover > .mf-folder-btn,
   justify-content: space-between;
   padding: 16px 20px;
   border-bottom: 1px solid var(--mf-border);
+}
+
+.mf-modal-header-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+.mf-modal-back-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: var(--mf-radius-pill) !important;
+  background: var(--mf-bg-wash) !important;
+  color: var(--mf-text-primary) !important;
+  border: 1px solid var(--mf-border) !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  line-height: 0 !important;
+  transition: all var(--mf-transition-fast) !important;
+}
+
+.mf-modal-back-btn:hover {
+  background: var(--mf-hover) !important;
+  border-color: var(--mf-primary) !important;
+  color: var(--mf-primary) !important;
+  transform: scale(1.05) !important;
+}
+
+.mf-modal-back-btn svg {
+  width: 18px !important;
+  height: 18px !important;
+  fill: currentColor !important;
 }
 
 .mf-modal-title {

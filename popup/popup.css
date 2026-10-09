@@ -697,6 +697,39 @@ body {
   border-bottom: 1px solid var(--mf-border);
 }
 
+.mf-dialog-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mf-dialog-back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--mf-border);
+  background: var(--mf-bg-wash);
+  color: var(--mf-text-primary);
+  cursor: pointer;
+  padding: 0;
+  transition: all 120ms ease;
+}
+
+.mf-dialog-back-btn:hover {
+  background: var(--mf-hover);
+  border-color: var(--mf-primary);
+  color: var(--mf-primary);
+}
+
+.mf-dialog-back-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
 .mf-dialog-title {
   font-size: 14px;
   font-weight: 700;

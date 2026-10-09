@@ -226,7 +226,14 @@
     <div class="mf-dialog-overlay" id="mf-dialog-overlay" style="display: none;">
       <div class="mf-dialog-card">
         <div class="mf-dialog-header">
-          <h2 class="mf-dialog-title" id="mf-dialog-title">Nowy folder</h2>
+          <div class="mf-dialog-header-left">
+            <button type="button" class="mf-dialog-back-btn" id="mf-dialog-back-btn" title="Wróć do listy folderów" aria-label="Wróć do listy folderów">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+              </svg>
+            </button>
+            <h2 class="mf-dialog-title" id="mf-dialog-title">Nowy folder</h2>
+          </div>
           <button type="button" class="mf-dialog-close" id="mf-dialog-close" aria-label="Zamknij">✕</button>
         </div>
         <div class="mf-dialog-body">
