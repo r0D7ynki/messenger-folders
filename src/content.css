@@ -220,6 +220,9 @@
   padding: 0 !important;
   margin: 0 !important;
   height: 100% !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  pointer-events: auto !important;
 }
 
 .mf-folder-search-input::placeholder {
@@ -462,6 +465,19 @@
               color var(--mf-transition-fast),
               box-shadow var(--mf-transition-fast),
               border-color var(--mf-transition-fast);
+}
+
+/* Ukrycie pigułki przy filtrowaniu wyszukiwarką */
+.mf-folder-pill.mf-pill-hidden,
+.mf-folder-tab.mf-pill-hidden,
+[data-mf-pill="true"].mf-pill-hidden {
+  display: none !important;
+  visibility: hidden !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
 }
 
 .mf-folder-pill:hover,

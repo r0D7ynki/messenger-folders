@@ -262,6 +262,26 @@
               countEl.remove();
             }
           });
+
+          // Zsynchronizuj widoczność pigułek z wpisaną frazą wyszukiwania
+          const activeSearch = bar.querySelector('.mf-folder-search-input');
+          if (activeSearch && activeSearch.value) {
+            const query = activeSearch.value.trim().toLowerCase();
+            existingPills.forEach(pill => {
+              const nameEl = pill.querySelector('.mf-folder-name');
+              const iconEl = pill.querySelector('.mf-folder-icon');
+              const name = nameEl ? (nameEl.textContent || '').trim().toLowerCase() : '';
+              const icon = iconEl ? (iconEl.textContent || '').trim() : '';
+              const match = !query || name.includes(query) || icon.includes(query);
+              pill.classList.toggle('mf-pill-hidden', !match);
+              if (!match) {
+                pill.style.setProperty('display', 'none', 'important');
+              } else {
+                pill.style.removeProperty('display');
+              }
+            });
+          }
+
           return bar; // Gotowe, zero resetu DOM!
         }
       } else {
@@ -359,14 +379,24 @@
         const allPills = container.querySelectorAll('.mf-folder-pill');
         allPills.forEach(pill => {
           const nameEl = pill.querySelector('.mf-folder-name');
+          const iconEl = pill.querySelector('.mf-folder-icon');
           const name = nameEl ? (nameEl.textContent || '').trim().toLowerCase() : '';
-          const match = !query || name.includes(query);
-          pill.style.display = match ? '' : 'none';
+          const icon = iconEl ? (iconEl.textContent || '').trim() : '';
+          const match = !query || name.includes(query) || icon.includes(query);
+          pill.classList.toggle('mf-pill-hidden', !match);
+          if (!match) {
+            pill.style.setProperty('display', 'none', 'important');
+          } else {
+            pill.style.removeProperty('display');
+          }
         });
         updateScrollButtons();
       };
 
       searchInput.addEventListener('input', applyFolderFilter);
+      searchInput.addEventListener('keyup', applyFolderFilter);
+      searchInput.addEventListener('change', applyFolderFilter);
+      searchInput.addEventListener('search', applyFolderFilter);
 
       clearBtn.addEventListener('click', () => {
         searchInput.value = '';
@@ -381,6 +411,17 @@
           event.stopPropagation();
           searchInput.value = '';
           applyFolderFilter();
+        } else if (event.key === 'Enter') {
+          event.preventDefault();
+          const firstVisiblePill = Array.from(container.querySelectorAll('.mf-folder-pill'))
+            .find(p => !p.classList.contains('mf-pill-hidden') && p.style.display !== 'none');
+          if (firstVisiblePill) {
+            if (typeof firstVisiblePill.click === 'function') {
+              firstVisiblePill.click();
+            } else if (typeof firstVisiblePill.dispatchEvent === 'function') {
+              firstVisiblePill.dispatchEvent({ type: 'click' });
+            }
+          }
         }
       });
 
@@ -448,6 +489,10 @@
 
         container.appendChild(pill);
       });
+
+      if (searchInput.value) {
+        applyFolderFilter();
+      }
 
       // Przycisk dodawania nowego folderu na końcu listy pigułek
       if (addHandler) {
@@ -1765,6 +1810,10 @@
     filterChatRows(activeFolderId = 'all', allThreads = {}) {
       if (!this.detector) return;
 
+      const isNativeSearchActive = Boolean(
+        this.detector.isMessengerSearchActive && this.detector.isMessengerSearchActive()
+      );
+
       const detected = this.detector.scanChatList();
       const folders = this.storage ? this.storage.getFoldersSync() : [];
 
@@ -1795,8 +1844,8 @@
           });
         });
 
-        // Widoczność wiersza według aktywnego filtra
-        const shouldBeVisible = (activeFolderId === 'all') || (folderId === activeFolderId);
+        // Widoczność wiersza według aktywnego filtra (oraz gdy trwa natywne wyszukiwanie w Messengerze)
+        const shouldBeVisible = isNativeSearchActive || (activeFolderId === 'all') || (folderId === activeFolderId);
         if (rowElement.classList) {
           rowElement.classList.toggle('mf-thread-hidden', !shouldBeVisible);
         }
@@ -1817,37 +1866,17 @@
         }
       });
 
-      // Aktualizacja pigułki w nagłówku otwartego czatu
-      const openChat = this.detector.getCurrentOpenChat();
-      if (openChat && openChat.threadId) {
-        const doc = this.detector.doc || (typeof document !== 'undefined' ? document : null);
-        if (doc) {
-          const headerEl = doc.querySelector('[role="main"] header') ||
-                           doc.querySelector('[role="main"] h2')?.parentElement;
-          if (headerEl) {
-            const openThreadData = allThreads[openChat.threadId];
-            const openFolderId = (openThreadData && openThreadData.folderId) ? openThreadData.folderId : 'uncategorized';
-            const openFolder = folders.find(f => f.id === openFolderId && f.id !== 'uncategorized');
-
-            this.renderHeaderPill(headerEl, openFolder, (targetEl) => {
-              this.showAssignDropdown(targetEl, openChat.threadId, folders, openFolderId, async (tId, newFolderId) => {
-                if (this.storage) {
-                  if (newFolderId) {
-                    await this.storage.assignThread(tId, newFolderId, {
-                      name: openChat.title,
-                      avatar: openChat.avatar
-                    });
-                  } else {
-                    await this.storage.removeThreadAssignment(tId);
-                  }
-                  const currentActive = await this.storage.getActiveFolder();
-                  const currentThreads = await this.storage.getAllThreads();
-                  this.filterChatRows(currentActive, currentThreads);
-                  const currentFolders = await this.storage.getFolders();
-                  this.renderFolderBar(currentFolders, currentActive, currentThreads);
-                }
-              });
-            });
+      // Całkowity brak ingerencji w [role="main"] (obszar widoku wiadomości)!
+      // Poprzednie wstrzykiwanie renderHeaderPill do [role="main"] header naruszało
+      // wirtualne drzewo React 18 i blokowało ładowanie wiadomości w konwersacji.
+      const doc = this.detector.doc || (typeof document !== 'undefined' ? document : null);
+      if (doc) {
+        const oldPill = doc.querySelector('.mf-header-pill');
+        if (oldPill) {
+          try {
+            oldPill.remove();
+          } catch (_) {
+            // Bezpieczne wygaszenie błędów DOM
           }
         }
       }

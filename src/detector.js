@@ -427,8 +427,39 @@
     }
 
     /**
+     * Sprawdza, czy użytkownik aktualnie korzysta z natywnej wyszukiwarki Messengera.
+     * @returns {boolean}
+     */
+    isMessengerSearchActive() {
+      if (!this.doc) return false;
+      const sidebar = this.getSidebarContainer() || this.doc;
+      const allInputs = sidebar.querySelectorAll(
+        'input[aria-label*="Szukaj" i], input[aria-label*="Search" i], ' +
+        'input[placeholder*="Szukaj" i], input[placeholder*="Search" i], ' +
+        '[role="search"] input, input[type="search"]'
+      );
+
+      for (const input of allInputs) {
+        if (input.closest && (
+          input.closest('#mf-folder-bar') ||
+          input.closest('[data-mf-folder-bar]') ||
+          input.closest('.mf-modal')
+        )) {
+          continue;
+        }
+
+        const value = (input.value || '').trim();
+        const isFocused = this.doc.activeElement === input;
+        if (value.length > 0 || isFocused) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    /**
      * Wyszukuje optymalne, stabilne miejsce do wstrzyknięcia paska folderów.
-     * Wyłącznie w obrębie paska bocznego - pod wyszukiwarką, nad listą czatów.
+     * Wyłącznie w obrębie paska bocznego - pod wyszukiwarką Messengera, a poza wirtualnym scrollerem.
      * @returns {{ target: Element, position: string, container: Element }|null} Punkt wstrzyknięcia.
      */
     findFolderBarInjectionPoint() {
@@ -436,17 +467,7 @@
       const sidebar = this.getSidebarContainer();
       const scope = sidebar || this.doc;
 
-      // 1. Priorytet: Bezpośrednio nad główną listą czatów (idealnie pod wyszukiwarką, bez rozpychania jej wnętrza)
-      const grid = scope.querySelector('[role="grid"]');
-      if (grid && grid.parentElement && !grid.closest('[role="main"]') && !grid.closest('#mf-folder-bar')) {
-        return {
-          target: grid,
-          position: 'beforebegin',
-          container: grid.parentElement,
-        };
-      }
-
-      // 2. Priorytet: Bezpośrednio pod zewnętrznym kontenerem wyszukiwarki
+      // 1. Priorytet: Bezpośrednio pod zewnętrznym kontenerem wyszukiwarki Messengera (bezpiecznie poza wirtualnym scrollerem!)
       const searchContainer = this.findSearchContainer(scope);
       if (searchContainer && searchContainer.parentElement &&
           !searchContainer.closest('[role="main"]') &&
@@ -455,6 +476,18 @@
           target: searchContainer,
           position: 'afterend',
           container: searchContainer.parentElement,
+        };
+      }
+
+      // 2. Priorytet: Przed kontenerem listy czatów (przed rodzicem siatki, aby nie zaburzać wewnętrznej kalkulacji offsetów wirtualnego scrolla)
+      const grid = scope.querySelector('[role="grid"]');
+      if (grid && grid.parentElement && !grid.closest('[role="main"]') && !grid.closest('#mf-folder-bar')) {
+        const gridParent = grid.parentElement;
+        const target = (gridParent && gridParent !== scope && gridParent.parentElement) ? gridParent : grid;
+        return {
+          target: target,
+          position: 'beforebegin',
+          container: target.parentElement,
         };
       }
 
@@ -622,24 +655,28 @@
       const throttledHandler = (mutationsList) => {
         if (isDisconnected) return;
 
-        // Filtrowanie mutacji: ignorujemy zmiany pochodzące z naszych własnych elementów
+        // Filtrowanie mutacji: ignorujemy zmiany pochodzące z naszych własnych elementów lub z wnętrza role="main"
         if (mutationsList && mutationsList.length > 0) {
-          const onlyOurElements = mutationsList.every((mutation) => {
+          const isIgnored = mutationsList.every((mutation) => {
             const target = mutation.target;
-            if (target && target.nodeType === 1) {
-              if (target.id === 'mf-folder-bar' ||
-                  target.closest?.('#mf-folder-bar, .mf-dropdown-menu, .mf-modal-overlay') ||
-                  target.classList?.contains('mf-thread-badge') ||
-                  target.classList?.contains('mf-folder-btn') ||
-                  target.hasAttribute?.('data-mf-thread-id') ||
-                  target.hasAttribute?.('data-mf-folder-bar')) {
+            const element = target?.nodeType === 1 ? target : target?.parentElement;
+            if (element) {
+              if (element.closest?.('[role="main"]')) {
+                return true;
+              }
+              if (element.id === 'mf-folder-bar' ||
+                  element.closest?.('#mf-folder-bar, .mf-dropdown-menu, .mf-modal-overlay') ||
+                  element.classList?.contains('mf-thread-badge') ||
+                  element.classList?.contains('mf-folder-btn') ||
+                  element.hasAttribute?.('data-mf-thread-id') ||
+                  element.hasAttribute?.('data-mf-folder-bar')) {
                 return true;
               }
             }
             return false;
           });
-          if (onlyOurElements) {
-            return; // Zero reakcji na własne zmiany
+          if (isIgnored) {
+            return; // Zero reakcji na własne zmiany oraz zmiany w role="main"
           }
         }
 

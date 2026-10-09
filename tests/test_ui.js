@@ -161,6 +161,10 @@ class MockElement {
     return { top: 100, bottom: 130, left: 50, right: 150, width: 100, height: 30 };
   }
 
+  click() {
+    this.dispatchEvent({ type: 'click' });
+  }
+
   focus() {}
 }
 
@@ -406,7 +410,76 @@ assert.ok(searchBox, 'Zakładka Rozmowy powinna zawierać pole wyszukiwania');
 
 ui.closeModal();
 assert.strictEqual(ui.activeModal, null, 'Okno powinno się zamknąć');
-console.log('✓ showSettingsModal() działa poprawnie.');
+// 10. Wyszukiwanie folderów na pasku
+console.log('Test 10: Weryfikacja wyszukiwarki folderów na pasku...');
+const testBar = ui.renderFolderBar(sampleFolders, 'all');
+const testSearchInput = testBar.querySelector('.mf-folder-search-input');
+const testPills = testBar.querySelectorAll('.mf-folder-pill');
+assert.strictEqual(testPills.length, 3, 'Powinny być 3 pigułki folderów');
+
+// Wpisanie frazy 'Praca'
+testSearchInput.value = 'Praca';
+testSearchInput.dispatchEvent({ type: 'input' });
+
+const hiddenPills = Array.from(testPills).filter(p => p.classList.contains('mf-pill-hidden'));
+const visiblePills = Array.from(testPills).filter(p => !p.classList.contains('mf-pill-hidden'));
+assert.strictEqual(visiblePills.length, 1, 'Tylko folder "Praca" powinien być widoczny');
+assert.strictEqual(hiddenPills.length, 2, 'Pozostałe foldery muszą mieć klasę mf-pill-hidden');
+
+// Wciśnięcie klawisza Enter powinno kliknąć pierwszy widoczny folder
+let clickedPillId = null;
+visiblePills[0].addEventListener('click', () => { clickedPillId = 'work'; });
+testSearchInput.dispatchEvent({ type: 'keydown', key: 'Enter', preventDefault() {} });
+assert.strictEqual(clickedPillId, 'work', 'Enter w polu wyszukiwarki powinien wybrać pasujący folder');
+
+// Wyszukiwanie po emoji (np. '👥')
+testSearchInput.value = '👥';
+testSearchInput.dispatchEvent({ type: 'input' });
+const emojiVisible = Array.from(testPills).filter(p => !p.classList.contains('mf-pill-hidden'));
+assert.strictEqual(emojiVisible.length, 1, 'Folder "Znajomi" z ikoną 👥 powinien być widoczny');
+assert.strictEqual(emojiVisible[0].dataset.folderId, 'friends');
+
+// Wyczyszczenie wyszukiwarki
+testSearchInput.value = '';
+testSearchInput.dispatchEvent({ type: 'input' });
+const allVisibleAgain = Array.from(testPills).filter(p => !p.classList.contains('mf-pill-hidden'));
+assert.strictEqual(allVisibleAgain.length, 3, 'Wszystkie foldery powinny znów być widoczne po wyczyszczeniu');
+console.log('✓ Wyszukiwarka folderów filtruje pigułki i obsługuje klawisz Enter.');
+
+// 11. filterChatRows oraz obsługa natywnego wyszukiwania Messengera
+console.log('Test 11: filterChatRows() i natywne wyszukiwanie Messengera...');
+let mockNativeSearchActive = false;
+const mockDetector = {
+  scanChatList() {
+    return [
+      { threadId: '101', name: 'Jan', rowElement: new MockElement('div') },
+      { threadId: '102', name: 'Anna', rowElement: new MockElement('div') }
+    ];
+  },
+  isMessengerSearchActive() {
+    return mockNativeSearchActive;
+  },
+  getCurrentOpenChat() {
+    return { threadId: '101', title: 'Jan' };
+  }
+};
+
+const uiWithDetector = new MessengerUI({ detector: mockDetector });
+const threadItems = mockDetector.scanChatList();
+// Mockowanie scanChatList w samej instancji
+uiWithDetector.detector.scanChatList = () => threadItems;
+
+// Test a: Aktywny filtr 'work', Jan nie należy do 'work' -> Jan ukryty
+uiWithDetector.filterChatRows('work', { '102': { folderId: 'work' } });
+assert.ok(threadItems[0].rowElement.classList.contains('mf-thread-hidden'), 'Jan powinien być ukryty');
+assert.ok(!threadItems[1].rowElement.classList.contains('mf-thread-hidden'), 'Anna powinna być widoczna');
+
+// Test b: Użytkownik korzysta z natywnego wyszukiwania Messengera -> żaden wiersz nie jest ukrywany
+mockNativeSearchActive = true;
+uiWithDetector.filterChatRows('work', { '102': { folderId: 'work' } });
+assert.ok(!threadItems[0].rowElement.classList.contains('mf-thread-hidden'), 'Jan NIE może być ukryty podczas wyszukiwania na Messengerze');
+assert.ok(!threadItems[1].rowElement.classList.contains('mf-thread-hidden'), 'Anna NIE może być ukryta podczas wyszukiwania na Messengerze');
+console.log('✓ filterChatRows() nie ukrywa wątków podczas natywnego wyszukiwania Messengera.');
 
 console.log('\n=============================================');
 console.log('WSZYSTKIE TESTY INTERFEJSU ZAKOŃCZONE SUKCESEM! ✓');
