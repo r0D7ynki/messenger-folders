@@ -231,6 +231,11 @@ const activePill = bar.querySelector('.mf-active');
 assert.ok(activePill, 'Jedna pigułka musi być aktywna');
 assert.strictEqual(activePill.dataset.folderId, 'work', 'Aktywny folder to "work"');
 
+// Sprawdzenie stałej szerokości oraz braku ikony edycji na pigułce
+assert.strictEqual(pills[0].style.width, '110px', 'Pigułka powinna mieć stałą szerokość 110px');
+const pillEditBtn = bar.querySelector('.mf-pill-edit-icon');
+assert.strictEqual(pillEditBtn, null, 'Pigułki nie powinny zawierać ikony edycji');
+
 // Sprawdzenie przycisku dodawania
 const addBtn = bar.querySelector('.mf-folder-add-btn');
 assert.ok(addBtn, 'Przycisk dodawania paska powinien istnieć');

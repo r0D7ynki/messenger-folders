@@ -398,6 +398,11 @@
         pill.setAttribute('aria-selected', isActive ? 'true' : 'false');
         pill.title = `${folder.name} (${count} rozmów)`;
 
+        // Stała szerokość pigułki w pasku
+        pill.style.width = '110px';
+        pill.style.minWidth = '110px';
+        pill.style.maxWidth = '110px';
+
         // Kolor akcentu pigułki
         if (folder.color) {
           pill.style.setProperty('--mf-folder-color', folder.color);
@@ -421,25 +426,6 @@
           countEl.className = 'mf-folder-count';
           countEl.textContent = count > 99 ? '99+' : count;
           pill.appendChild(countEl);
-        }
-
-        // Przycisk edycji dla folderów innych niż 'all'
-        if (folder.id !== 'all' && editHandler) {
-          const editBtn = document.createElement('span');
-          editBtn.className = 'mf-pill-edit-icon';
-          editBtn.title = 'Edytuj ten folder';
-          editBtn.innerHTML = ICONS.edit;
-          editBtn.addEventListener('click', (event) => {
-            event.stopPropagation();
-            editHandler(folder);
-          });
-          pill.appendChild(editBtn);
-
-          // Kliknięcie prawym przyciskiem myszy również otwiera edycję
-          pill.addEventListener('contextmenu', (event) => {
-            event.preventDefault();
-            editHandler(folder);
-          });
         }
 
         // Wybór folderu z natychmiastową reakcją wizualną i filtrowaniem
@@ -508,7 +494,7 @@
         bar._mfBoundDelegation = true;
         bar.addEventListener('click', (event) => {
           const pill = event.target.closest ? event.target.closest('.mf-folder-pill') : null;
-          if (pill && !event.target.closest('.mf-pill-edit-icon')) {
+          if (pill) {
             const fId = pill.dataset.folderId;
             if (fId) {
               bar.querySelectorAll('.mf-folder-pill').forEach(p => {

@@ -372,15 +372,30 @@
     findSearchContainer(scope) {
       if (!scope) return null;
 
-      // Szukamy pola wyszukiwarki (wielojęzyczne selektory Messenger / Facebook)
-      const searchInput = scope.querySelector(
+      // Szukamy pola wyszukiwarki Messengera z wykluczeniem elementów wtyczki
+      const allInputs = scope.querySelectorAll(
         'input[aria-label*="Szukaj" i], input[aria-label*="Search" i], ' +
         'input[placeholder*="Szukaj" i], input[placeholder*="Search" i], ' +
         '[role="search"] input, input[type="search"], ' +
         'label input, input'
       );
 
-      if (!searchInput || searchInput.closest('[role="main"]')) {
+      let searchInput = null;
+      for (const input of allInputs) {
+        if (input.closest && (
+          input.closest('#mf-folder-bar') ||
+          input.closest('[data-mf-folder-bar]') ||
+          input.closest('.mf-modal') ||
+          input.closest('.mf-dropdown-menu') ||
+          input.closest('[role="main"]')
+        )) {
+          continue;
+        }
+        searchInput = input;
+        break;
+      }
+
+      if (!searchInput) {
         return null;
       }
 
@@ -423,7 +438,7 @@
 
       // 1. Priorytet: Bezpośrednio nad główną listą czatów (idealnie pod wyszukiwarką, bez rozpychania jej wnętrza)
       const grid = scope.querySelector('[role="grid"]');
-      if (grid && grid.parentElement && !grid.closest('[role="main"]')) {
+      if (grid && grid.parentElement && !grid.closest('[role="main"]') && !grid.closest('#mf-folder-bar')) {
         return {
           target: grid,
           position: 'beforebegin',
@@ -433,7 +448,9 @@
 
       // 2. Priorytet: Bezpośrednio pod zewnętrznym kontenerem wyszukiwarki
       const searchContainer = this.findSearchContainer(scope);
-      if (searchContainer && searchContainer.parentElement && !searchContainer.closest('[role="main"]')) {
+      if (searchContainer && searchContainer.parentElement &&
+          !searchContainer.closest('[role="main"]') &&
+          !searchContainer.closest('#mf-folder-bar')) {
         return {
           target: searchContainer,
           position: 'afterend',
@@ -443,9 +460,9 @@
 
       // 3. Priorytet: Przed pierwszym linkiem wątku wewnątrz paska bocznego
       const firstRowLink = scope.querySelector('a[href*="/t/"], a[href*="/messages/"]');
-      if (firstRowLink && !firstRowLink.closest('[role="main"]')) {
+      if (firstRowLink && !firstRowLink.closest('[role="main"]') && !firstRowLink.closest('#mf-folder-bar')) {
         const row = this.findChatRow(firstRowLink) || firstRowLink;
-        if (row.parentElement && !row.parentElement.closest('[role="main"]')) {
+        if (row.parentElement && !row.parentElement.closest('[role="main"]') && !row.parentElement.closest('#mf-folder-bar')) {
           return {
             target: row.parentElement,
             position: 'beforebegin',
@@ -455,7 +472,7 @@
       }
 
       // 4. Priorytet: Bezpośrednio na początku paska bocznego
-      if (sidebar && sidebar.firstElementChild) {
+      if (sidebar && sidebar.firstElementChild && !sidebar.firstElementChild.closest('#mf-folder-bar')) {
         return {
           target: sidebar.firstElementChild,
           position: 'afterend',
@@ -477,8 +494,15 @@
         return false;
       }
 
+      // Jeśli pasek jest już w DOM w prawidłowym miejscu, nie ruszamy go (zero migotania i skakania)
+      if (folderBarElement.isConnected && folderBarElement.parentElement) {
+        if (!folderBarElement.closest('[role="main"]')) {
+          return true;
+        }
+      }
+
       const point = this.findFolderBarInjectionPoint();
-      if (!point || !point.target) {
+      if (!point || !point.target || point.target === folderBarElement || point.target.closest?.('#mf-folder-bar')) {
         return false;
       }
 
@@ -493,7 +517,7 @@
         return true;
       }
 
-      // Jeśli element znajdował się wcześniej w innym, złym miejscu, usuwamy go stamtąd
+      // Jeśli element znajdował się wcześniej w niewłaściwym miejscu, usuwamy go stamtąd
       if (folderBarElement.parentElement) {
         folderBarElement.remove();
       }
