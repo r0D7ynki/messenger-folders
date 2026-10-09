@@ -54,6 +54,7 @@
 
       // Podpięcie obserwatora dynamicznego ładowania listy czatów (virtual scrolling)
       detector.setupObserver(async () => {
+        tryInjectBar();
         const currentActive = await storage.getActiveFolder();
         const currentThreads = await storage.getAllThreads();
         ui.filterChatRows(currentActive, currentThreads);

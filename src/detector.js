@@ -280,66 +280,112 @@
      * Typowe położenie to obszar pod polem wyszukiwania lub pod nagłówkiem listy czatów.
      * @returns {{ target: Element, position: string, container: Element }|null} Punkt wstrzyknięcia.
      */
+    /**
+     * Wyszukuje optymalne, stabilne miejsce do wstrzyknięcia paska folderów.
+     * Zapobiega wstrzykiwaniu paska do wnętrza pola wyszukiwania lub elementów inline.
+     * @returns {{ target: Element, position: string, container: Element }|null} Punkt wstrzyknięcia.
+     */
     findFolderBarInjectionPoint() {
       if (!this.doc) return null;
 
-      // 1. Sprawdzenie obszaru pod polem wyszukiwania kontaktów
-      const searchInput = this.doc.querySelector(
-        'input[placeholder*="Szukaj" i], input[placeholder*="Search" i], ' +
-        'input[aria-label*="Szukaj" i], input[aria-label*="Search" i], ' +
-        'div[role="search"] input'
-      );
+      // 1. Priorytet: Główna siatka / lista czatów (role="grid")
+      // Wstrzyknięcie bezpośrednio przed listą gwarantuje prawidłową szerokość i brak kolizji z wyszukiwarką.
+      const grid = this.doc.querySelector('[role="navigation"] [role="grid"], [role="grid"]');
+      if (grid && grid.parentElement) {
+        return {
+          target: grid,
+          position: 'beforebegin',
+          container: grid.parentElement,
+        };
+      }
 
-      if (searchInput) {
-        // Znalezienie kontenera zewnętrznego pola wyszukiwania
-        const searchBox = searchInput.closest('label')?.parentElement ||
-          searchInput.closest('div[role="search"]') ||
-          searchInput.closest('form') ||
-          searchInput.parentElement;
-
-        if (searchBox && searchBox.parentElement) {
+      // 2. Kontener listy rozmów wykryty przez pierwszy wiersz konwersacji
+      const firstRowLink = this.doc.querySelector('a[href*="/t/"]');
+      if (firstRowLink) {
+        const listContainer = firstRowLink.closest(
+          '[role="grid"], [role="rowgroup"], div[aria-label="Czaty"], div[aria-label="Chats"]'
+        );
+        if (listContainer && listContainer.parentElement) {
           return {
-            target: searchBox,
-            position: 'afterend',
-            container: searchBox.parentElement,
+            target: listContainer,
+            position: 'beforebegin',
+            container: listContainer.parentElement,
           };
         }
       }
 
-      // 2. Sprawdzenie nagłówka listy czatów ("Czaty" / "Chats")
+      // 3. Bezpieczne wykrycie zewnętrznej sekcji wyszukiwania w kolumnie bocznej
+      const searchInput = this.doc.querySelector(
+        'input[placeholder*="Szukaj" i], input[placeholder*="Search" i], ' +
+        'input[aria-label*="Szukaj" i], input[aria-label*="Search" i], ' +
+        'div[role="search"] input, input[type="search"]'
+      );
+
+      if (searchInput) {
+        const navParent = this.doc.querySelector('[role="navigation"]');
+        let searchSection = searchInput;
+
+        // Wspinamy się do bezpośredniego dziecka paska bocznego, aby nie trafić do wnętrza pola input
+        if (navParent && navParent.contains(searchInput)) {
+          while (searchSection.parentElement && searchSection.parentElement !== navParent) {
+            searchSection = searchSection.parentElement;
+          }
+          if (searchSection && searchSection.parentElement) {
+            return {
+              target: searchSection,
+              position: 'afterend',
+              container: searchSection.parentElement,
+            };
+          }
+        } else {
+          // Szukamy nadrzędnego bloku sekcji o odpowiedniej wysokości
+          let current = searchInput;
+          while (current.parentElement &&
+                 current.parentElement !== this.doc.body &&
+                 current.parentElement.clientHeight < 100 &&
+                 current.parentElement.children.length < 4) {
+            current = current.parentElement;
+          }
+          if (current && current.parentElement) {
+            return {
+              target: current,
+              position: 'afterend',
+              container: current.parentElement,
+            };
+          }
+        }
+      }
+
+      // 4. Nagłówek listy czatów ("Czaty" / "Chats")
       const headerCandidate = this.doc.querySelector(
         'h1, [role="heading"][aria-level="1"], ' +
         'div[aria-label="Czaty"], div[aria-label="Chats"]'
       );
 
       if (headerCandidate && headerCandidate.parentElement) {
-        return {
-          target: headerCandidate.parentElement,
-          position: 'afterend',
-          container: headerCandidate.parentElement.parentElement || headerCandidate.parentElement,
-        };
-      }
-
-      // 3. Sprawdzenie pierwszego wiersza czatu na liście
-      const firstRow = this.doc.querySelector('[data-mf-thread-id], a[href*="/t/"]');
-      if (firstRow) {
-        const row = this.findChatRow(firstRow) || firstRow;
-        if (row && row.parentElement) {
+        let headerSection = headerCandidate;
+        const navParent = this.doc.querySelector('[role="navigation"]');
+        if (navParent && navParent.contains(headerCandidate)) {
+          while (headerSection.parentElement && headerSection.parentElement !== navParent) {
+            headerSection = headerSection.parentElement;
+          }
+        }
+        if (headerSection && headerSection.parentElement) {
           return {
-            target: row.parentElement,
-            position: 'beforebegin',
-            container: row.parentElement.parentElement || row.parentElement,
+            target: headerSection,
+            position: 'afterend',
+            container: headerSection.parentElement,
           };
         }
       }
 
-      // 4. Domyślny kontener nawigacji po lewej stronie
-      const navContainer = this.doc.querySelector('[role="navigation"], [role="grid"]');
-      if (navContainer && navContainer.parentElement) {
+      // 5. Domyślny kontener nawigacji po lewej stronie
+      const navContainer = this.doc.querySelector('[role="navigation"]');
+      if (navContainer) {
         return {
           target: navContainer,
-          position: 'beforebegin',
-          container: navContainer.parentElement,
+          position: 'prepend',
+          container: navContainer,
         };
       }
 
@@ -348,6 +394,7 @@
 
     /**
      * Bezpiecznie wstrzykuje element paska folderów do drzewa DOM.
+     * Przenosi pasek, jeśli znajdował się w niewłaściwym kontenerze.
      * @param {Element} folderBarElement Przygotowany element paska folderów.
      * @returns {boolean} Czy operacja wstrzyknięcia powiodła się.
      */
@@ -356,14 +403,25 @@
         return false;
       }
 
-      // Jeśli element już istnieje w DOM w tym samym miejscu, nie duplikujemy go
-      if (this.doc?.contains(folderBarElement)) {
-        return true;
-      }
-
       const point = this.findFolderBarInjectionPoint();
       if (!point || !point.target) {
         return false;
+      }
+
+      // Sprawdź, czy element jest już poprawnie umieszczony w DOM
+      if (point.position === 'beforebegin' && point.target.previousElementSibling === folderBarElement) {
+        return true;
+      }
+      if (point.position === 'afterend' && point.target.nextElementSibling === folderBarElement) {
+        return true;
+      }
+      if (point.position === 'prepend' && point.container.firstElementChild === folderBarElement) {
+        return true;
+      }
+
+      // Jeśli element znajdował się wcześniej w innym, złym miejscu, usuwamy go stamtąd
+      if (folderBarElement.parentElement) {
+        folderBarElement.remove();
       }
 
       try {

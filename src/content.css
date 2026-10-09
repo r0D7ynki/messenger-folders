@@ -123,78 +123,122 @@
    ========================================================================== */
 
 #mf-folder-bar,
-.mf-folder-bar {
-  display: flex;
-  align-items: center;
-  position: relative;
-  width: 100%;
-  padding: 8px 12px;
-  background: var(--mf-bg-surface);
-  border-bottom: 1px solid var(--mf-border);
-  z-index: var(--mf-z-bar);
-  user-select: none;
+.mf-folder-bar,
+[data-mf-folder-bar="true"] {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  position: relative !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  height: 48px !important;
+  min-height: 48px !important;
+  max-height: 48px !important;
+  padding: 0 8px !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  background: var(--mf-bg-surface) !important;
+  border-bottom: 1px solid var(--mf-border) !important;
+  z-index: var(--mf-z-bar) !important;
+  user-select: none !important;
+  flex-shrink: 0 !important;
+  flex-grow: 0 !important;
+  overflow: hidden !important;
+  isolation: isolate !important;
+  contain: layout style !important;
+  clear: both !important;
   transition: background var(--mf-transition-normal), border-color var(--mf-transition-normal);
 }
 
-/* Kontener przewijany w poziomie */
-.mf-folder-scroll-container {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  white-space: nowrap;
-  scroll-behavior: smooth;
-  width: 100%;
-  padding: 2px 0;
-  -ms-overflow-style: none; /* IE i Edge */
-  scrollbar-width: none;    /* Firefox */
+/* Reset stylów natywnych przycisków wewnątrz paska dla przeglądarki Brave */
+#mf-folder-bar button,
+.mf-folder-bar button,
+[data-mf-folder-bar="true"] button {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  box-shadow: none;
 }
 
-.mf-folder-scroll-container::-webkit-scrollbar {
-  display: none;            /* Chrome, Safari, Opera */
+/* Kontener przewijany w poziomie z blokadą rozszerzania Flexbox */
+.mf-folder-scroll-container,
+[data-mf-scroll-container="true"] {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 6px !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  white-space: nowrap !important;
+  scroll-behavior: smooth !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  flex: 1 1 0% !important;
+  box-sizing: border-box !important;
+  padding: 4px 6px !important;
+  height: 100% !important;
+  -ms-overflow-style: none !important; /* IE i Edge */
+  scrollbar-width: none !important;    /* Firefox */
+}
+
+.mf-folder-scroll-container::-webkit-scrollbar,
+[data-mf-scroll-container="true"]::-webkit-scrollbar {
+  display: none !important;            /* Chrome, Brave, Safari, Opera */
+  width: 0 !important;
+  height: 0 !important;
 }
 
 /* Przyciski przewijania na krańcach paska */
 .mf-scroll-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 26px;
-  height: 26px;
-  border-radius: var(--mf-radius-pill);
-  background: var(--mf-bg-surface);
-  color: var(--mf-text-secondary);
-  border: 1px solid var(--mf-border);
-  box-shadow: var(--mf-shadow-sm);
-  cursor: pointer;
-  z-index: 2;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: absolute !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  width: 26px !important;
+  height: 26px !important;
+  border-radius: var(--mf-radius-pill) !important;
+  background: var(--mf-bg-surface) !important;
+  color: var(--mf-text-secondary) !important;
+  border: 1px solid var(--mf-border) !important;
+  box-shadow: var(--mf-shadow-sm) !important;
+  cursor: pointer !important;
+  z-index: 5 !important;
   opacity: 0;
   pointer-events: none;
+  box-sizing: border-box !important;
+  flex-shrink: 0 !important;
   transition: opacity var(--mf-transition-fast), background var(--mf-transition-fast), transform var(--mf-transition-fast);
 }
 
 .mf-scroll-btn.mf-visible {
-  opacity: 0.95;
-  pointer-events: auto;
+  opacity: 0.95 !important;
+  pointer-events: auto !important;
 }
 
 .mf-scroll-btn:hover {
-  opacity: 1;
-  background: var(--mf-bg-wash);
-  color: var(--mf-text-primary);
-  transform: translateY(-50%) scale(1.06);
+  opacity: 1 !important;
+  background: var(--mf-bg-wash) !important;
+  color: var(--mf-text-primary) !important;
+  transform: translateY(-50%) scale(1.06) !important;
 }
 
 .mf-scroll-btn-left {
-  left: 4px;
+  left: 4px !important;
 }
 
 .mf-scroll-btn-right {
-  right: 4px;
+  right: 4px !important;
 }
 
 .mf-scroll-btn svg {
@@ -205,21 +249,31 @@
 
 /* Pojedyncza pigułka folderu */
 .mf-folder-pill,
-.mf-folder-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: var(--mf-radius-pill);
-  background: var(--mf-bg-wash);
-  color: var(--mf-text-secondary);
-  font-size: 13px;
-  font-weight: 500;
-  border: 1px solid transparent;
-  cursor: pointer;
-  outline: none;
-  flex-shrink: 0;
+.mf-folder-tab,
+[data-mf-pill="true"] {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  max-height: 32px !important;
+  padding: 0 12px !important;
+  border-radius: var(--mf-radius-pill) !important;
+  background: var(--mf-bg-wash) !important;
+  color: var(--mf-text-secondary) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  font-family: var(--mf-font) !important;
+  border: 1px solid transparent !important;
+  cursor: pointer !important;
+  outline: none !important;
+  flex-shrink: 0 !important;
+  flex-grow: 0 !important;
+  white-space: nowrap !important;
+  box-sizing: border-box !important;
+  line-height: normal !important;
   position: relative;
   transition: transform var(--mf-transition-fast),
               background var(--mf-transition-fast),
@@ -376,24 +430,27 @@
    ========================================================================== */
 
 /* Plakietka folderu przy czacie */
-.mf-thread-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1;
-  white-space: nowrap;
-  cursor: pointer;
-  max-width: 110px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  vertical-align: middle;
-  margin-left: 6px;
-  border: 1px solid transparent;
+.mf-thread-badge,
+[data-mf-badge="true"] {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  height: 18px !important;
+  padding: 0 6px !important;
+  border-radius: 4px !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  cursor: pointer !important;
+  max-width: 110px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  vertical-align: middle !important;
+  margin-left: 6px !important;
+  border: 1px solid transparent !important;
+  visibility: visible !important;
+  opacity: 1 !important;
   transition: transform var(--mf-transition-fast), opacity var(--mf-transition-fast), filter var(--mf-transition-fast);
 }
 
@@ -731,16 +788,19 @@ div:hover > .mf-folder-btn,
    6. OKNO MODALNE TWORZENIA/EDYCJI FOLDERU (.mf-modal-overlay, .mf-modal)
    ========================================================================== */
 
-.mf-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: var(--mf-z-modal);
-  padding: 16px;
+.mf-modal-overlay,
+[data-mf-modal-overlay="true"] {
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(0, 0, 0, 0.55) !important;
+  backdrop-filter: blur(4px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: var(--mf-z-modal) !important;
+  padding: 16px !important;
+  visibility: visible !important;
+  opacity: 1 !important;
   animation: mfFadeIn var(--mf-transition-normal) ease-out;
 }
 
@@ -749,14 +809,17 @@ div:hover > .mf-folder-btn,
   to { opacity: 1; }
 }
 
-.mf-modal {
-  width: 100%;
-  max-width: 440px;
-  background: var(--mf-bg-surface);
-  border-radius: var(--mf-radius-lg);
-  border: 1px solid var(--mf-border);
-  box-shadow: var(--mf-shadow-lg);
-  overflow: hidden;
+.mf-modal,
+[data-mf-modal="true"] {
+  width: 100% !important;
+  max-width: 440px !important;
+  background: var(--mf-bg-surface) !important;
+  border-radius: var(--mf-radius-lg) !important;
+  border: 1px solid var(--mf-border) !important;
+  box-shadow: var(--mf-shadow-lg) !important;
+  overflow: hidden !important;
+  visibility: visible !important;
+  opacity: 1 !important;
   animation: mfModalPop var(--mf-transition-normal) cubic-bezier(0.18, 0.89, 0.32, 1.28);
 }
 

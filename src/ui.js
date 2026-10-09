@@ -182,6 +182,7 @@
         bar = document.createElement('div');
         bar.id = 'mf-folder-bar';
       }
+      bar.setAttribute('data-mf-folder-bar', 'true');
 
       bar.innerHTML = '';
 
@@ -195,6 +196,7 @@
       // Kontener przewijalny z pigułkami
       const container = document.createElement('div');
       container.className = 'mf-folder-scroll-container';
+      container.setAttribute('data-mf-scroll-container', 'true');
 
       // Przycisk przewijania w prawo
       const btnRight = document.createElement('button');
@@ -219,6 +221,7 @@
         pill.type = 'button';
         pill.className = `mf-folder-pill ${isActive ? 'mf-active' : ''}`;
         pill.dataset.folderId = folder.id;
+        pill.setAttribute('data-mf-pill', 'true');
         pill.setAttribute('role', 'tab');
         pill.setAttribute('aria-selected', isActive ? 'true' : 'false');
         pill.title = `${folder.name} (${count} rozmów)`;
@@ -291,9 +294,10 @@
 
       // Funkcja sprawdzająca konieczność pokazania strzałek przewijania
       const updateScrollButtons = () => {
+        if (!container.clientWidth) return;
         const maxScroll = container.scrollWidth - container.clientWidth;
         btnLeft.classList.toggle('mf-visible', container.scrollLeft > 6);
-        btnRight.classList.toggle('mf-visible', container.scrollLeft < maxScroll - 6);
+        btnRight.classList.toggle('mf-visible', maxScroll > 6 && container.scrollLeft < maxScroll - 6);
       };
 
       // Obsługa kliknięć w przyciski przewijania
@@ -323,6 +327,8 @@
 
       if (typeof requestAnimationFrame !== 'undefined') {
         requestAnimationFrame(updateScrollButtons);
+        setTimeout(updateScrollButtons, 100);
+        setTimeout(updateScrollButtons, 500);
       }
 
       return bar;
@@ -350,6 +356,7 @@
         if (!badge) {
           badge = document.createElement('span');
           badge.className = 'mf-thread-badge';
+          badge.setAttribute('data-mf-badge', 'true');
 
           const titleElement = rowElement.querySelector('[role="heading"], span[dir="auto"], strong') || rowElement;
           titleElement.appendChild(badge);
@@ -381,6 +388,7 @@
         actionBtn = document.createElement('button');
         actionBtn.type = 'button';
         actionBtn.className = 'mf-folder-btn';
+        actionBtn.setAttribute('data-mf-btn', 'true');
         actionBtn.title = currentFolder ? 'Zmień folder rozmowy' : 'Przypisz do folderu';
         actionBtn.setAttribute('aria-label', actionBtn.title);
         actionBtn.innerHTML = ICONS.folder;
@@ -399,6 +407,15 @@
         event.stopPropagation();
         event.preventDefault();
         if (onAssign) onAssign(actionBtn, threadId);
+      };
+
+      // 3. Menu pod prawym przyciskiem myszy na wierszu rozmowy
+      rowElement.oncontextmenu = (event) => {
+        if (!event.shiftKey) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (onAssign) onAssign(actionBtn || rowElement, threadId);
+        }
       };
     }
 
@@ -478,11 +495,13 @@
 
       const overlay = document.createElement('div');
       overlay.className = 'mf-modal-overlay';
+      overlay.setAttribute('data-mf-modal-overlay', 'true');
       overlay.setAttribute('role', 'dialog');
       overlay.setAttribute('aria-modal', 'true');
 
       const modal = document.createElement('div');
       modal.className = 'mf-modal';
+      modal.setAttribute('data-mf-modal', 'true');
 
       // Nagłówek okna
       const header = document.createElement('div');
@@ -744,6 +763,7 @@
 
       const dropdown = document.createElement('div');
       dropdown.className = 'mf-dropdown-menu';
+      dropdown.setAttribute('data-mf-dropdown', 'true');
 
       // 1. Nagłówek z wyszukiwarką
       const header = document.createElement('div');
