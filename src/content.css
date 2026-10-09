@@ -202,30 +202,39 @@
 
 /* Przyciski przewijania na krańcach paska */
 .mf-scroll-btn {
-  display: flex !important;
+  display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
   position: absolute !important;
-  top: 50% !important;
-  transform: translateY(-50%) !important;
+  top: 7px !important;
+  bottom: auto !important;
+  transform: none !important;
   width: 26px !important;
+  min-width: 26px !important;
+  max-width: 26px !important;
   height: 26px !important;
-  border-radius: var(--mf-radius-pill) !important;
+  min-height: 26px !important;
+  max-height: 26px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 50% !important;
   background: var(--mf-bg-surface) !important;
   color: var(--mf-text-secondary) !important;
   border: 1px solid var(--mf-border) !important;
-  box-shadow: var(--mf-shadow-sm) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18) !important;
   cursor: pointer !important;
-  z-index: 5 !important;
+  z-index: 15 !important;
   opacity: 0;
   pointer-events: none;
   box-sizing: border-box !important;
   flex-shrink: 0 !important;
-  transition: opacity var(--mf-transition-fast), background var(--mf-transition-fast), transform var(--mf-transition-fast);
+  line-height: 0 !important;
+  overflow: hidden !important;
+  transition: opacity var(--mf-transition-fast), background var(--mf-transition-fast), transform var(--mf-transition-fast), color var(--mf-transition-fast);
 }
 
 .mf-scroll-btn.mf-visible {
-  opacity: 0.95 !important;
+  opacity: 0.96 !important;
   pointer-events: auto !important;
 }
 
@@ -233,21 +242,30 @@
   opacity: 1 !important;
   background: var(--mf-bg-wash) !important;
   color: var(--mf-text-primary) !important;
-  transform: translateY(-50%) scale(1.06) !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.24) !important;
+  transform: scale(1.08) !important;
 }
 
 .mf-scroll-btn-left {
-  left: 4px !important;
+  left: 3px !important;
 }
 
 .mf-scroll-btn-right {
-  right: 4px !important;
+  right: 3px !important;
 }
 
 .mf-scroll-btn svg {
-  width: 14px;
-  height: 14px;
-  fill: currentColor;
+  display: block !important;
+  width: 15px !important;
+  height: 15px !important;
+  min-width: 15px !important;
+  min-height: 15px !important;
+  max-width: 15px !important;
+  max-height: 15px !important;
+  margin: auto !important;
+  fill: currentColor !important;
+  flex-shrink: 0 !important;
+  pointer-events: none !important;
 }
 
 /* Pojedyncza pigułka folderu */
@@ -529,14 +547,14 @@
 /* Przycisk folderu na wierszu rozmowy (zawsze dostępny i widoczny) */
 .mf-folder-btn {
   position: absolute !important;
-  right: 46px !important;
+  right: 64px !important;
   top: 50% !important;
   transform: translateY(-50%) !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  width: 30px !important;
-  height: 30px !important;
+  width: 26px !important;
+  height: 26px !important;
   border-radius: var(--mf-radius-pill) !important;
   background: var(--mf-bg-surface) !important;
   color: var(--mf-text-secondary) !important;
@@ -561,14 +579,14 @@ div:hover > .mf-folder-btn,
   background: var(--mf-bg-wash) !important;
   color: var(--mf-primary) !important;
   border-color: var(--mf-primary) !important;
-  transform: translateY(-50%) scale(1.12) !important;
+  transform: translateY(-50%) scale(1.08) !important;
   box-shadow: var(--mf-shadow-md) !important;
 }
 
 .mf-folder-btn svg {
-  width: 15px;
-  height: 15px;
-  fill: currentColor;
+  width: 14px !important;
+  height: 14px !important;
+  fill: currentColor !important;
 }
 
 
@@ -1391,6 +1409,148 @@ div:hover > .mf-folder-btn,
   color: var(--mf-text-secondary);
   font-size: 13px;
   line-height: 1.5;
+}
+
+/* Picker osób i rozmów w oknie tworzenia/edycji folderu */
+.mf-modal-group-threads {
+  margin-top: 4px;
+}
+
+.mf-modal-threads-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mf-modal-threads-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mf-primary);
+  background: var(--mf-primary-subtle);
+  padding: 2px 8px;
+  border-radius: var(--mf-radius-pill);
+}
+
+.mf-modal-threads-search {
+  margin-bottom: 8px;
+}
+
+.mf-modal-threads-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--mf-border);
+  border-radius: var(--mf-radius-md);
+  padding: 6px;
+  background: var(--mf-bg-wash);
+}
+
+.mf-picker-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--mf-bg-surface);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all var(--mf-transition-fast);
+  user-select: none;
+}
+
+.mf-picker-item:hover {
+  background: var(--mf-hover);
+  border-color: var(--mf-border);
+}
+
+.mf-picker-item.mf-picker-item-assigned {
+  background: var(--mf-primary-subtle);
+  border-color: rgba(0, 132, 255, 0.25);
+}
+
+.mf-picker-item-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.mf-picker-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.mf-picker-avatar-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--mf-bg-card);
+  font-size: 13px;
+}
+
+.mf-picker-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--mf-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mf-picker-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--mf-radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  flex-shrink: 0;
+  transition: all var(--mf-transition-fast);
+}
+
+.mf-picker-toggle-btn svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+}
+
+.mf-btn-add-folder {
+  background: var(--mf-bg-wash);
+  color: var(--mf-text-secondary);
+  border-color: var(--mf-border);
+}
+
+.mf-btn-add-folder:hover {
+  background: var(--mf-primary);
+  color: #ffffff;
+  border-color: var(--mf-primary);
+}
+
+.mf-btn-in-folder {
+  background: var(--mf-primary);
+  color: #ffffff;
+}
+
+.mf-btn-in-folder:hover {
+  background: var(--mf-danger);
+  border-color: var(--mf-danger);
+}
+
+.mf-picker-empty {
+  padding: 18px 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--mf-text-secondary);
+  line-height: 1.4;
 }
 
 

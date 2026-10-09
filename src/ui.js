@@ -21,7 +21,8 @@
     chevronDown: `<svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>`,
     unassign: `<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z"/></svg>`,
     palette: `<svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l1.9-1.9C9.22 19.49 10.57 20 12 20c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-5 9c-.83 0-1.5-.67-1.5-1.5S6.17 9 7 9s1.5.67 1.5 1.5S7.83 12 7 12zm3-4c-.83 0-1.5-.67-1.5-1.5S9.17 5 10 5s1.5.67 1.5 1.5S10.83 8 10 8zm4 0c-.83 0-1.5-.67-1.5-1.5S13.17 5 14 5s1.5.67 1.5 1.5S14.83 8 14 8zm3 4c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>`,
-    settings: `<svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>`
+    settings: `<svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>`,
+    users: `<svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>`
   };
 
   // Domyślny zestaw emotikonów do wyboru
@@ -754,6 +755,166 @@
       body.appendChild(groupColor);
       body.appendChild(groupPreview);
 
+      // Sekcja wyboru i wyszukiwania rozmów do tego folderu
+      const savedThreads = this.storage ? (this.storage._threads || {}) : {};
+      const detected = this.detector ? this.detector.scanChatList() : [];
+
+      const threadsMap = new Map();
+      for (const [tId, tData] of Object.entries(savedThreads)) {
+        threadsMap.set(tId, {
+          id: tId,
+          name: tData.name || `Rozmowa ${tId}`,
+          avatar: tData.avatar || '',
+          folderId: tData.folderId || 'uncategorized'
+        });
+      }
+      detected.forEach(item => {
+        if (!threadsMap.has(item.threadId)) {
+          threadsMap.set(item.threadId, {
+            id: item.threadId,
+            name: item.name || `Rozmowa ${item.threadId}`,
+            avatar: item.avatar || '',
+            folderId: 'uncategorized'
+          });
+        } else {
+          const existing = threadsMap.get(item.threadId);
+          if (item.name && item.name !== `Rozmowa ${item.threadId}`) {
+            existing.name = item.name;
+          }
+          if (item.avatar) {
+            existing.avatar = item.avatar;
+          }
+        }
+      });
+
+      const assignedThreadIds = new Set();
+      if (isEdit && folder && folder.id) {
+        for (const [tId, t] of threadsMap.entries()) {
+          if (t.folderId === folder.id) {
+            assignedThreadIds.add(tId);
+          }
+        }
+      }
+
+      const groupThreads = document.createElement('div');
+      groupThreads.className = 'mf-modal-group mf-modal-group-threads';
+
+      const threadsHeader = document.createElement('div');
+      threadsHeader.className = 'mf-modal-threads-header';
+      const threadsLabel = document.createElement('label');
+      threadsLabel.className = 'mf-modal-label';
+      threadsLabel.textContent = 'Rozmowy w tym folderze';
+      const threadsCountBadge = document.createElement('span');
+      threadsCountBadge.className = 'mf-modal-threads-badge';
+      threadsHeader.appendChild(threadsLabel);
+      threadsHeader.appendChild(threadsCountBadge);
+
+      const searchThreadsInput = document.createElement('input');
+      searchThreadsInput.type = 'text';
+      searchThreadsInput.className = 'mf-modal-input mf-modal-threads-search';
+      searchThreadsInput.placeholder = 'Wyszukaj osoby lub czaty do dodania...';
+      searchThreadsInput.autocomplete = 'off';
+
+      const threadsListEl = document.createElement('div');
+      threadsListEl.className = 'mf-modal-threads-picker';
+
+      const threadList = Array.from(threadsMap.values());
+
+      const updateThreadsBadge = () => {
+        threadsCountBadge.textContent = `${assignedThreadIds.size} ${assignedThreadIds.size === 1 ? 'wybrana' : 'wybranych'}`;
+      };
+
+      const renderPickerList = (filterQuery = '') => {
+        threadsListEl.innerHTML = '';
+        const query = (filterQuery || '').toLowerCase().trim();
+
+        const filtered = threadList.filter(t => t.name.toLowerCase().includes(query));
+        filtered.sort((a, b) => {
+          const aAssigned = assignedThreadIds.has(a.id) ? 1 : 0;
+          const bAssigned = assignedThreadIds.has(b.id) ? 1 : 0;
+          if (aAssigned !== bAssigned) return bAssigned - aAssigned;
+          return a.name.localeCompare(b.name);
+        });
+
+        if (filtered.length === 0) {
+          const emptyEl = document.createElement('div');
+          emptyEl.className = 'mf-picker-empty';
+          emptyEl.textContent = threadList.length === 0
+            ? 'Przewiń listę czatów na Messengerze, aby rozszerzenie odczytało kontakty.'
+            : 'Nie znaleziono takich osób.';
+          threadsListEl.appendChild(emptyEl);
+          return;
+        }
+
+        filtered.forEach(thread => {
+          const isAssigned = assignedThreadIds.has(thread.id);
+          const item = document.createElement('div');
+          item.className = `mf-picker-item ${isAssigned ? 'mf-picker-item-assigned' : ''}`;
+
+          const left = document.createElement('div');
+          left.className = 'mf-picker-item-left';
+
+          if (thread.avatar) {
+            const img = document.createElement('img');
+            img.className = 'mf-picker-avatar';
+            img.src = thread.avatar;
+            img.alt = '';
+            left.appendChild(img);
+          } else {
+            const placeholder = document.createElement('div');
+            placeholder.className = 'mf-picker-avatar mf-picker-avatar-placeholder';
+            placeholder.textContent = '👤';
+            left.appendChild(placeholder);
+          }
+
+          const name = document.createElement('span');
+          name.className = 'mf-picker-name';
+          name.textContent = thread.name;
+          name.title = thread.name;
+          left.appendChild(name);
+
+          const toggleBtn = document.createElement('button');
+          toggleBtn.type = 'button';
+          toggleBtn.className = `mf-picker-toggle-btn ${isAssigned ? 'mf-btn-in-folder' : 'mf-btn-add-folder'}`;
+          toggleBtn.innerHTML = isAssigned
+            ? `${ICONS.check} <span>W folderze</span>`
+            : `${ICONS.plus} <span>Dodaj</span>`;
+
+          const toggleAction = () => {
+            if (assignedThreadIds.has(thread.id)) {
+              assignedThreadIds.delete(thread.id);
+            } else {
+              assignedThreadIds.add(thread.id);
+            }
+            updateThreadsBadge();
+            renderPickerList(searchThreadsInput.value);
+          };
+
+          toggleBtn.onclick = (e) => {
+            e.stopPropagation();
+            toggleAction();
+          };
+
+          item.onclick = () => {
+            toggleAction();
+          };
+
+          item.appendChild(left);
+          item.appendChild(toggleBtn);
+          threadsListEl.appendChild(item);
+        });
+      };
+
+      groupThreads.appendChild(threadsHeader);
+      groupThreads.appendChild(searchThreadsInput);
+      groupThreads.appendChild(threadsListEl);
+
+      searchThreadsInput.addEventListener('input', (e) => renderPickerList(e.target.value));
+      updateThreadsBadge();
+      renderPickerList();
+
+      body.appendChild(groupThreads);
+
       // Stopka okna z przyciskami akcji
       const footer = document.createElement('div');
       footer.className = 'mf-modal-footer';
@@ -815,7 +976,7 @@
       setTimeout(() => nameInput.focus(), 50);
 
       // Zapis formularza
-      const handleSave = () => {
+      const handleSave = async () => {
         const trimmedName = nameInput.value.trim();
         if (!trimmedName) {
           nameInput.focus();
@@ -823,8 +984,9 @@
           return;
         }
 
+        const targetFolderId = isEdit ? folder.id : this.generateId();
         const folderData = {
-          id: isEdit ? folder.id : this.generateId(),
+          id: targetFolderId,
           name: trimmedName,
           icon: selectedIcon,
           color: selectedColor
@@ -836,6 +998,32 @@
 
         this.closeModal();
         this.showToast(isEdit ? 'Zapisano zmiany w folderze' : 'Utworzono nowy folder');
+
+        if (this.storage) {
+          (async () => {
+            for (const tId of assignedThreadIds) {
+              const tInfo = threadsMap.get(tId);
+              await this.storage.assignThread(tId, targetFolderId, {
+                name: tInfo ? tInfo.name : '',
+                avatar: tInfo ? tInfo.avatar : ''
+              });
+            }
+
+            if (isEdit) {
+              for (const [tId, tData] of Object.entries(savedThreads)) {
+                if (tData.folderId === targetFolderId && !assignedThreadIds.has(tId)) {
+                  await this.storage.removeThreadAssignment(tId);
+                }
+              }
+            }
+
+            const currentActive = await this.storage.getActiveFolder();
+            const currentThreads = await this.storage.getAllThreads();
+            this.filterChatRows(currentActive, currentThreads);
+            const currentFolders = await this.storage.getFolders();
+            this.renderFolderBar(currentFolders, currentActive, currentThreads);
+          })();
+        }
       };
 
       saveBtn.addEventListener('click', handleSave);
@@ -974,10 +1162,40 @@
           info.appendChild(details);
           item.appendChild(info);
 
+          const openEditModal = () => {
+            this.showFolderModal({
+              folder,
+              onSave: async (updated) => {
+                if (this.storage) await this.storage.saveFolder(updated);
+                this.showSettingsModal(options);
+              },
+              onDelete: async (fId) => {
+                if (this.storage) await this.storage.deleteFolder(fId);
+                this.showSettingsModal(options);
+              }
+            });
+          };
+
+          if (folder.id !== 'all') {
+            info.style.cursor = 'pointer';
+            info.title = 'Kliknij, aby zarządzać osobami i edytować folder';
+            info.onclick = openEditModal;
+          }
+
           const actions = document.createElement('div');
           actions.className = 'mf-settings-folder-actions';
 
-          if (folder.isSystem) {
+          if (folder.id !== 'all') {
+            const peopleBtn = document.createElement('button');
+            peopleBtn.type = 'button';
+            peopleBtn.className = 'mf-settings-action-btn';
+            peopleBtn.title = 'Dodaj lub usuń osoby z tego folderu';
+            peopleBtn.innerHTML = ICONS.users;
+            peopleBtn.onclick = openEditModal;
+            actions.appendChild(peopleBtn);
+          }
+
+          if (folder.isSystem && folder.id === 'all') {
             const tag = document.createElement('span');
             tag.className = 'mf-settings-system-tag';
             tag.textContent = 'Domyślny';
@@ -986,21 +1204,9 @@
             const editBtn = document.createElement('button');
             editBtn.type = 'button';
             editBtn.className = 'mf-settings-action-btn';
-            editBtn.title = 'Edytuj';
+            editBtn.title = 'Edytuj folder';
             editBtn.innerHTML = ICONS.edit;
-            editBtn.onclick = () => {
-              this.showFolderModal({
-                folder,
-                onSave: async (updated) => {
-                  if (this.storage) await this.storage.saveFolder(updated);
-                  this.showSettingsModal(options);
-                },
-                onDelete: async (fId) => {
-                  if (this.storage) await this.storage.deleteFolder(fId);
-                  this.showSettingsModal(options);
-                }
-              });
-            };
+            editBtn.onclick = openEditModal;
             actions.appendChild(editBtn);
 
             const deleteBtn = document.createElement('button');

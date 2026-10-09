@@ -297,6 +297,11 @@ const modalNameInput = ui.activeModal.querySelector('#mf-input-folder-name');
 assert.ok(modalNameInput, 'Pole wprowadzania nazwy musi istnieć');
 modalNameInput.value = 'Ważne kontakty';
 
+const threadsSearch = ui.activeModal.querySelector('.mf-modal-threads-search');
+assert.ok(threadsSearch, 'Okno modalne folderu musi zawierać pole wyszukiwania osób');
+const threadsPicker = ui.activeModal.querySelector('.mf-modal-threads-picker');
+assert.ok(threadsPicker, 'Okno modalne folderu musi zawierać listę wyboru osób');
+
 const saveModalBtn = ui.activeModal.querySelector('.mf-btn-primary');
 saveModalBtn.dispatchEvent({ type: 'click' });
 
@@ -341,6 +346,8 @@ const cssContent = fs.readFileSync(cssPath, 'utf8');
 assert.ok(cssContent.includes('#mf-folder-bar'), 'content.css musi stylizować #mf-folder-bar');
 assert.ok(cssContent.includes('.mf-thread-badge'), 'content.css musi stylizować .mf-thread-badge');
 assert.ok(cssContent.includes('.mf-folder-btn'), 'content.css musi stylizować .mf-folder-btn');
+assert.ok(cssContent.includes('.mf-scroll-btn'), 'content.css musi stylizować .mf-scroll-btn');
+assert.ok(cssContent.includes('.mf-modal-threads-picker'), 'content.css musi stylizować .mf-modal-threads-picker');
 assert.ok(cssContent.includes('.mf-dropdown-menu'), 'content.css musi stylizować .mf-dropdown-menu');
 assert.ok(cssContent.includes('.mf-modal-overlay'), 'content.css musi stylizować .mf-modal-overlay');
 assert.ok(cssContent.includes('.mf-header-pill'), 'content.css musi stylizować .mf-header-pill');

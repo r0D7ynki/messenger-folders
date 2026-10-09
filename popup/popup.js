@@ -46,7 +46,8 @@
     settings: { ...INITIAL_SETTINGS },
     currentEditId: null,
     selectedEmoji: '📁',
-    selectedColor: COLOR_LIST[0]
+    selectedColor: COLOR_LIST[0],
+    assignedThreadIds: new Set()
   };
 
   // Referencje do elementów DOM
@@ -83,7 +84,10 @@
     dialogPreviewName: document.querySelector('.mf-dialog-preview-name'),
     dialogBtnCancel: document.getElementById('mf-dialog-btn-cancel'),
     dialogBtnSave: document.getElementById('mf-dialog-btn-save'),
-    dialogClose: document.getElementById('mf-dialog-close')
+    dialogClose: document.getElementById('mf-dialog-close'),
+    dialogThreadsSearch: document.getElementById('mf-dialog-threads-search'),
+    dialogThreadsList: document.getElementById('mf-dialog-threads-list'),
+    dialogThreadsCount: document.getElementById('mf-dialog-threads-count')
   };
 
   /**
@@ -429,6 +433,9 @@
     dom.dialogClose.addEventListener('click', closeDialog);
 
     dom.dialogInputName.addEventListener('input', updateDialogPreview);
+    if (dom.dialogThreadsSearch) {
+      dom.dialogThreadsSearch.addEventListener('input', (e) => renderDialogThreads(e.target.value));
+    }
 
     dom.dialogBtnSave.addEventListener('click', async () => {
       const name = dom.dialogInputName.value.trim();
@@ -438,17 +445,18 @@
         return;
       }
 
+      const targetId = state.currentEditId || ('f_' + Date.now().toString(36));
+
       if (state.currentEditId) {
         if (storage) {
           await storage.saveFolder({
-            id: state.currentEditId,
+            id: targetId,
             name,
             icon: state.selectedEmoji,
             color: state.selectedColor
           });
-          state.folders = await storage.getFolders();
         } else {
-          const idx = state.folders.findIndex((f) => f.id === state.currentEditId);
+          const idx = state.folders.findIndex((f) => f.id === targetId);
           if (idx !== -1) {
             state.folders[idx] = {
               ...state.folders[idx],
@@ -463,14 +471,14 @@
       } else {
         if (storage) {
           await storage.saveFolder({
+            id: targetId,
             name,
             icon: state.selectedEmoji,
             color: state.selectedColor
           });
-          state.folders = await storage.getFolders();
         } else {
           const newFolder = {
-            id: 'f_' + Date.now().toString(36),
+            id: targetId,
             name,
             icon: state.selectedEmoji,
             color: state.selectedColor,
@@ -482,18 +490,127 @@
         showToast('Utworzono nowy folder');
       }
 
+      // Przypisz zaznaczone rozmowy
+      if (storage) {
+        for (const tId of state.assignedThreadIds) {
+          const tInfo = state.threads[tId];
+          await storage.assignThread(tId, targetId, {
+            name: tInfo ? tInfo.name : '',
+            avatar: tInfo ? tInfo.avatar : ''
+          });
+        }
+        if (state.currentEditId) {
+          for (const [tId, tData] of Object.entries(state.threads)) {
+            if (tData.folderId === targetId && !state.assignedThreadIds.has(tId)) {
+              await storage.removeThreadAssignment(tId);
+            }
+          }
+        }
+        state.folders = await storage.getFolders();
+        state.threads = await storage.getAllThreads();
+      }
+
       renderFolderList();
       closeDialog();
     });
   }
 
+  function renderDialogThreads(searchQuery = '') {
+    if (!dom.dialogThreadsList) return;
+    dom.dialogThreadsList.innerHTML = '';
+    const q = (searchQuery || '').toLowerCase().trim();
+    const threads = Object.entries(state.threads).map(([id, data]) => ({
+      id,
+      name: data.name || `Rozmowa ${id}`,
+      avatar: data.avatar || '',
+      folderId: data.folderId || 'uncategorized'
+    }));
+
+    const filtered = threads.filter(t => t.name.toLowerCase().includes(q));
+    filtered.sort((a, b) => {
+      const aIn = state.assignedThreadIds.has(a.id) ? 1 : 0;
+      const bIn = state.assignedThreadIds.has(b.id) ? 1 : 0;
+      if (aIn !== bIn) return bIn - aIn;
+      return a.name.localeCompare(b.name);
+    });
+
+    if (dom.dialogThreadsCount) {
+      dom.dialogThreadsCount.textContent = `${state.assignedThreadIds.size} ${state.assignedThreadIds.size === 1 ? 'wybrana' : 'wybranych'}`;
+    }
+
+    if (filtered.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'mf-dialog-threads-empty';
+      empty.textContent = threads.length === 0 ? 'Brak zapisanych rozmów.' : 'Nie znaleziono takich osób.';
+      dom.dialogThreadsList.appendChild(empty);
+      return;
+    }
+
+    filtered.forEach(thread => {
+      const isAssigned = state.assignedThreadIds.has(thread.id);
+      const row = document.createElement('div');
+      row.className = `mf-dialog-thread-item ${isAssigned ? 'mf-selected' : ''}`;
+
+      const left = document.createElement('div');
+      left.className = 'mf-dialog-thread-left';
+
+      if (thread.avatar) {
+        const img = document.createElement('img');
+        img.className = 'mf-dialog-thread-avatar';
+        img.src = thread.avatar;
+        left.appendChild(img);
+      } else {
+        const ph = document.createElement('div');
+        ph.className = 'mf-dialog-thread-avatar mf-dialog-thread-avatar-ph';
+        ph.textContent = '👤';
+        left.appendChild(ph);
+      }
+
+      const name = document.createElement('span');
+      name.className = 'mf-dialog-thread-name';
+      name.textContent = thread.name;
+      left.appendChild(name);
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `mf-dialog-thread-btn ${isAssigned ? 'mf-btn-in-folder' : 'mf-btn-add-folder'}`;
+      btn.textContent = isAssigned ? 'W folderze' : '+ Dodaj';
+
+      const toggle = () => {
+        if (state.assignedThreadIds.has(thread.id)) {
+          state.assignedThreadIds.delete(thread.id);
+        } else {
+          state.assignedThreadIds.add(thread.id);
+        }
+        renderDialogThreads(dom.dialogThreadsSearch ? dom.dialogThreadsSearch.value : '');
+      };
+
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        toggle();
+      };
+      row.onclick = toggle;
+
+      row.appendChild(left);
+      row.appendChild(btn);
+      dom.dialogThreadsList.appendChild(row);
+    });
+  }
+
   function openDialog(folder) {
+    state.assignedThreadIds.clear();
     if (folder) {
       state.currentEditId = folder.id;
       dom.dialogTitle.textContent = 'Edytuj folder';
       dom.dialogInputName.value = folder.name;
       state.selectedEmoji = folder.icon || '📁';
       state.selectedColor = folder.color || COLOR_LIST[0];
+
+      Object.entries(state.threads).forEach(([tId, tData]) => {
+        if (tData.folderId === folder.id) {
+          state.assignedThreadIds.add(tId);
+        }
+      });
     } else {
       state.currentEditId = null;
       dom.dialogTitle.textContent = 'Nowy folder';
@@ -502,8 +619,13 @@
       state.selectedColor = COLOR_LIST[0];
     }
 
+    if (dom.dialogThreadsSearch) {
+      dom.dialogThreadsSearch.value = '';
+    }
+
     updateDialogSelection();
     updateDialogPreview();
+    renderDialogThreads();
     dom.dialogOverlay.style.display = 'flex';
     setTimeout(() => dom.dialogInputName.focus(), 60);
   }
