@@ -16,8 +16,8 @@
     close: `<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z"/></svg>`,
     search: `<svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>`,
     check: `<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>`,
-    chevronLeft: `<svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>`,
-    chevronRight: `<svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>`,
+    chevronLeft: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>`,
+    chevronRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>`,
     chevronDown: `<svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>`,
     unassign: `<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z"/></svg>`,
     palette: `<svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l1.9-1.9C9.22 19.49 10.57 20 12 20c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-5 9c-.83 0-1.5-.67-1.5-1.5S6.17 9 7 9s1.5.67 1.5 1.5S7.83 12 7 12zm3-4c-.83 0-1.5-.67-1.5-1.5S9.17 5 10 5s1.5.67 1.5 1.5S10.83 8 10 8zm4 0c-.83 0-1.5-.67-1.5-1.5S13.17 5 14 5s1.5.67 1.5 1.5S14.83 8 14 8zm3 4c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>`,
@@ -203,6 +203,22 @@
           existingIds.every((id, idx) => id === newIds[idx]);
 
         if (isSameStructure) {
+          // Zaktualizuj ikony i pozycję przycisków przewijania
+          const btnL = bar.querySelector('.mf-scroll-btn-left');
+          if (btnL) {
+            btnL.innerHTML = ICONS.chevronLeft;
+            btnL.style.top = '50%';
+            btnL.style.transform = 'translateY(-50%)';
+            btnL.style.left = '2px';
+          }
+          const btnR = bar.querySelector('.mf-scroll-btn-right');
+          if (btnR) {
+            btnR.innerHTML = ICONS.chevronRight;
+            btnR.style.top = '50%';
+            btnR.style.transform = 'translateY(-50%)';
+            btnR.style.right = '2px';
+          }
+
           // Zaktualizuj stan, nazwy, ikony, kolory i liczniki w istniejących elementach
           existingPills.forEach(pill => {
             const fId = pill.dataset.folderId;
@@ -259,6 +275,9 @@
       btnLeft.className = 'mf-scroll-btn mf-scroll-btn-left';
       btnLeft.setAttribute('aria-label', 'Przewiń foldery w lewo');
       btnLeft.innerHTML = ICONS.chevronLeft;
+      btnLeft.style.top = '50%';
+      btnLeft.style.transform = 'translateY(-50%)';
+      btnLeft.style.left = '2px';
 
       // Kontener przewijalny z pigułkami
       const container = document.createElement('div');
@@ -271,6 +290,9 @@
       btnRight.className = 'mf-scroll-btn mf-scroll-btn-right';
       btnRight.setAttribute('aria-label', 'Przewiń foldery w prawo');
       btnRight.innerHTML = ICONS.chevronRight;
+      btnRight.style.top = '50%';
+      btnRight.style.transform = 'translateY(-50%)';
+      btnRight.style.right = '2px';
 
       // Tworzenie pigułek folderów
       folderList.forEach((folder) => {
