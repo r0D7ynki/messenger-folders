@@ -207,16 +207,16 @@
           const btnL = bar.querySelector('.mf-scroll-btn-left');
           if (btnL) {
             btnL.innerHTML = ICONS.chevronLeft;
-            btnL.style.top = '50%';
-            btnL.style.transform = 'translateY(-50%)';
-            btnL.style.left = '2px';
+            btnL.style.top = '2px';
+            btnL.style.transform = 'none';
+            btnL.style.left = '-4px';
           }
           const btnR = bar.querySelector('.mf-scroll-btn-right');
           if (btnR) {
             btnR.innerHTML = ICONS.chevronRight;
-            btnR.style.top = '50%';
-            btnR.style.transform = 'translateY(-50%)';
-            btnR.style.right = '2px';
+            btnR.style.top = '2px';
+            btnR.style.transform = 'none';
+            btnR.style.right = '-4px';
           }
 
           // Zaktualizuj stan, nazwy, ikony, kolory i liczniki w istniejących elementach
@@ -275,9 +275,9 @@
       btnLeft.className = 'mf-scroll-btn mf-scroll-btn-left';
       btnLeft.setAttribute('aria-label', 'Przewiń foldery w lewo');
       btnLeft.innerHTML = ICONS.chevronLeft;
-      btnLeft.style.top = '50%';
-      btnLeft.style.transform = 'translateY(-50%)';
-      btnLeft.style.left = '2px';
+      btnLeft.style.top = '2px';
+      btnLeft.style.transform = 'none';
+      btnLeft.style.left = '-4px';
 
       // Kontener przewijalny z pigułkami
       const container = document.createElement('div');
@@ -290,9 +290,9 @@
       btnRight.className = 'mf-scroll-btn mf-scroll-btn-right';
       btnRight.setAttribute('aria-label', 'Przewiń foldery w prawo');
       btnRight.innerHTML = ICONS.chevronRight;
-      btnRight.style.top = '50%';
-      btnRight.style.transform = 'translateY(-50%)';
-      btnRight.style.right = '2px';
+      btnRight.style.top = '2px';
+      btnRight.style.transform = 'none';
+      btnRight.style.right = '-4px';
 
       // Tworzenie pigułek folderów
       folderList.forEach((folder) => {

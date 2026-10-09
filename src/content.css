@@ -146,7 +146,7 @@
   user-select: none !important;
   flex-shrink: 0 !important;
   flex-grow: 0 !important;
-  overflow: hidden !important;
+  overflow: visible !important;
   isolation: isolate !important;
   contain: layout style !important;
   clear: both !important;
@@ -206,9 +206,9 @@
   align-items: center !important;
   justify-content: center !important;
   position: absolute !important;
-  top: 50% !important;
+  top: 2px !important;
   bottom: auto !important;
-  transform: translateY(-50%) !important;
+  transform: none !important;
   width: 28px !important;
   min-width: 28px !important;
   max-width: 28px !important;
@@ -221,7 +221,7 @@
   background: var(--mf-bg-surface) !important;
   color: var(--mf-text-primary) !important;
   border: 1px solid var(--mf-border) !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22) !important;
   cursor: pointer !important;
   z-index: 25 !important;
   opacity: 0;
@@ -244,15 +244,15 @@
   color: var(--mf-primary) !important;
   border-color: var(--mf-primary) !important;
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.28) !important;
-  transform: translateY(-50%) scale(1.1) !important;
+  transform: scale(1.08) !important;
 }
 
 .mf-scroll-btn-left {
-  left: 2px !important;
+  left: -4px !important;
 }
 
 .mf-scroll-btn-right {
-  right: 2px !important;
+  right: -4px !important;
 }
 
 .mf-scroll-btn svg {
