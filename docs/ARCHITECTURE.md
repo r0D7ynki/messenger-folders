@@ -221,22 +221,19 @@ Aby zapewnić płynne działanie, detektor tworzy obiekt `MutationObserver`:
 
 ## Warstwa interfejsu użytkownika (UI)
 
-Klasa [`MessengerUI`](file:///home/grz3chu/messenger-folders/src/ui.js#L47-L879) w pliku [src/ui.js](file:///home/grz3chu/messenger-folders/src/ui.js) tworzy wszystkie elementy graficzne:
+Klasa [`MessengerUI`](file:///home/grz3chu/messenger-folders/src/ui.js) w pliku [src/ui.js](file:///home/grz3chu/messenger-folders/src/ui.js) tworzy wszystkie elementy graficzne:
 
-- **Pasek pigułek (`#mf-folder-bar`)**:
-  Poziomy kontener z płynnym przewijaniem za pomocą kółka myszy, gestu dotykowego lub strzałek bocznych.
-  Każda pigułka wyświetla ikonę, nazwę oraz licznik przypisanych wątków.
-- **Plakietka wiersza (`.mf-thread-badge`)**:
-  Kolorowa etykieta wyświetlana obok nazwy rozmówcy. Informuje o przypisanym folderze.
-- **Przycisk przypisania (`.mf-folder-btn`)**:
-  Dyskretny przycisk pojawiający się po najechaniu kursorem na wiersz czatu.
+- **Moduł paska folderów (`#mf-folder-bar`)**:
+  Dwurzędowy kontener umieszczony nad listą czatów:
+  - **Górny wiersz (`.mf-folder-top-bar`)**: zawiera pole wyszukiwarki folderów w czasie rzeczywistym oraz przypięty obok przycisk ustawień `⚙️`.
+  - **Dolny wiersz (`.mf-folder-pills-row`)**: poziomy pasek pigułek z płynnym przewijaniem za pomocą kółka myszy, gestu dotykowego lub bocznych strzałek.
 - **Wskaźnik w nagłówku (`.mf-header-pill`)**:
   Pigułka umieszczona u góry aktywnej konwersacji. Ułatwia szybką zmianę kategorii.
 - **Menu wyboru folderu (`.mf-dropdown-menu`)**:
   Wyskakujące menu z wbudowaną wyszukiwarką.
   Inteligentnie dopasowuje swoją pozycję, aby nie wychodzić poza krawędź ekranu.
-- **Okno edycji folderu (`.mf-modal`)**:
-  Okno dialogowe z siatką 24 popularnych emoji, paletą kolorów oraz podglądem pigułki na żywo.
+- **Okno edycji i zarządzania folderami (`.mf-modal`, `.mf-settings-modal`)**:
+  Centrum zarządzania folderami, przypisywania czatów, wyboru emoji i kolorów oraz kopii zapasowej.
 
 ### Zgodność z motywem jasnym i ciemnym
 

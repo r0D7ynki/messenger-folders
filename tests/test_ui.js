@@ -237,9 +237,13 @@ assert.ok(addBtn, 'Przycisk dodawania paska powinien istnieć');
 addBtn.dispatchEvent({ type: 'click' });
 assert.strictEqual(addClicked, true, 'Kliknięcie w dodawanie powinno wywołać callback');
 
-// Sprawdzenie przycisku ustawień
+// Sprawdzenie wyszukiwarki folderów
+const searchInput = bar.querySelector('.mf-folder-search-input');
+assert.ok(searchInput, 'Pole wyszukiwarki folderów powinno istnieć');
+
+// Sprawdzenie przycisku ustawień obok wyszukiwarki folderów
 const settingsBtn = bar.querySelector('.mf-folder-settings-btn');
-assert.ok(settingsBtn, 'Przycisk ustawień powinien istnieć na pasku');
+assert.ok(settingsBtn, 'Przycisk ustawień powinien istnieć w górnym wierszu paska');
 
 // Sprawdzenie wyboru pigułki
 pills[2].dispatchEvent({ type: 'click' });
@@ -247,27 +251,31 @@ assert.strictEqual(selectedId, 'friends', 'Kliknięcie pigułki powinno wywoła�
 
 console.log('✓ renderFolderBar() działa poprawnie.');
 
-// 3. injectFolderBadge
+// 3. injectFolderBadge (usunięcie plakietek i nazw folderów z wiersza czatu)
 console.log('Test 3: injectFolderBadge()...');
 const mockRow = new MockElement('div');
 mockRow.setAttribute('role', 'row');
 
+// Dodanie starej plakietki, aby sprawdzić czy injectFolderBadge ją usuwa
+const oldBadge = new MockElement('span');
+oldBadge.className = 'mf-thread-badge';
+mockRow.appendChild(oldBadge);
+
 let assignCalled = false;
-ui.injectFolderBadge(mockRow, 'thread_123', sampleFolders[1], () => {
+ui.injectFolderBadge(mockRow, 'thread_123', sampleFolders[1], (el, tid) => {
   assignCalled = true;
 });
 
 const badge = mockRow.querySelector('.mf-thread-badge');
-assert.ok(badge, 'Plakietka folderu powinna zostać wstrzyknięta');
-assert.strictEqual(badge.querySelector('.mf-thread-badge-text').textContent, 'Praca');
+assert.strictEqual(badge, null, 'Plakietka folderu powinna zostać usunięta z czatu');
 
-// Przycisk folderu na czacie został usunięty zgodnie z życzeniem użytkownika
+// Przycisk folderu na czacie również nie powinien istnieć
 const folderBtn = mockRow.querySelector('.mf-folder-btn');
 assert.strictEqual(folderBtn, null, 'Przycisk folderu przy czacie nie powinien być tworzony');
 
-badge.dispatchEvent({ type: 'click', stopPropagation() {}, preventDefault() {} });
-assert.strictEqual(assignCalled, true, 'Kliknięcie plakietki powinno wywołać onAssign');
-console.log('✓ injectFolderBadge() działa poprawnie.');
+mockRow.dispatchEvent({ type: 'contextmenu', shiftKey: false, stopPropagation() {}, preventDefault() {} });
+assert.strictEqual(assignCalled, true, 'Prawy przycisk myszy na wierszu powinien wywołać onAssign');
+console.log('✓ injectFolderBadge() działa poprawnie (plakietki usunięte z czatu).');
 
 // 4. renderHeaderPill
 console.log('Test 4: renderHeaderPill()...');

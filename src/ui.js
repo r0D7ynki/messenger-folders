@@ -194,27 +194,30 @@
 
       let bar = document.getElementById('mf-folder-bar');
       if (bar) {
-        // Jeśli pasek już istnieje w DOM, sprawdzamy czy struktura folderów jest identyczna
+        // Jeśli pasek już istnieje w DOM, sprawdzamy czy struktura folderów i rzędów jest zachowana
+        const topBar = bar.querySelector('.mf-folder-top-bar');
+        const pillsRow = bar.querySelector('.mf-folder-pills-row');
         const existingPills = bar.querySelectorAll('.mf-folder-pill');
         const existingIds = Array.from(existingPills).map(p => p.dataset.folderId);
         const newIds = folderList.map(f => f.id);
-        const isSameStructure = existingIds.length > 0 &&
+        const isSameStructure = Boolean(topBar && pillsRow) &&
+          existingIds.length > 0 &&
           existingIds.length === newIds.length &&
           existingIds.every((id, idx) => id === newIds[idx]);
 
         if (isSameStructure) {
           // Zaktualizuj ikony i pozycję przycisków przewijania
-          const btnL = bar.querySelector('.mf-scroll-btn-left');
+          const btnL = pillsRow.querySelector('.mf-scroll-btn-left');
           if (btnL) {
             btnL.innerHTML = ICONS.chevronLeft;
-            btnL.style.top = '-2px';
+            btnL.style.top = '3px';
             btnL.style.transform = 'none';
             btnL.style.left = '-8px';
           }
-          const btnR = bar.querySelector('.mf-scroll-btn-right');
+          const btnR = pillsRow.querySelector('.mf-scroll-btn-right');
           if (btnR) {
             btnR.innerHTML = ICONS.chevronRight;
-            btnR.style.top = '-2px';
+            btnR.style.top = '3px';
             btnR.style.transform = 'none';
             btnR.style.right = '-8px';
           }
@@ -269,13 +272,60 @@
 
       bar.innerHTML = '';
 
+      // 1. Górny rząd: wyszukiwarka folderów i przycisk ustawień
+      const topBar = document.createElement('div');
+      topBar.className = 'mf-folder-top-bar';
+
+      const searchBox = document.createElement('div');
+      searchBox.className = 'mf-folder-search-box';
+
+      const searchIcon = document.createElement('span');
+      searchIcon.className = 'mf-folder-search-icon';
+      searchIcon.innerHTML = ICONS.search;
+      searchBox.appendChild(searchIcon);
+
+      const searchInput = document.createElement('input');
+      searchInput.type = 'text';
+      searchInput.className = 'mf-folder-search-input';
+      searchInput.placeholder = 'Szukaj folderu...';
+      searchInput.setAttribute('aria-label', 'Szukaj folderu');
+      searchInput.autocomplete = 'off';
+      searchInput.spellcheck = false;
+      searchBox.appendChild(searchInput);
+
+      const clearBtn = document.createElement('button');
+      clearBtn.type = 'button';
+      clearBtn.className = 'mf-folder-search-clear';
+      clearBtn.title = 'Wyczyść szukanie';
+      clearBtn.setAttribute('aria-label', 'Wyczyść szukanie');
+      clearBtn.innerHTML = ICONS.close;
+      searchBox.appendChild(clearBtn);
+
+      topBar.appendChild(searchBox);
+
+      // Przycisk ustawień przypięty obok wyszukiwarki folderów
+      if (settingsHandler) {
+        const settingsBtn = document.createElement('button');
+        settingsBtn.type = 'button';
+        settingsBtn.className = 'mf-folder-settings-btn';
+        settingsBtn.title = 'Ustawienia folderów i kopia zapasowa';
+        settingsBtn.setAttribute('aria-label', 'Ustawienia folderów');
+        settingsBtn.innerHTML = ICONS.settings;
+        settingsBtn.addEventListener('click', () => settingsHandler());
+        topBar.appendChild(settingsBtn);
+      }
+
+      // 2. Dolny rząd: pigułki folderów i przewijanie
+      const pillsRow = document.createElement('div');
+      pillsRow.className = 'mf-folder-pills-row';
+
       // Przycisk przewijania w lewo
       const btnLeft = document.createElement('button');
       btnLeft.type = 'button';
       btnLeft.className = 'mf-scroll-btn mf-scroll-btn-left';
       btnLeft.setAttribute('aria-label', 'Przewiń foldery w lewo');
       btnLeft.innerHTML = ICONS.chevronLeft;
-      btnLeft.style.top = '-2px';
+      btnLeft.style.top = '3px';
       btnLeft.style.transform = 'none';
       btnLeft.style.left = '-8px';
 
@@ -290,9 +340,49 @@
       btnRight.className = 'mf-scroll-btn mf-scroll-btn-right';
       btnRight.setAttribute('aria-label', 'Przewiń foldery w prawo');
       btnRight.innerHTML = ICONS.chevronRight;
-      btnRight.style.top = '-2px';
+      btnRight.style.top = '3px';
       btnRight.style.transform = 'none';
       btnRight.style.right = '-8px';
+
+      // Funkcja sprawdzająca konieczność pokazania strzałek przewijania
+      const updateScrollButtons = () => {
+        if (!container.clientWidth) return;
+        const maxScroll = container.scrollWidth - container.clientWidth;
+        btnLeft.classList.toggle('mf-visible', container.scrollLeft > 6);
+        btnRight.classList.toggle('mf-visible', maxScroll > 6 && container.scrollLeft < maxScroll - 6);
+      };
+
+      // Dynamiczne filtrowanie pigułek w czasie rzeczywistym
+      const applyFolderFilter = () => {
+        const query = (searchInput.value || '').trim().toLowerCase();
+        clearBtn.style.display = query ? 'flex' : 'none';
+        const allPills = container.querySelectorAll('.mf-folder-pill');
+        allPills.forEach(pill => {
+          const nameEl = pill.querySelector('.mf-folder-name');
+          const name = nameEl ? (nameEl.textContent || '').trim().toLowerCase() : '';
+          const match = !query || name.includes(query);
+          pill.style.display = match ? '' : 'none';
+        });
+        updateScrollButtons();
+      };
+
+      searchInput.addEventListener('input', applyFolderFilter);
+
+      clearBtn.addEventListener('click', () => {
+        searchInput.value = '';
+        applyFolderFilter();
+        if (typeof searchInput.focus === 'function') {
+          searchInput.focus();
+        }
+      });
+
+      searchInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && searchInput.value) {
+          event.stopPropagation();
+          searchInput.value = '';
+          applyFolderFilter();
+        }
+      });
 
       // Tworzenie pigułek folderów
       folderList.forEach((folder) => {
@@ -373,7 +463,7 @@
         container.appendChild(pill);
       });
 
-      // Przycisk dodawania nowego folderu na końcu listy
+      // Przycisk dodawania nowego folderu na końcu listy pigułek
       if (addHandler) {
         const addBtn = document.createElement('button');
         addBtn.type = 'button';
@@ -384,26 +474,6 @@
         addBtn.addEventListener('click', () => addHandler());
         container.appendChild(addBtn);
       }
-
-      // Przycisk ustawień i zarządzania folderami
-      if (settingsHandler) {
-        const settingsBtn = document.createElement('button');
-        settingsBtn.type = 'button';
-        settingsBtn.className = 'mf-folder-settings-btn';
-        settingsBtn.title = 'Ustawienia folderów i kopia zapasowa';
-        settingsBtn.setAttribute('aria-label', 'Ustawienia folderów');
-        settingsBtn.innerHTML = ICONS.settings;
-        settingsBtn.addEventListener('click', () => settingsHandler());
-        container.appendChild(settingsBtn);
-      }
-
-      // Funkcja sprawdzająca konieczność pokazania strzałek przewijania
-      const updateScrollButtons = () => {
-        if (!container.clientWidth) return;
-        const maxScroll = container.scrollWidth - container.clientWidth;
-        btnLeft.classList.toggle('mf-visible', container.scrollLeft > 6);
-        btnRight.classList.toggle('mf-visible', maxScroll > 6 && container.scrollLeft < maxScroll - 6);
-      };
 
       // Obsługa kliknięć w przyciski przewijania
       btnLeft.addEventListener('click', () => {
@@ -426,9 +496,12 @@
       container.addEventListener('scroll', updateScrollButtons, { passive: true });
 
       // Składanie struktury
-      bar.appendChild(btnLeft);
-      bar.appendChild(container);
-      bar.appendChild(btnRight);
+      pillsRow.appendChild(btnLeft);
+      pillsRow.appendChild(container);
+      pillsRow.appendChild(btnRight);
+
+      bar.appendChild(topBar);
+      bar.appendChild(pillsRow);
 
       // Delegacja zdarzeń na pasku dla pewności obsługi kliknięć
       if (!bar._mfBoundDelegation && bar.addEventListener) {
@@ -467,7 +540,8 @@
        ========================================================================== */
 
     /**
-     * Wstrzykuje lub aktualizuje plakietkę folderu oraz przycisk akcji w wierszu rozmowy.
+     * Obsługa wiersza rozmowy na liście czatów.
+     * Zgodnie z życzeniem użytkownika nazwy folderów na czacie są usunięte.
      *
      * @param {HTMLElement} rowElement - Wiersz rozmowy na liście
      * @param {string} threadId - Identyfikator wątku
@@ -477,59 +551,19 @@
     injectFolderBadge(rowElement, threadId, currentFolder, onAssign) {
       if (!rowElement) return;
 
-      // 1. Obsługa plakietki folderu
-      let badge = rowElement.querySelector('.mf-thread-badge');
-
-      if (currentFolder && currentFolder.id !== 'all' && currentFolder.id !== 'uncategorized') {
-        if (!badge) {
-          badge = document.createElement('span');
-          badge.className = 'mf-thread-badge';
-          badge.setAttribute('data-mf-badge', 'true');
-
-          const titleElement = rowElement.querySelector('[role="heading"], span[dir="auto"], strong');
-          if (titleElement && titleElement.parentElement) {
-            titleElement.parentElement.style.alignItems = 'center';
-            titleElement.insertAdjacentElement('afterend', badge);
-          } else {
-            rowElement.appendChild(badge);
-          }
-        }
-
-        badge.style.alignSelf = 'center';
-        badge.style.marginTop = 'auto';
-        badge.style.marginBottom = 'auto';
-        badge.style.verticalAlign = 'middle';
-
-        const color = currentFolder.color || '#0084FF';
-        if (badge.dataset.folderId !== currentFolder.id) {
-          badge.dataset.folderId = currentFolder.id;
-          badge.style.backgroundColor = `${color}20`;
-          badge.style.color = color;
-          badge.style.borderColor = `${color}45`;
-          badge.title = `Folder: ${currentFolder.name} (kliknij, aby zmienić)`;
-
-          badge.innerHTML = `
-            <span class="mf-thread-badge-icon">${currentFolder.icon || '📁'}</span>
-            <span class="mf-thread-badge-text">${currentFolder.name}</span>
-          `;
-        }
-
-        badge.onclick = (event) => {
-          event.stopPropagation();
-          event.preventDefault();
-          if (onAssign) onAssign(badge, threadId);
-        };
-      } else if (badge) {
+      // 1. Usunięcie plakietki i nazwy folderu z wiersza czatu (nie jest to potrzebne na liście)
+      const badge = rowElement.querySelector('.mf-thread-badge');
+      if (badge) {
         badge.remove();
       }
 
-      // 2. Usunięcie przycisku folderu przy chacie (dodawanie osób odbywa się w oknie folderu)
+      // 2. Usunięcie przycisku folderu przy chacie (zarządzanie odbywa się w ustawieniach)
       const actionBtn = rowElement.querySelector('.mf-folder-btn');
       if (actionBtn) {
         actionBtn.remove();
       }
 
-      // 3. Menu pod prawym przyciskiem myszy na wierszu rozmowy
+      // 3. Menu pod prawym przyciskiem myszy na wierszu rozmowy (szybkie przypisanie)
       rowElement.oncontextmenu = (event) => {
         if (!event.shiftKey) {
           event.preventDefault();

@@ -27,9 +27,10 @@ Szanuje Twoją prywatność i chroni historię rozmów.
 ## Kluczowe możliwości
 
 - **Własne foldery i kategorie**: Twórz dowolne foldery z własną nazwą, ikoną emoji oraz kolorem akcentu.
-- **Błyskawiczne filtrowanie**: Kliknij pigułkę folderu na górnym pasku. Od razu zobaczysz tylko wybrane czaty.
-- **Przypisywanie jednym kliknięciem**: Kliknij ikonę folderu obok rozmowy. Następnie wybierz docelową kategorię z menu.
-- **Kolorowe plakietki**: Każdy przypisany czat otrzymuje czytelną etykietę z ikoną i kolorem folderu.
+- **Wyszukiwarka folderów**: Szukaj folderów w czasie rzeczywistym dzięki wygodnemu polu wyszukiwania nad paskiem.
+- **Błyskawiczne filtrowanie**: Kliknij pigułkę folderu na pasku. Od razu zobaczysz tylko wybrane czaty.
+- **Dedykowane centrum ustawień**: Otwieraj okno zarządzania folderami przyciskiem przypiętym obok wyszukiwarki.
+- **Czysty widok czatów**: Lista wiadomości pozostaje uporządkowana i czytelna bez zbędnych etykiet.
 - **Wskaźnik w otwartym czacie**: Pigułka w nagłówku aktywnej rozmowy pokazuje jej aktualny folder.
 - **Kopia zapasowa JSON**: Eksportuj całą konfigurację do pliku. Bez trudu przenieś dane na inny komputer.
 - **Wsparcie dla trybu ciemnego**: Interfejs automatycznie dopasowuje kolory do jasnego i ciemnego motywu Messengera.
@@ -126,32 +127,28 @@ Możesz zarządzać folderami na trzy wygodne sposoby:
 
 ### 2. Przypisywanie rozmowy do folderu
 
-Rozmowę możesz przypisać na cztery sposoby:
+Rozmowę możesz przypisać na trzy proste sposoby:
 
-1. **Przycisk folderu w wierszu**:
-   - Najedź kursorem na rozmowę.
-   - Kliknij ikonę folderu z prawej strony wiersza.
-   - Wybierz folder z menu.
+1. **Menu pod prawym przyciskiem myszy**:
+   - Kliknij prawym przyciskiem myszy na wiersz wybranej rozmowy.
+   - Wybierz docelowy folder z menu.
 
-2. **Menu pod prawym przyciskiem myszy**:
-   - Kliknij prawym przyciskiem myszy na wiersz rozmowy.
-   - Wybierz folder z otwartego menu.
-
-3. **Pigułka w nagłówku aktywnego czatu**:
+2. **Pigułka w nagłówku aktywnego czatu**:
    - Otwórz wybraną rozmowę.
    - Kliknij pigułkę folderu w nagłówku u góry ekranu.
    - Wybierz nową kategorię.
 
-4. **Zakładka „Rozmowy” w oknie ustawień**:
-   - Kliknij zębatkę `⚙️` na pasku folderów.
+3. **Zakładka „Rozmowy” w oknie ustawień**:
+   - Kliknij ikonę ustawień `⚙️` obok pola wyszukiwarki folderów.
    - Przejdź do zakładki **💬 Rozmowy**.
    - Wybierz folder z listy rozwijanej obok nazwy wybranego czatu.
 
-### 3. Filtrowanie i przeglądanie wiadomości
+### 3. Filtrowanie i wyszukiwanie folderów
 
-1. Kliknij dowolną pigułkę folderu na górnym pasku (np. **Praca** lub **Ważne**).
-2. Lista rozmów natychmiast ukryje pozostałe czaty i pokaże tylko pasujące pozycje.
-3. Aby powrócić do pełnej listy, kliknij pierwszy folder **Wszystkie**.
+1. Wpisz nazwę w polu **Szukaj folderu...** nad paskiem, aby szybko odnaleźć poszukiwaną kategorię.
+2. Kliknij dowolną pigułkę folderu na pasku (np. **Praca** lub **Ważne**).
+3. Lista rozmów natychmiast ukryje pozostałe czaty i pokaże tylko pasujące pozycje.
+4. Aby powrócić do pełnej listy wiadomości, kliknij folder **Wszystkie**.
 
 ### 4. Edycja i usuwanie folderu
 
