@@ -50,7 +50,7 @@
   --mf-transition-normal: 220ms cubic-bezier(0.4, 0, 0.2, 1);
 
   /* Poziomy nakładania (Z-Index) */
-  --mf-z-bar: 100;
+  --mf-z-bar: 9999;
   --mf-z-dropdown: 99999;
   --mf-z-modal: 100000;
 }
@@ -142,6 +142,7 @@
   background: var(--mf-bg-surface) !important;
   border-bottom: 1px solid var(--mf-border) !important;
   z-index: var(--mf-z-bar) !important;
+  pointer-events: auto !important;
   user-select: none !important;
   flex-shrink: 0 !important;
   flex-grow: 0 !important;
@@ -164,8 +165,10 @@
   margin: 0;
   font: inherit;
   color: inherit;
-  cursor: pointer;
+  cursor: pointer !important;
   box-shadow: none;
+  pointer-events: auto !important;
+  position: relative !important;
 }
 
 /* Kontener przewijany w poziomie z blokadą rozszerzania Flexbox */
@@ -392,29 +395,35 @@
   fill: currentColor;
 }
 
+/* Wewnętrzne elementy pigułki nie przechwytują kliknięć oprócz edycji */
+.mf-folder-pill > *:not(.mf-pill-edit-icon) {
+  pointer-events: none !important;
+}
+
 /* Przycisk dodawania nowego folderu */
 .mf-folder-add-btn,
 .mf-tab-add {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--mf-radius-pill);
-  background: transparent;
-  color: var(--mf-text-secondary);
-  border: 1px dashed var(--mf-border);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: all var(--mf-transition-fast);
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: var(--mf-radius-pill) !important;
+  background: transparent !important;
+  color: var(--mf-text-secondary) !important;
+  border: 1px dashed var(--mf-border) !important;
+  cursor: pointer !important;
+  flex-shrink: 0 !important;
+  transition: all var(--mf-transition-fast) !important;
+  pointer-events: auto !important;
 }
 
 .mf-folder-add-btn:hover,
 .mf-tab-add:hover {
-  background: var(--mf-hover);
-  color: var(--mf-primary);
-  border-color: var(--mf-primary);
-  transform: scale(1.05);
+  background: var(--mf-hover) !important;
+  color: var(--mf-primary) !important;
+  border-color: var(--mf-primary) !important;
+  transform: scale(1.05) !important;
 }
 
 .mf-folder-add-btn svg,
@@ -422,6 +431,52 @@
   width: 16px;
   height: 16px;
   fill: currentColor;
+}
+
+/* Przycisk ustawień na pasku folderów */
+.mf-folder-settings-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: var(--mf-radius-pill) !important;
+  background: transparent !important;
+  color: var(--mf-text-secondary) !important;
+  border: 1px solid var(--mf-border) !important;
+  cursor: pointer !important;
+  flex-shrink: 0 !important;
+  margin-left: 2px !important;
+  transition: all var(--mf-transition-fast) !important;
+  pointer-events: auto !important;
+}
+
+.mf-folder-settings-btn:hover {
+  background: var(--mf-hover) !important;
+  color: var(--mf-primary) !important;
+  border-color: var(--mf-primary) !important;
+  transform: rotate(30deg) scale(1.05) !important;
+}
+
+.mf-folder-settings-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+/* Ukrywanie wątków niepasujących do aktywnego folderu */
+.mf-thread-hidden,
+[data-mf-thread-hidden="true"] {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 
@@ -1081,6 +1136,171 @@ div:hover > .mf-folder-btn,
 
 .mf-btn-danger:hover {
   background: var(--mf-danger-subtle);
+}
+
+/* Style okna modalnego ustawień */
+.mf-modal-wide {
+  max-width: 520px !important;
+}
+
+.mf-settings-nav {
+  display: flex;
+  gap: 6px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--mf-border);
+  background: var(--mf-bg-wash);
+}
+
+.mf-settings-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mf-text-secondary);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all var(--mf-transition-fast);
+}
+
+.mf-settings-nav-btn:hover {
+  color: var(--mf-text-primary);
+}
+
+.mf-settings-nav-btn.mf-active {
+  color: var(--mf-primary);
+  border-bottom-color: var(--mf-primary);
+}
+
+.mf-settings-folder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mf-settings-folder-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: var(--mf-radius-md);
+  background: var(--mf-bg-wash);
+  border: 1px solid var(--mf-border);
+  transition: background var(--mf-transition-fast);
+}
+
+.mf-settings-folder-item:hover {
+  background: var(--mf-hover);
+}
+
+.mf-settings-folder-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.mf-settings-folder-icon {
+  font-size: 18px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.mf-settings-folder-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mf-settings-folder-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--mf-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mf-settings-folder-count {
+  font-size: 12px;
+  color: var(--mf-text-secondary);
+}
+
+.mf-settings-folder-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.mf-settings-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: var(--mf-text-secondary);
+  cursor: pointer;
+  transition: all var(--mf-transition-fast);
+}
+
+.mf-settings-action-btn:hover {
+  background: var(--mf-hover);
+  color: var(--mf-text-primary);
+}
+
+.mf-settings-action-btn.mf-btn-delete:hover {
+  background: var(--mf-danger-subtle);
+  color: var(--mf-danger);
+}
+
+.mf-settings-action-btn svg {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+}
+
+.mf-settings-system-tag {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mf-text-secondary);
+  background: rgba(0, 0, 0, 0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.__fb-dark-mode .mf-settings-system-tag,
+[data-theme="dark"] .mf-settings-system-tag {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.mf-settings-backup-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--mf-bg-wash);
+  border-radius: var(--mf-radius-md);
+  border: 1px solid var(--mf-border);
+}
+
+.mf-settings-backup-desc {
+  font-size: 13px;
+  color: var(--mf-text-secondary);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.mf-settings-backup-actions {
+  display: flex;
+  gap: 10px;
 }
 
 

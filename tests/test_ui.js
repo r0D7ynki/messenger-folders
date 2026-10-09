@@ -227,6 +227,10 @@ assert.ok(addBtn, 'Przycisk dodawania paska powinien istnieć');
 addBtn.dispatchEvent({ type: 'click' });
 assert.strictEqual(addClicked, true, 'Kliknięcie w dodawanie powinno wywołać callback');
 
+// Sprawdzenie przycisku ustawień
+const settingsBtn = bar.querySelector('.mf-folder-settings-btn');
+assert.ok(settingsBtn, 'Przycisk ustawień powinien istnieć na pasku');
+
 // Sprawdzenie wyboru pigułki
 pills[2].dispatchEvent({ type: 'click' });
 assert.strictEqual(selectedId, 'friends', 'Kliknięcie pigułki powinno wywołać onSelectFolder');
@@ -334,7 +338,21 @@ assert.ok(cssContent.includes('--surface-background'), 'content.css musi korzyst
 assert.ok(cssContent.includes('--web-wash'), 'content.css musi korzystać ze zmiennej --web-wash');
 assert.ok(cssContent.includes('--primary-text'), 'content.css musi korzystać ze zmiennej --primary-text');
 assert.ok(cssContent.includes('--secondary-text'), 'content.css musi korzystać ze zmiennej --secondary-text');
+assert.ok(cssContent.includes('.mf-folder-settings-btn'), 'content.css musi stylizować .mf-folder-settings-btn');
+assert.ok(cssContent.includes('.mf-thread-hidden'), 'content.css musi zawierać regułę .mf-thread-hidden');
 console.log('✓ content.css zawiera wszystkie wymagane selektory i zmienne motywu.');
+
+// 9. showSettingsModal
+console.log('Test 9: showSettingsModal()...');
+ui.showSettingsModal();
+assert.ok(ui.activeModal, 'Okno ustawień powinno zostać otwarte');
+const wideModal = ui.activeModal.querySelector('.mf-modal-wide');
+assert.ok(wideModal, 'Okno dialogowe powinno mieć klasę .mf-modal-wide');
+const settingsNav = ui.activeModal.querySelector('.mf-settings-nav');
+assert.ok(settingsNav, 'Okno powinno zawierać pasek nawigacji');
+ui.closeModal();
+assert.strictEqual(ui.activeModal, null, 'Okno powinno się zamknąć');
+console.log('✓ showSettingsModal() działa poprawnie.');
 
 console.log('\n=============================================');
 console.log('WSZYSTKIE TESTY INTERFEJSU ZAKOŃCZONE SUKCESEM! ✓');

@@ -31,25 +31,65 @@
       const allThreads = await storage.getAllThreads();
 
       // Próba wstrzyknięcia paska folderów
-      const tryInjectBar = () => {
-        const existingBar = document.getElementById('mf-folder-bar');
-        if (existingBar && document.body.contains(existingBar)) {
-          return true; // Pasek już istnieje stabilnie w DOM
-        }
+      const tryInjectBar = async () => {
+        const currentFolders = await storage.getFolders();
+        const currentActive = await storage.getActiveFolder();
+        const currentThreads = await storage.getAllThreads();
 
-        const bar = ui.renderFolderBar(folders, activeFolder, allThreads);
+        const bar = ui.renderFolderBar(
+          currentFolders,
+          currentActive,
+          currentThreads,
+          async (folderId) => {
+            await storage.setActiveFolder(folderId);
+            const th = await storage.getAllThreads();
+            ui.filterChatRows(folderId, th);
+          },
+          () => {
+            ui.showFolderModal({
+              onSave: async (newFolder) => {
+                await storage.saveFolder(newFolder);
+                const f = await storage.getFolders();
+                const th = await storage.getAllThreads();
+                ui.renderFolderBar(f, newFolder.id, th);
+                ui.filterChatRows(newFolder.id, th);
+              }
+            });
+          },
+          (folder) => {
+            ui.showFolderModal({
+              folder,
+              onSave: async (updated) => {
+                await storage.saveFolder(updated);
+                const f = await storage.getFolders();
+                const th = await storage.getAllThreads();
+                ui.renderFolderBar(f, currentActive, th);
+              },
+              onDelete: async (fId) => {
+                await storage.deleteFolder(fId);
+                const f = await storage.getFolders();
+                const th = await storage.getAllThreads();
+                ui.renderFolderBar(f, 'all', th);
+                ui.filterChatRows('all', th);
+              }
+            });
+          },
+          () => {
+            ui.showSettingsModal();
+          }
+        );
+
         const injected = detector.injectFolderBar(bar);
         if (injected) {
-          console.log('Messenger Folders: Pasek folderów został wstrzyknięty.');
-          ui.filterChatRows(activeFolder, allThreads);
+          ui.filterChatRows(currentActive, currentThreads);
         }
         return injected;
       };
 
-      if (!tryInjectBar()) {
+      if (!await tryInjectBar()) {
         // Ponawianie próby, dopóki strona nie załaduje struktury DOM
-        const retryTimer = setInterval(() => {
-          if (tryInjectBar()) {
+        const retryTimer = setInterval(async () => {
+          if (await tryInjectBar()) {
             clearInterval(retryTimer);
           }
         }, 500);

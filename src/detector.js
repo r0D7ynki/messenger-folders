@@ -339,8 +339,55 @@
     }
 
     /**
+     * Wyszukuje kontener pola wyszukiwarki w panelu bocznym.
+     * @param {Element} scope Kontener panelu bocznego do przeszukania.
+     * @returns {Element|null} Kontener sekcji wyszukiwania.
+     */
+    findSearchContainer(scope) {
+      if (!scope) return null;
+
+      // Szukamy pola wyszukiwarki (wielojęzyczne selektory Messenger / Facebook)
+      const searchInput = scope.querySelector(
+        'input[aria-label*="Szukaj" i], input[aria-label*="Search" i], ' +
+        'input[placeholder*="Szukaj" i], input[placeholder*="Search" i], ' +
+        '[role="search"] input, input[type="search"], ' +
+        'label input, input'
+      );
+
+      if (!searchInput || searchInput.closest('[role="main"]')) {
+        return null;
+      }
+
+      // Wędrówka w górę drzewa DOM w poszukiwaniu zewnętrznego bloku wyszukiwarki
+      let current = searchInput;
+      while (current.parentElement &&
+             current.parentElement !== scope &&
+             current.parentElement !== this.doc?.body) {
+        const parent = current.parentElement;
+
+        // Jeśli rodzic zawiera już listę czatów, a sam current jej nie zawiera
+        const parentHasChats = parent.querySelector('a[href*="/t/"], [role="grid"]');
+        const currentHasChats = current.querySelector('a[href*="/t/"], [role="grid"]');
+        if (parentHasChats && !currentHasChats) {
+          return current;
+        }
+
+        // Jeśli rodzic ma rodzeństwo będące listą czatów
+        if (parent.nextElementSibling &&
+            (parent.nextElementSibling.querySelector('a[href*="/t/"]') ||
+             parent.nextElementSibling.getAttribute('role') === 'grid')) {
+          return parent;
+        }
+
+        current = parent;
+      }
+
+      return searchInput.closest('label') || searchInput.parentElement || searchInput;
+    }
+
+    /**
      * Wyszukuje optymalne, stabilne miejsce do wstrzyknięcia paska folderów.
-     * Wyłącznie w obrębie paska bocznego - nigdy w obszarze wiadomości.
+     * Wyłącznie w obrębie paska bocznego - pod wyszukiwarką, nad listą czatów.
      * @returns {{ target: Element, position: string, container: Element }|null} Punkt wstrzyknięcia.
      */
     findFolderBarInjectionPoint() {
@@ -348,7 +395,17 @@
       const sidebar = this.getSidebarContainer();
       const scope = sidebar || this.doc;
 
-      // 1. Priorytet: Główna siatka / lista czatów wewnątrz paska bocznego
+      // 1. Priorytet BEZWZGLĘDNY: Bezpośrednio pod polem wyszukiwarki w pasku bocznym
+      const searchContainer = this.findSearchContainer(scope);
+      if (searchContainer && searchContainer.parentElement && !searchContainer.closest('[role="main"]')) {
+        return {
+          target: searchContainer,
+          position: 'afterend',
+          container: searchContainer.parentElement,
+        };
+      }
+
+      // 2. Priorytet: Główna siatka / lista czatów wewnątrz paska bocznego
       const grid = scope.querySelector('[role="grid"]');
       if (grid && grid.parentElement && !grid.closest('[role="main"]')) {
         return {
@@ -358,7 +415,7 @@
         };
       }
 
-      // 2. Pierwszy link wątku wewnątrz paska bocznego
+      // 3. Priorytet: Pierwszy link wątku wewnątrz paska bocznego
       const firstRowLink = scope.querySelector('a[href*="/t/"]');
       if (firstRowLink && !firstRowLink.closest('[role="main"]')) {
         const row = this.findChatRow(firstRowLink) || firstRowLink;
@@ -371,26 +428,7 @@
         }
       }
 
-      // 3. Pod zewnętrzną sekcją wyszukiwania w pasku bocznym
-      const searchInput = scope.querySelector('input');
-      if (searchInput && !searchInput.closest('[role="main"]')) {
-        let searchSection = searchInput;
-        while (searchSection.parentElement &&
-               searchSection.parentElement !== scope &&
-               searchSection.parentElement !== this.doc.body &&
-               searchSection.parentElement.clientHeight < 100) {
-          searchSection = searchSection.parentElement;
-        }
-        if (searchSection && searchSection.parentElement) {
-          return {
-            target: searchSection,
-            position: 'afterend',
-            container: searchSection.parentElement,
-          };
-        }
-      }
-
-      // 4. Bezpośrednio na początku paska bocznego
+      // 4. Priorytet: Bezpośrednio na początku paska bocznego
       if (sidebar && sidebar.firstElementChild) {
         return {
           target: sidebar.firstElementChild,
@@ -413,14 +451,6 @@
         return false;
       }
 
-      // Jeśli pasek jest już w DOM w prawidłowym miejscu, nie ruszaj go!
-      if (this.doc?.contains(folderBarElement)) {
-        const currentParent = folderBarElement.parentElement;
-        if (currentParent && !currentParent.closest('[role="main"]')) {
-          return true; // Stabilny, poprawnie umieszczony pasek
-        }
-      }
-
       const point = this.findFolderBarInjectionPoint();
       if (!point || !point.target) {
         return false;
@@ -433,7 +463,7 @@
       if (point.position === 'afterend' && point.target.nextElementSibling === folderBarElement) {
         return true;
       }
-      if (point.position === 'prepend' && point.container.firstElementChild === folderBarElement) {
+      if (point.position === 'prepend' && point.container?.firstElementChild === folderBarElement) {
         return true;
       }
 

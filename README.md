@@ -76,7 +76,7 @@ Przesuń suwak w pozycję aktywną.
 ### Krok 5: Otwórz Messengera
 
 Przejdź na stronę [messenger.com](https://www.messenger.com) lub [facebook.com/messages](https://www.facebook.com/messages).
-Rozszerzenie automatycznie doda pasek folderów nad listą Twoich rozmów.
+Rozszerzenie automatycznie doda pasek folderów bezpośrednio pod polem wyszukiwarki, na samej górze listy rozmów.
 
 > [!TIP]
 > Przypnij ikonę rozszerzenia na pasku przeglądarki.
@@ -102,20 +102,25 @@ Szczegółowy przewodnik ze zrzutami i poradami znajdziesz w dokumencie [docs/IN
 
 ## Podręcznik użytkowania krok po kroku
 
-### 1. Tworzenie nowego folderu
+### 1. Tworzenie i zarządzanie folderami
 
-Możesz utworzyć folder na dwa proste sposoby:
+Możesz zarządzać folderami na trzy wygodne sposoby:
 
-**Sposób A (z poziomu paska Messengera):**
+**Sposób A (okno ustawień z poziomu paska Messengera):**
+1. Kliknij przycisk zębatki `⚙️` na pasku folderów.
+2. W otwartym oknie możesz przeglądać foldery, edytować je, usuwać oraz dodawać nowe.
+3. W zakładce **Kopia zapasowa** możesz wyeksportować i zaimportować dane w formacie JSON.
+
+**Sposób B (szybkie dodawanie z paska Messengera):**
 1. Kliknij przycisk `+` umieszczony na końcu paska folderów.
-2. Wpisz nazwę folderu w otwartym oknie.
+2. Wpisz nazwę folderu w oknie dialogowym.
 3. Wybierz ikonę emoji z siatki.
 4. Wybierz kolor z gotowej palety lub wskaż własną barwę.
 5. Kliknij przycisk **Utwórz folder**.
 
-**Sposób B (z menu wtyczki na pasku przeglądarki):**
+**Sposób C (z menu wtyczki na pasku przeglądarki):**
 1. Kliknij ikonę wtyczki Messenger Folders na pasku zadań przeglądarki.
-2. Kliknij przycisk **+ Dodaj folder**.
+2. Kliknij przycisk **+ Nowy folder**.
 3. Uzupełnij nazwę, ikonę oraz kolor.
 4. Kliknij przycisk **Zapisz**.
 

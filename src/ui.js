@@ -20,7 +20,8 @@
     chevronRight: `<svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>`,
     chevronDown: `<svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>`,
     unassign: `<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z"/></svg>`,
-    palette: `<svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l1.9-1.9C9.22 19.49 10.57 20 12 20c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-5 9c-.83 0-1.5-.67-1.5-1.5S6.17 9 7 9s1.5.67 1.5 1.5S7.83 12 7 12zm3-4c-.83 0-1.5-.67-1.5-1.5S9.17 5 10 5s1.5.67 1.5 1.5S10.83 8 10 8zm4 0c-.83 0-1.5-.67-1.5-1.5S13.17 5 14 5s1.5.67 1.5 1.5S14.83 8 14 8zm3 4c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>`
+    palette: `<svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l1.9-1.9C9.22 19.49 10.57 20 12 20c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-5 9c-.83 0-1.5-.67-1.5-1.5S6.17 9 7 9s1.5.67 1.5 1.5S7.83 12 7 12zm3-4c-.83 0-1.5-.67-1.5-1.5S9.17 5 10 5s1.5.67 1.5 1.5S10.83 8 10 8zm4 0c-.83 0-1.5-.67-1.5-1.5S13.17 5 14 5s1.5.67 1.5 1.5S14.83 8 14 8zm3 4c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>`,
+    settings: `<svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>`
   };
 
   // Domyślny zestaw emotikonów do wyboru
@@ -124,9 +125,10 @@
      * @param {Function} [onSelectFolder] - Callback po wyborze folderu (folderId)
      * @param {Function} [onAddFolder] - Callback po kliknięciu dodawania folderu
      * @param {Function} [onEditFolder] - Callback po kliknięciu edycji folderu (folder)
+     * @param {Function} [onOpenSettings] - Callback po kliknięciu ustawień folderów
      * @returns {HTMLElement} Główny element paska #mf-folder-bar
      */
-    renderFolderBar(folders = [], activeFolderId = 'all', counts = {}, onSelectFolder, onAddFolder, onEditFolder) {
+    renderFolderBar(folders = [], activeFolderId = 'all', counts = {}, onSelectFolder, onAddFolder, onEditFolder, onOpenSettings) {
       if (typeof document === 'undefined') return null;
 
       // Obsługa domyślnych callbacków przy integracji ze storage
@@ -160,6 +162,10 @@
             }
           }
         });
+      });
+
+      const settingsHandler = onOpenSettings || (() => {
+        this.showSettingsModal();
       });
 
       // Jeśli w parametrze `counts` przekazano obiekt mapy wątków z folderId (np. allThreads)
@@ -305,8 +311,19 @@
           });
         }
 
-        // Wybór folderu
+        // Wybór folderu z natychmiastową reakcją wizualną i filtrowaniem
         pill.addEventListener('click', () => {
+          container.querySelectorAll('.mf-folder-pill').forEach(p => {
+            const isMatch = p === pill;
+            p.classList.toggle('mf-active', isMatch);
+            p.setAttribute('aria-selected', isMatch ? 'true' : 'false');
+          });
+
+          if (this.storage) {
+            const currentThreads = this.storage._threads || {};
+            this.filterChatRows(folder.id, currentThreads);
+          }
+
           if (selectHandler) {
             selectHandler(folder.id);
           }
@@ -325,6 +342,18 @@
         addBtn.innerHTML = ICONS.plus;
         addBtn.addEventListener('click', () => addHandler());
         container.appendChild(addBtn);
+      }
+
+      // Przycisk ustawień i zarządzania folderami
+      if (settingsHandler) {
+        const settingsBtn = document.createElement('button');
+        settingsBtn.type = 'button';
+        settingsBtn.className = 'mf-folder-settings-btn';
+        settingsBtn.title = 'Ustawienia folderów i kopia zapasowa';
+        settingsBtn.setAttribute('aria-label', 'Ustawienia folderów');
+        settingsBtn.innerHTML = ICONS.settings;
+        settingsBtn.addEventListener('click', () => settingsHandler());
+        container.appendChild(settingsBtn);
       }
 
       // Funkcja sprawdzająca konieczność pokazania strzałek przewijania
@@ -359,6 +388,29 @@
       bar.appendChild(btnLeft);
       bar.appendChild(container);
       bar.appendChild(btnRight);
+
+      // Delegacja zdarzeń na pasku dla pewności obsługi kliknięć
+      if (!bar._mfBoundDelegation && bar.addEventListener) {
+        bar._mfBoundDelegation = true;
+        bar.addEventListener('click', (event) => {
+          const pill = event.target.closest ? event.target.closest('.mf-folder-pill') : null;
+          if (pill && !event.target.closest('.mf-pill-edit-icon')) {
+            const fId = pill.dataset.folderId;
+            if (fId) {
+              bar.querySelectorAll('.mf-folder-pill').forEach(p => {
+                const isMatch = p === pill;
+                p.classList.toggle('mf-active', isMatch);
+                p.setAttribute('aria-selected', isMatch ? 'true' : 'false');
+              });
+              if (this.storage) {
+                const currentThreads = this.storage._threads || {};
+                this.filterChatRows(fId, currentThreads);
+              }
+              if (selectHandler) selectHandler(fId);
+            }
+          }
+        });
+      }
 
       if (typeof requestAnimationFrame !== 'undefined') {
         requestAnimationFrame(updateScrollButtons);
@@ -792,6 +844,278 @@
       }
     }
 
+    /**
+     * Otwiera okno dialogowe ustawień i zarządzania folderami bezpośrednio na stronie.
+     * Umożliwia tworzenie, edycję, usuwanie folderów oraz operacje kopii zapasowej.
+     * @param {Object} [options]
+     */
+    showSettingsModal(options = {}) {
+      if (typeof document === 'undefined') return;
+      this.closeModal();
+
+      const overlay = document.createElement('div');
+      overlay.className = 'mf-modal-overlay';
+      overlay.setAttribute('data-mf-modal-overlay', 'true');
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+
+      const modal = document.createElement('div');
+      modal.className = 'mf-modal mf-modal-wide';
+      modal.setAttribute('data-mf-modal', 'true');
+
+      const header = document.createElement('div');
+      header.className = 'mf-modal-header';
+      header.innerHTML = `
+        <h2 class="mf-modal-title">Zarządzanie folderami i ustawienia</h2>
+        <button type="button" class="mf-modal-close-btn" aria-label="Zamknij okno">
+          ${ICONS.close}
+        </button>
+      `;
+
+      const nav = document.createElement('div');
+      nav.className = 'mf-settings-nav';
+      nav.innerHTML = `
+        <button type="button" class="mf-settings-nav-btn mf-active" data-tab="folders">
+          <span>📁 Foldery</span>
+        </button>
+        <button type="button" class="mf-settings-nav-btn" data-tab="backup">
+          <span>💾 Kopia zapasowa</span>
+        </button>
+      `;
+
+      const body = document.createElement('div');
+      body.className = 'mf-modal-body';
+
+      const contentContainer = document.createElement('div');
+      contentContainer.className = 'mf-settings-tab-content';
+
+      const renderFoldersTab = () => {
+        contentContainer.innerHTML = '';
+
+        const folders = this.storage ? this.storage.getFoldersSync() : [];
+        const threads = this.storage ? (this.storage._threads || {}) : {};
+
+        const counts = {};
+        for (const t of Object.values(threads)) {
+          const fId = t.folderId || 'uncategorized';
+          counts[fId] = (counts[fId] || 0) + 1;
+        }
+
+        const topActions = document.createElement('div');
+        topActions.style.marginBottom = '12px';
+        const addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'mf-btn mf-btn-primary';
+        addBtn.innerHTML = `${ICONS.plus}<span>Nowy folder</span>`;
+        addBtn.onclick = () => {
+          this.showFolderModal({
+            onSave: async (newFolder) => {
+              if (this.storage) await this.storage.saveFolder(newFolder);
+              this.showSettingsModal(options);
+            }
+          });
+        };
+        topActions.appendChild(addBtn);
+        contentContainer.appendChild(topActions);
+
+        const list = document.createElement('div');
+        list.className = 'mf-settings-folder-list';
+
+        folders.forEach(folder => {
+          const count = counts[folder.id] || 0;
+          const item = document.createElement('div');
+          item.className = 'mf-settings-folder-item';
+
+          const info = document.createElement('div');
+          info.className = 'mf-settings-folder-info';
+
+          const icon = document.createElement('span');
+          icon.className = 'mf-settings-folder-icon';
+          icon.textContent = folder.icon || '📁';
+
+          const details = document.createElement('div');
+          details.className = 'mf-settings-folder-details';
+
+          const name = document.createElement('span');
+          name.className = 'mf-settings-folder-name';
+          name.textContent = folder.name;
+
+          const countSpan = document.createElement('span');
+          countSpan.className = 'mf-settings-folder-count';
+          countSpan.textContent = `${count} ${count === 1 ? 'konwersacja' : 'konwersacji'}`;
+
+          details.appendChild(name);
+          details.appendChild(countSpan);
+          info.appendChild(icon);
+          info.appendChild(details);
+          item.appendChild(info);
+
+          const actions = document.createElement('div');
+          actions.className = 'mf-settings-folder-actions';
+
+          if (folder.isSystem) {
+            const tag = document.createElement('span');
+            tag.className = 'mf-settings-system-tag';
+            tag.textContent = 'Domyślny';
+            actions.appendChild(tag);
+          } else {
+            const editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.className = 'mf-settings-action-btn';
+            editBtn.title = 'Edytuj';
+            editBtn.innerHTML = ICONS.edit;
+            editBtn.onclick = () => {
+              this.showFolderModal({
+                folder,
+                onSave: async (updated) => {
+                  if (this.storage) await this.storage.saveFolder(updated);
+                  this.showSettingsModal(options);
+                },
+                onDelete: async (fId) => {
+                  if (this.storage) await this.storage.deleteFolder(fId);
+                  this.showSettingsModal(options);
+                }
+              });
+            };
+            actions.appendChild(editBtn);
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'mf-settings-action-btn mf-btn-delete';
+            deleteBtn.title = 'Usuń';
+            deleteBtn.innerHTML = ICONS.trash;
+            deleteBtn.onclick = async () => {
+              const confirmMsg = typeof confirm !== 'undefined' ? confirm(`Czy na pewno chcesz usunąć folder „${folder.name}”?`) : true;
+              if (confirmMsg) {
+                if (this.storage) await this.storage.deleteFolder(folder.id);
+                this.showToast(`Usunięto folder „${folder.name}”.`);
+                this.showSettingsModal(options);
+              }
+            };
+            actions.appendChild(deleteBtn);
+          }
+
+          item.appendChild(actions);
+          list.appendChild(item);
+        });
+
+        contentContainer.appendChild(list);
+      };
+
+      const renderBackupTab = () => {
+        contentContainer.innerHTML = '';
+
+        const backupBox = document.createElement('div');
+        backupBox.className = 'mf-settings-backup-box';
+
+        const desc = document.createElement('p');
+        desc.className = 'mf-settings-backup-desc';
+        desc.textContent = 'Możesz zapisać wszystkie foldery oraz przypisania czatów do pliku JSON lub przywrócić je z pliku.';
+
+        const actions = document.createElement('div');
+        actions.className = 'mf-settings-backup-actions';
+
+        const exportBtn = document.createElement('button');
+        exportBtn.type = 'button';
+        exportBtn.className = 'mf-btn mf-btn-primary';
+        exportBtn.textContent = 'Eksportuj do JSON';
+        exportBtn.onclick = async () => {
+          if (this.storage) {
+            const jsonStr = await this.storage.exportData();
+            if (typeof Blob !== 'undefined' && typeof URL !== 'undefined') {
+              const blob = new Blob([jsonStr], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `messenger-folders-backup-${new Date().toISOString().slice(0, 10)}.json`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }
+            this.showToast('Pomyślnie wyeksportowano dane.');
+          }
+        };
+
+        const importBtn = document.createElement('button');
+        importBtn.type = 'button';
+        importBtn.className = 'mf-btn mf-btn-secondary';
+        importBtn.textContent = 'Importuj z JSON';
+
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = '.json,application/json';
+        fileInput.style.display = 'none';
+
+        fileInput.onchange = async (e) => {
+          const file = e.target.files && e.target.files[0];
+          if (!file) return;
+          if (typeof FileReader !== 'undefined') {
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+              try {
+                if (this.storage) {
+                  await this.storage.importData(event.target.result);
+                  this.showToast('Pomyślnie zaimportowano dane.');
+                  this.showSettingsModal(options);
+                }
+              } catch (err) {
+                if (typeof alert !== 'undefined') alert('Błąd importu: ' + err.message);
+              }
+            };
+            reader.readAsText(file);
+          }
+        };
+
+        importBtn.onclick = () => fileInput.click();
+
+        actions.appendChild(exportBtn);
+        actions.appendChild(importBtn);
+        actions.appendChild(fileInput);
+
+        backupBox.appendChild(desc);
+        backupBox.appendChild(actions);
+        contentContainer.appendChild(backupBox);
+      };
+
+      nav.querySelectorAll('.mf-settings-nav-btn').forEach(btn => {
+        btn.onclick = () => {
+          nav.querySelectorAll('.mf-settings-nav-btn').forEach(b => b.classList.remove('mf-active'));
+          btn.classList.add('mf-active');
+          if (btn.dataset.tab === 'folders') {
+            renderFoldersTab();
+          } else {
+            renderBackupTab();
+          }
+        };
+      });
+
+      renderFoldersTab();
+      body.appendChild(contentContainer);
+
+      const footer = document.createElement('div');
+      footer.className = 'mf-modal-footer';
+      footer.innerHTML = `
+        <button type="button" class="mf-btn mf-btn-secondary" id="mf-btn-close-settings">Zamknij</button>
+      `;
+
+      const closeAction = () => this.closeModal();
+      const closeBtn = header.querySelector('.mf-modal-close-btn');
+      if (closeBtn) closeBtn.onclick = closeAction;
+      const footerClose = footer.querySelector('#mf-btn-close-settings');
+      if (footerClose) footerClose.onclick = closeAction;
+      overlay.onclick = (e) => {
+        if (e.target === overlay) closeAction();
+      };
+
+      modal.appendChild(header);
+      modal.appendChild(nav);
+      modal.appendChild(body);
+      modal.appendChild(footer);
+      overlay.appendChild(modal);
+
+      document.body.appendChild(overlay);
+      this.activeModal = overlay;
+    }
+
     /* ==========================================================================
        5. MENU ROZWIJANE WYBORU FOLDERU (showAssignDropdown)
        ========================================================================== */
@@ -1019,9 +1343,23 @@
 
         // Widoczność wiersza według aktywnego filtra
         const shouldBeVisible = (activeFolderId === 'all') || (folderId === activeFolderId);
-        const targetDisplay = shouldBeVisible ? '' : 'none';
-        if (rowElement.style.display !== targetDisplay) {
-          rowElement.style.display = targetDisplay;
+        if (rowElement.classList) {
+          rowElement.classList.toggle('mf-thread-hidden', !shouldBeVisible);
+        }
+        if (!shouldBeVisible) {
+          if (rowElement.setAttribute) rowElement.setAttribute('data-mf-thread-hidden', 'true');
+          if (rowElement.style?.setProperty) {
+            rowElement.style.setProperty('display', 'none', 'important');
+          } else if (rowElement.style) {
+            rowElement.style.display = 'none';
+          }
+        } else {
+          if (rowElement.removeAttribute) rowElement.removeAttribute('data-mf-thread-hidden');
+          if (rowElement.style?.removeProperty) {
+            rowElement.style.removeProperty('display');
+          } else if (rowElement.style) {
+            rowElement.style.display = '';
+          }
         }
       });
 
