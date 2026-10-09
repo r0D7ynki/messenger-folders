@@ -7,64 +7,262 @@
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <header class="mf-popup-header">
-    <div class="mf-logo">
-      <span class="mf-logo-icon">📁</span>
-      <h1>Messenger Folders</h1>
+  <div class="mf-popup-container">
+    <!-- Nagłówek panelu -->
+    <header class="mf-popup-header">
+      <div class="mf-header-brand">
+        <img src="../icons/icon48.png" alt="Logo" class="mf-header-logo">
+        <div class="mf-header-info">
+          <h1 class="mf-header-title">Messenger Folders</h1>
+          <span class="mf-header-status">
+            <span class="mf-status-dot"></span>
+            Rozszerzenie aktywne
+          </span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Pasek zakładek nawigacyjnych -->
+    <nav class="mf-popup-nav" role="tablist">
+      <button type="button" class="mf-nav-tab mf-tab-active" data-tab="folders" role="tab" aria-selected="true">
+        <span class="mf-nav-icon">📁</span>
+        <span>Foldery</span>
+      </button>
+      <button type="button" class="mf-nav-tab" data-tab="settings" role="tab" aria-selected="false">
+        <span class="mf-nav-icon">⚙️</span>
+        <span>Ustawienia</span>
+      </button>
+      <button type="button" class="mf-nav-tab" data-tab="backup" role="tab" aria-selected="false">
+        <span class="mf-nav-icon">💾</span>
+        <span>Kopia zapasowa</span>
+      </button>
+      <button type="button" class="mf-nav-tab" data-tab="help" role="tab" aria-selected="false">
+        <span class="mf-nav-icon">❓</span>
+        <span>Pomoc</span>
+      </button>
+    </nav>
+
+    <!-- Główna zawartość zakładek -->
+    <main class="mf-popup-content">
+
+      <!-- Zakładka 1: Foldery -->
+      <section id="tab-folders" class="mf-tab-panel mf-panel-active" role="tabpanel">
+        <div class="mf-panel-heading">
+          <div class="mf-heading-title">
+            <span>Twoje foldery</span>
+            <span class="mf-badge-counter" id="mf-folders-total">0</span>
+          </div>
+          <button type="button" class="mf-btn mf-btn-primary mf-btn-sm" id="mf-btn-open-create">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+            </svg>
+            <span>Nowy folder</span>
+          </button>
+        </div>
+
+        <!-- Lista folderów -->
+        <div class="mf-folder-card-list" id="mf-folder-list">
+          <!-- Renderowane dynamicznie przez popup.js -->
+        </div>
+
+        <!-- Stan pusty (gdy brak folderów) -->
+        <div class="mf-empty-state" id="mf-folders-empty" style="display: none;">
+          <div class="mf-empty-icon">📂</div>
+          <p class="mf-empty-title">Nie masz jeszcze folderów</p>
+          <p class="mf-empty-text">Kliknij przycisk „Nowy folder” powyżej, aby uporządkować swoje wiadomości.</p>
+        </div>
+      </section>
+
+      <!-- Zakładka 2: Ustawienia -->
+      <section id="tab-settings" class="mf-tab-panel" role="tabpanel" style="display: none;">
+        <div class="mf-panel-heading">
+          <div class="mf-heading-title">
+            <span>Opcje wyświetlania</span>
+          </div>
+        </div>
+
+        <div class="mf-settings-list">
+          <label class="mf-setting-card">
+            <div class="mf-setting-text">
+              <span class="mf-setting-label">Ukryj puste foldery</span>
+              <span class="mf-setting-desc">Nie pokazuj folderów bez przypisanych czatów na pasku.</span>
+            </div>
+            <div class="mf-switch">
+              <input type="checkbox" id="mf-opt-hide-empty">
+              <span class="mf-slider"></span>
+            </div>
+          </label>
+
+          <label class="mf-setting-card">
+            <div class="mf-setting-text">
+              <span class="mf-setting-label">Płynne animacje</span>
+              <span class="mf-setting-desc">Włącz efekty przejść dla pasków i menu.</span>
+            </div>
+            <div class="mf-switch">
+              <input type="checkbox" id="mf-opt-enable-animations" checked>
+              <span class="mf-slider"></span>
+            </div>
+          </label>
+
+          <label class="mf-setting-card">
+            <div class="mf-setting-text">
+              <span class="mf-setting-label">Plakietki na liście rozmów</span>
+              <span class="mf-setting-desc">Wyświetlaj kolorową plakietkę folderu przy każdym czacie.</span>
+            </div>
+            <div class="mf-switch">
+              <input type="checkbox" id="mf-opt-show-badges" checked>
+              <span class="mf-slider"></span>
+            </div>
+          </label>
+
+          <label class="mf-setting-card">
+            <div class="mf-setting-text">
+              <span class="mf-setting-label">Pigułka w nagłówku czatu</span>
+              <span class="mf-setting-desc">Pokazuj nazwę folderu w górnej belce aktywnej rozmowy.</span>
+            </div>
+            <div class="mf-switch">
+              <input type="checkbox" id="mf-opt-header-pill" checked>
+              <span class="mf-slider"></span>
+            </div>
+          </label>
+        </div>
+      </section>
+
+      <!-- Zakładka 3: Kopia zapasowa -->
+      <section id="tab-backup" class="mf-tab-panel" role="tabpanel" style="display: none;">
+        <div class="mf-panel-heading">
+          <div class="mf-heading-title">
+            <span>Kopia zapasowa danych</span>
+          </div>
+        </div>
+
+        <div class="mf-backup-card">
+          <p class="mf-backup-desc">
+            Możesz zapisać swoje foldery i przypisania do pliku JSON lub przywrócić je na innym komputerze.
+          </p>
+
+          <div class="mf-backup-actions">
+            <button type="button" class="mf-btn mf-btn-outline" id="mf-btn-export">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+              </svg>
+              <span>Eksportuj do JSON</span>
+            </button>
+
+            <button type="button" class="mf-btn mf-btn-outline" id="mf-btn-import-trigger">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/>
+              </svg>
+              <span>Importuj z JSON</span>
+            </button>
+            <input type="file" id="mf-file-import" accept=".json,application/json" style="display: none;">
+          </div>
+        </div>
+
+        <div class="mf-info-note">
+          <span class="mf-info-icon">ℹ️</span>
+          <span>Twoje dane są w pełni prywatne i zapisywane wyłącznie w pamięci Twojej przeglądarki.</span>
+        </div>
+      </section>
+
+      <!-- Zakładka 4: Pomoc i instrukcja -->
+      <section id="tab-help" class="mf-tab-panel" role="tabpanel" style="display: none;">
+        <div class="mf-panel-heading">
+          <div class="mf-heading-title">
+            <span>Instrukcja obsługi</span>
+          </div>
+        </div>
+
+        <div class="mf-help-accordion">
+          <details class="mf-help-item" open>
+            <summary class="mf-help-question">Jak przypisać czat do folderu?</summary>
+            <div class="mf-help-answer">
+              Najedź kursorem na dowolny wiersz rozmowy na liście po lewej stronie. Kliknij ikonę folderu lub kliknij prawym przyciskiem myszy, a następnie wybierz pożądany folder z listy.
+            </div>
+          </details>
+
+          <details class="mf-help-item">
+            <summary class="mf-help-question">Jak filtrować wiadomości?</summary>
+            <div class="mf-help-answer">
+              U góry listy rozmów na Messengerze znajduje się poziomy pasek pigułek. Kliknij dowolny folder, aby wyświetlić tylko te rozmowy, które do niego należą. Kliknij „Wszystkie”, aby powrócić do pełnej listy.
+            </div>
+          </details>
+
+          <details class="mf-help-item">
+            <summary class="mf-help-question">Jak edytować lub usunąć folder?</summary>
+            <div class="mf-help-answer">
+              Kliknij ikonę ołówka obok nazwy folderu na pasku w Messengerze lub przejdź do zakładki „Foldery” w tym panelu i kliknij ikonę edycji przy wybranym folderze.
+            </div>
+          </details>
+
+          <details class="mf-help-item">
+            <summary class="mf-help-question">Gdzie są zapisywane moje foldery?</summary>
+            <div class="mf-help-answer">
+              Wszystkie foldery i powiązania czatów są zapisywane w bezpiecznej, lokalnej pamięci rozszerzenia (Chrome Storage).
+            </div>
+          </details>
+        </div>
+
+        <div class="mf-help-links">
+          <a href="https://github.com" target="_blank" class="mf-link-btn" rel="noreferrer">
+            <span>Zgłoś problem / sugestię</span>
+          </a>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Stopka panelu -->
+    <footer class="mf-popup-footer">
+      <span>Messenger Folders v1.0.0</span>
+      <span>•</span>
+      <span>Dla Messenger.com & Facebook</span>
+    </footer>
+
+    <!-- Dymek powiadomień (Toast) -->
+    <div class="mf-popup-toast" id="mf-popup-toast"></div>
+
+    <!-- Wbudowany dialog dodawania / edycji w popupie -->
+    <div class="mf-dialog-overlay" id="mf-dialog-overlay" style="display: none;">
+      <div class="mf-dialog-card">
+        <div class="mf-dialog-header">
+          <h2 class="mf-dialog-title" id="mf-dialog-title">Nowy folder</h2>
+          <button type="button" class="mf-dialog-close" id="mf-dialog-close" aria-label="Zamknij">✕</button>
+        </div>
+        <div class="mf-dialog-body">
+          <div class="mf-form-group">
+            <label for="mf-dialog-input-name" class="mf-form-label">Nazwa folderu</label>
+            <input type="text" id="mf-dialog-input-name" class="mf-form-input" placeholder="np. Praca, Ważne" maxlength="30">
+          </div>
+
+          <div class="mf-form-group">
+            <label class="mf-form-label">Wybierz ikonę</label>
+            <div class="mf-dialog-emojis" id="mf-dialog-emojis"></div>
+          </div>
+
+          <div class="mf-form-group">
+            <label class="mf-form-label">Wybierz kolor</label>
+            <div class="mf-dialog-colors" id="mf-dialog-colors"></div>
+          </div>
+
+          <div class="mf-form-group">
+            <label class="mf-form-label">Podgląd</label>
+            <div class="mf-dialog-preview">
+              <span class="mf-folder-pill mf-active" id="mf-dialog-preview-pill">
+                <span class="mf-dialog-preview-icon">📁</span>
+                <span class="mf-dialog-preview-name">Nazwa folderu</span>
+                <span class="mf-folder-count">2</span>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="mf-dialog-footer">
+          <button type="button" class="mf-btn mf-btn-secondary" id="mf-dialog-btn-cancel">Anuluj</button>
+          <button type="button" class="mf-btn mf-btn-primary" id="mf-dialog-btn-save">Zapisz</button>
+        </div>
+      </div>
     </div>
-    <span class="mf-version">v1.0.0</span>
-  </header>
-
-  <main class="mf-popup-content">
-    <section class="mf-section">
-      <div class="mf-section-header">
-        <h2>Twoje foldery</h2>
-        <button id="btn-add-folder-toggle" class="mf-btn-secondary" type="button">+ Dodaj folder</button>
-      </div>
-
-      <!-- Formularz dodawania folderu -->
-      <form id="form-new-folder" class="mf-form-add hidden">
-        <div class="mf-form-group">
-          <label for="folder-name">Nazwa folderu</label>
-          <input type="text" id="folder-name" placeholder="np. Studia, Rodzina" required maxlength="25">
-        </div>
-
-        <div class="mf-form-row">
-          <div class="mf-form-group">
-            <label for="folder-icon">Ikona / Emoji</label>
-            <input type="text" id="folder-icon" value="📁" maxlength="2">
-          </div>
-          <div class="mf-form-group">
-            <label for="folder-color">Kolor</label>
-            <input type="color" id="folder-color" value="#0084FF">
-          </div>
-        </div>
-
-        <div class="mf-form-actions">
-          <button type="submit" class="mf-btn-primary">Zapisz</button>
-          <button type="button" id="btn-cancel-add" class="mf-btn-text">Anuluj</button>
-        </div>
-      </form>
-
-      <!-- Lista folderów -->
-      <ul id="folder-list" class="mf-folder-list"></ul>
-    </section>
-
-    <!-- Sekcja kopii zapasowej -->
-    <section class="mf-section mf-backup-section">
-      <h2>Kopia zapasowa danych</h2>
-      <div class="mf-backup-buttons">
-        <button id="btn-export" class="mf-btn-outline" type="button">Eksportuj do pliku</button>
-        <button id="btn-import" class="mf-btn-outline" type="button">Importuj z pliku</button>
-        <input type="file" id="file-import-input" accept=".json" class="hidden">
-      </div>
-      <p id="status-message" class="mf-status-message"></p>
-    </section>
-  </main>
-
-  <footer class="mf-popup-footer">
-    <p>Organizuj wiadomości w prosty sposób.</p>
-  </footer>
+  </div>
 
   <script src="../src/storage.js"></script>
   <script src="popup.js"></script>

@@ -1,20 +1,27 @@
 /**
  * Messenger Folders - Logika panelu popup rozszerzenia
  * Zgodność ze standardem PN-ISO 24495-1 (Prosta Polszczyzna)
- * Zarządzanie folderami, ustawieniami, kopiami zapasowymi oraz integracja ze storage.
+ * Zarządzanie folderami, ustawieniami, kopiami zapasowymi oraz synchronizacja ze storage.
  */
 
 (function () {
   'use strict';
 
-  // Domyślny zestaw danych startowych
-  const INITIAL_FOLDERS = [
-    { id: 'f_work', name: 'Praca', icon: '💼', color: '#0084FF' },
-    { id: 'f_friends', name: 'Znajomi', icon: '👥', color: '#00C853' },
-    { id: 'f_important', name: 'Ważne', icon: '⭐', color: '#FFAB00' },
-    { id: 'f_projects', name: 'Projekty', icon: '🚀', color: '#AF52DE' }
+  // Domyślny zestaw emotikonów do wyboru
+  const EMOJI_LIST = [
+    '📁', '💼', '👥', '⭐', '💡', '🏷️', '🛒', '📌',
+    '🎯', '🔒', '💬', '🚀', '❤️', '🔔', '🎮', '🏠',
+    '📚', '🎨', '🛠️', '✈️', '🎵', '🔥', '💻', '🤝'
   ];
 
+  // Domyślna paleta kolorów
+  const COLOR_LIST = [
+    '#0084FF', '#00C6FF', '#00C853', '#FFAB00',
+    '#FF3B30', '#AF52DE', '#5856D6', '#FF2D55',
+    '#FF9500', '#64748B'
+  ];
+
+  // Domyślne ustawienia
   const INITIAL_SETTINGS = {
     hideEmptyFolders: false,
     enableAnimations: true,
@@ -22,53 +29,27 @@
     headerPill: true
   };
 
-  const EMOJI_LIST = [
-    '📁', '💼', '👥', '⭐', '💡', '🏷️', '🛒', '📌',
-    '🎯', '🔒', '💬', '🚀', '❤️', '🔔', '🎮', '🏠',
-    '📚', '🎨', '🛠️', '✈️', '🎵', '🔥', '💻', '🤝'
-  ];
-
-  const COLOR_LIST = [
-    '#0084FF', '#00C6FF', '#00C853', '#FFAB00',
-    '#FF3B30', '#AF52DE', '#5856D6', '#FF2D55',
-    '#FF9500', '#64748B'
-  ];
-
-  // Moduł przechowywania danych (Chrome Storage z fallbackiem do localStorage)
-  const Storage = {
-    async get(keys) {
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
-        return new Promise((resolve) => chrome.storage.sync.get(keys, resolve));
-      }
-      const result = {};
-      Object.keys(keys).forEach((key) => {
-        const item = localStorage.getItem('mf_' + key);
-        result[key] = item !== null ? JSON.parse(item) : keys[key];
-      });
-      return result;
-    },
-
-    async set(items) {
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
-        return new Promise((resolve) => chrome.storage.sync.set(items, resolve));
-      }
-      Object.entries(items).forEach(([k, v]) => {
-        localStorage.setItem('mf_' + k, JSON.stringify(v));
-      });
+  // Instancja modułu MessengerFoldersStorage, jeśli załadowany
+  let storage = null;
+  if (typeof MessengerFoldersStorage !== 'undefined') {
+    try {
+      storage = new MessengerFoldersStorage();
+    } catch (_) {
+      storage = null;
     }
-  };
+  }
 
   // Stan aplikacji panelu
   const state = {
     folders: [],
-    assignments: {},
+    threads: {},
     settings: { ...INITIAL_SETTINGS },
     currentEditId: null,
     selectedEmoji: '📁',
     selectedColor: COLOR_LIST[0]
   };
 
-  // Elementy interfejsu
+  // Referencje do elementów DOM
   const dom = {
     tabs: document.querySelectorAll('.mf-nav-tab'),
     panels: document.querySelectorAll('.mf-tab-panel'),
@@ -91,7 +72,7 @@
     // Toast
     toast: document.getElementById('mf-popup-toast'),
 
-    // Dialog edycji / tworzenia
+    // Okno dialogowe w popupie
     dialogOverlay: document.getElementById('mf-dialog-overlay'),
     dialogTitle: document.getElementById('mf-dialog-title'),
     dialogInputName: document.getElementById('mf-dialog-input-name'),
@@ -133,28 +114,81 @@
   }
 
   /**
-   * Inicjalizacja danych z pamięci
+   * Inicjalizacja danych panelu
    */
   async function init() {
-    const data = await Storage.get({
-      folders: INITIAL_FOLDERS,
-      assignments: {},
-      settings: INITIAL_SETTINGS
-    });
+    if (storage) {
+      await storage.init();
+      state.folders = await storage.getFolders();
+      state.threads = await storage.getAllThreads();
 
-    state.folders = data.folders || INITIAL_FOLDERS;
-    state.assignments = data.assignments || {};
-    state.settings = { ...INITIAL_SETTINGS, ...(data.settings || {}) };
+      // Nasłuchiwanie zmian zewnętrznych
+      storage.onChange(async () => {
+        state.folders = await storage.getFolders();
+        state.threads = await storage.getAllThreads();
+        renderFolderList();
+      });
+    } else {
+      // Fallback lokalny
+      const localFolders = localStorage.getItem('mf_folders');
+      const localThreads = localStorage.getItem('mf_threads');
+      state.folders = localFolders ? JSON.parse(localFolders) : [
+        { id: 'all', name: 'Wszystkie', icon: '💬', color: '#0084FF', isSystem: true },
+        { id: 'work', name: 'Praca', icon: '💼', color: '#10B981', isSystem: false },
+        { id: 'friends', name: 'Znajomi', icon: '👥', color: '#8B5CF6', isSystem: false },
+        { id: 'important', name: 'Ważne', icon: '⭐', color: '#FFB800', isSystem: false }
+      ];
+      state.threads = localThreads ? JSON.parse(localThreads) : {};
+    }
+
+    // Odczyt ustawień
+    await loadSettings();
 
     setupTabs();
-    setupSettings();
+    setupSettingsEvents();
     setupBackup();
     setupDialog();
     renderFolderList();
   }
 
   /**
-   * Obsługa przełączania zakładek
+   * Odczyt opcji użytkownika
+   */
+  async function loadSettings() {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      return new Promise((resolve) => {
+        chrome.storage.local.get(['mf_settings'], (result) => {
+          if (result && result.mf_settings) {
+            state.settings = { ...INITIAL_SETTINGS, ...result.mf_settings };
+          }
+          resolve();
+        });
+      });
+    } else {
+      const raw = localStorage.getItem('mf_settings');
+      if (raw) {
+        try {
+          state.settings = { ...INITIAL_SETTINGS, ...JSON.parse(raw) };
+        } catch (_) {}
+      }
+    }
+  }
+
+  /**
+   * Zapis opcji użytkownika
+   */
+  async function saveSettings() {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      return new Promise((resolve) => {
+        chrome.storage.local.set({ mf_settings: state.settings }, resolve);
+      });
+    } else {
+      localStorage.setItem('mf_settings', JSON.stringify(state.settings));
+    }
+  }
+
+  /**
+   * Przełączanie zakładek panelu
    */
   function setupTabs() {
     dom.tabs.forEach((tab) => {
@@ -186,7 +220,10 @@
    */
   function renderFolderList() {
     dom.folderList.innerHTML = '';
-    const total = state.folders.length;
+
+    // Foldery użytkownika (pomijamy systemowy 'all' na liście kart do edycji)
+    const userFolders = state.folders.filter((f) => f.id !== 'all');
+    const total = userFolders.length;
     dom.folderTotal.textContent = total;
 
     if (total === 0) {
@@ -196,18 +233,20 @@
 
     dom.foldersEmpty.style.display = 'none';
 
-    // Oblicz liczbę przypisań dla każdego folderu
+    // Obliczenie liczby przypisanych czatów
     const counts = {};
-    Object.values(state.assignments).forEach((folderId) => {
-      counts[folderId] = (counts[folderId] || 0) + 1;
+    Object.values(state.threads).forEach((thread) => {
+      const fId = thread.folderId || 'uncategorized';
+      counts[fId] = (counts[fId] || 0) + 1;
     });
 
-    state.folders.forEach((folder) => {
+    userFolders.forEach((folder) => {
       const count = counts[folder.id] || 0;
       const card = document.createElement('div');
       card.className = 'mf-folder-card';
 
       const color = folder.color || '#0084FF';
+      const isSystem = Boolean(folder.isSystem);
 
       card.innerHTML = `
         <div class="mf-card-info">
@@ -223,54 +262,44 @@
           <button type="button" class="mf-card-btn mf-btn-edit" title="Edytuj folder" data-id="${folder.id}">
             <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
           </button>
+          ${!isSystem ? `
           <button type="button" class="mf-card-btn mf-btn-del" title="Usuń folder" data-id="${folder.id}">
             <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
           </button>
+          ` : ''}
         </div>
       `;
 
-      // Obsługa edycji
       card.querySelector('.mf-btn-edit').addEventListener('click', () => {
         openDialog(folder);
       });
 
-      // Obsługa usuwania
-      card.querySelector('.mf-btn-del').addEventListener('click', async () => {
-        if (confirm(`Czy na pewno chcesz usunąć folder "${folder.name}"?`)) {
-          state.folders = state.folders.filter((f) => f.id !== folder.id);
-
-          // Usuń przypisania do usuniętego folderu
-          Object.keys(state.assignments).forEach((thId) => {
-            if (state.assignments[thId] === folder.id) {
-              delete state.assignments[thId];
+      const delBtn = card.querySelector('.mf-btn-del');
+      if (delBtn) {
+        delBtn.addEventListener('click', async () => {
+          if (confirm(`Czy na pewno chcesz usunąć folder "${folder.name}"? Przypisane czaty nie zostaną usunięte.`)) {
+            if (storage) {
+              await storage.deleteFolder(folder.id);
+              state.folders = await storage.getFolders();
+              state.threads = await storage.getAllThreads();
+            } else {
+              state.folders = state.folders.filter((f) => f.id !== folder.id);
+              localStorage.setItem('mf_folders', JSON.stringify(state.folders));
             }
-          });
-
-          await saveState();
-          renderFolderList();
-          showToast(`Usunięto folder "${folder.name}"`);
-        }
-      });
+            renderFolderList();
+            showToast(`Usunięto folder "${folder.name}"`);
+          }
+        });
+      }
 
       dom.folderList.appendChild(card);
     });
   }
 
   /**
-   * Zapis stanu do pamięci podręcznej rozszerzenia
-   */
-  async function saveState() {
-    await Storage.set({
-      folders: state.folders,
-      assignments: state.assignments,
-      settings: state.settings
-    });
-  }
-
-  /**
    * Obsługa opcji konfiguracyjnych w zakładce 2
    */
-  function setupSettings() {
+  function setupSettingsEvents() {
     dom.optHideEmpty.checked = Boolean(state.settings.hideEmptyFolders);
     dom.optAnimations.checked = Boolean(state.settings.enableAnimations);
     dom.optBadges.checked = Boolean(state.settings.showBadges);
@@ -278,7 +307,7 @@
 
     const updateOpt = async (key, val) => {
       state.settings[key] = val;
-      await saveState();
+      await saveSettings();
       showToast('Zapisano ustawienie');
     };
 
@@ -289,21 +318,26 @@
   }
 
   /**
-   * Obsługa tworzenia i przywracania kopii zapasowej w zakładce 3
+   * Obsługa kopii zapasowej w zakładce 3
    */
   function setupBackup() {
     // Eksport do pliku JSON
-    dom.btnExport.addEventListener('click', () => {
-      const backupData = {
-        app: 'Messenger Folders',
-        version: '1.0.0',
-        exportedAt: new Date().toISOString(),
-        folders: state.folders,
-        assignments: state.assignments,
-        settings: state.settings
-      };
+    dom.btnExport.addEventListener('click', async () => {
+      let jsonStr;
+      if (storage) {
+        jsonStr = await storage.exportData();
+      } else {
+        const backupData = {
+          app: 'Messenger Folders',
+          version: '1.0.0',
+          exportedAt: new Date().toISOString(),
+          folders: state.folders,
+          threads: state.threads,
+          settings: state.settings
+        };
+        jsonStr = JSON.stringify(backupData, null, 2);
+      }
 
-      const jsonStr = JSON.stringify(backupData, null, 2);
       const blob = new Blob([jsonStr], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
 
@@ -331,20 +365,25 @@
       const reader = new FileReader();
       reader.onload = async (e) => {
         try {
-          const imported = JSON.parse(e.target.result);
-          if (!imported || !Array.isArray(imported.folders)) {
-            alert('Wybrany plik nie zawiera prawidłowej konfiguracji Messenger Folders.');
-            return;
+          const raw = e.target.result;
+          if (storage) {
+            await storage.importData(raw);
+            state.folders = await storage.getFolders();
+            state.threads = await storage.getAllThreads();
+          } else {
+            const parsed = JSON.parse(raw);
+            if (!parsed || !Array.isArray(parsed.folders)) {
+              alert('Wybrany plik nie zawiera prawidłowej konfiguracji Messenger Folders.');
+              return;
+            }
+            state.folders = parsed.folders;
+            if (parsed.threads) state.threads = parsed.threads;
+            localStorage.setItem('mf_folders', JSON.stringify(state.folders));
+            localStorage.setItem('mf_threads', JSON.stringify(state.threads));
           }
 
-          state.folders = imported.folders;
-          if (imported.assignments) state.assignments = imported.assignments;
-          if (imported.settings) state.settings = { ...state.settings, ...imported.settings };
-
-          await saveState();
           renderFolderList();
-          setupSettings();
-          showToast('Pomyślnie przywrócono dane z kopii');
+          showToast('Pomyślnie przywrócono dane z pliku');
         } catch (err) {
           alert('Błąd podczas odczytu pliku: ' + err.message);
         }
@@ -354,10 +393,9 @@
   }
 
   /**
-   * Obsługa okna dialogowego edycji / tworzenia folderu
+   * Obsługa okna dialogowego w popupie
    */
   function setupDialog() {
-    // Wypełnij siatkę emotikonów
     dom.dialogEmojis.innerHTML = '';
     EMOJI_LIST.forEach((emoji) => {
       const btn = document.createElement('button');
@@ -372,7 +410,6 @@
       dom.dialogEmojis.appendChild(btn);
     });
 
-    // Wypełnij paletę kolorów
     dom.dialogColors.innerHTML = '';
     COLOR_LIST.forEach((hex) => {
       const btn = document.createElement('button');
@@ -402,30 +439,49 @@
       }
 
       if (state.currentEditId) {
-        // Aktualizacja istniejącego folderu
-        const idx = state.folders.findIndex((f) => f.id === state.currentEditId);
-        if (idx !== -1) {
-          state.folders[idx] = {
-            ...state.folders[idx],
+        if (storage) {
+          await storage.saveFolder({
+            id: state.currentEditId,
             name,
             icon: state.selectedEmoji,
             color: state.selectedColor
-          };
+          });
+          state.folders = await storage.getFolders();
+        } else {
+          const idx = state.folders.findIndex((f) => f.id === state.currentEditId);
+          if (idx !== -1) {
+            state.folders[idx] = {
+              ...state.folders[idx],
+              name,
+              icon: state.selectedEmoji,
+              color: state.selectedColor
+            };
+            localStorage.setItem('mf_folders', JSON.stringify(state.folders));
+          }
         }
         showToast('Zaktualizowano folder');
       } else {
-        // Nowy folder
-        const newFolder = {
-          id: 'f_' + Date.now().toString(36),
-          name,
-          icon: state.selectedEmoji,
-          color: state.selectedColor
-        };
-        state.folders.push(newFolder);
+        if (storage) {
+          await storage.saveFolder({
+            name,
+            icon: state.selectedEmoji,
+            color: state.selectedColor
+          });
+          state.folders = await storage.getFolders();
+        } else {
+          const newFolder = {
+            id: 'f_' + Date.now().toString(36),
+            name,
+            icon: state.selectedEmoji,
+            color: state.selectedColor,
+            isSystem: false
+          };
+          state.folders.push(newFolder);
+          localStorage.setItem('mf_folders', JSON.stringify(state.folders));
+        }
         showToast('Utworzono nowy folder');
       }
 
-      await saveState();
       renderFolderList();
       closeDialog();
     });
@@ -457,12 +513,10 @@
   }
 
   function updateDialogSelection() {
-    // Zaznaczenie emotikona
     dom.dialogEmojis.querySelectorAll('.mf-dialog-emoji-btn').forEach((btn) => {
       btn.classList.toggle('mf-selected', btn.textContent === state.selectedEmoji);
     });
 
-    // Zaznaczenie koloru
     dom.dialogColors.querySelectorAll('.mf-dialog-color-btn').forEach((btn) => {
       btn.classList.toggle('mf-selected', btn.style.backgroundColor === hexToRgb(state.selectedColor));
     });
@@ -493,6 +547,5 @@
       .replace(/'/g, '&#039;');
   }
 
-  // Uruchomienie po załadowaniu drzewa DOM
   document.addEventListener('DOMContentLoaded', init);
 })();

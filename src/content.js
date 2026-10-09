@@ -36,6 +36,7 @@
         const injected = detector.injectFolderBar(bar);
         if (injected) {
           console.log('Messenger Folders: Pasek folderów został wstrzyknięty.');
+          ui.filterChatRows(activeFolder, allThreads);
         }
         return injected;
       };
@@ -52,25 +53,22 @@
       }
 
       // Podpięcie obserwatora dynamicznego ładowania listy czatów (virtual scrolling)
-      detector.setupObserver(async (detectedThreads) => {
+      detector.setupObserver(async () => {
         const currentActive = await storage.getActiveFolder();
         const currentThreads = await storage.getAllThreads();
-
-        // Zapis metadanych nowo wykrytych wątków
-        for (const thread of detectedThreads) {
-          if (!currentThreads[thread.threadId]) {
-            // Zapis nowego wątku jako nieprzypisany z wykrytą nazwą i awatarem
-            if (thread.name || thread.avatar) {
-              await storage.assignThread(thread.threadId, 'uncategorized', {
-                name: thread.name,
-                avatar: thread.avatar,
-              });
-            }
-          }
-        }
-
         ui.filterChatRows(currentActive, currentThreads);
-      }, { throttleMs: 200 });
+      }, { throttleMs: 150 });
+
+      // Nasłuchiwanie zmian adresu URL (przełączanie czatów w aplikacji Single Page App)
+      let lastUrl = window.location.href;
+      setInterval(async () => {
+        if (window.location.href !== lastUrl) {
+          lastUrl = window.location.href;
+          const currentActive = await storage.getActiveFolder();
+          const currentThreads = await storage.getAllThreads();
+          ui.filterChatRows(currentActive, currentThreads);
+        }
+      }, 500);
 
       // Nasłuchiwanie zmian w konfiguracji i magazynie danych
       storage.onChange((payload) => {

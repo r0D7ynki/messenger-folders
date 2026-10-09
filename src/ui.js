@@ -45,7 +45,15 @@
   ];
 
   class MessengerUI {
-    constructor() {
+    /**
+     * Tworzy instancję interfejsu MessengerUI.
+     * @param {Object} [options]
+     * @param {Object} [options.storage] Opcjonalna instancja MessengerFoldersStorage
+     * @param {Object} [options.detector] Opcjonalna instancja MessengerDOMDetector
+     */
+    constructor(options = {}) {
+      this.storage = options.storage || null;
+      this.detector = options.detector || null;
       this.activeDropdown = null;
       this.activeModal = null;
       this.toastTimeout = null;
@@ -59,6 +67,8 @@
      * @private
      */
     _bindGlobalEvents() {
+      if (typeof document === 'undefined') return;
+
       // Obsługa klawisza Escape
       document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
@@ -84,11 +94,13 @@
       });
 
       // Zamykanie menu przy zmianie rozmiaru okna
-      window.addEventListener('resize', () => {
-        if (this.activeDropdown) {
-          this.closeDropdown();
-        }
-      });
+      if (typeof window !== 'undefined') {
+        window.addEventListener('resize', () => {
+          if (this.activeDropdown) {
+            this.closeDropdown();
+          }
+        });
+      }
     }
 
     /**
@@ -108,13 +120,63 @@
      *
      * @param {Array<Object>} folders - Lista folderów użytkownika
      * @param {string} activeFolderId - ID aktywnego folderu ('all' dla wszystkich)
-     * @param {Object} counts - Mapa liczników: { [folderId]: number }
-     * @param {Function} onSelectFolder - Callback po wyborze folderu (folderId)
-     * @param {Function} onAddFolder - Callback po kliknięciu dodawania folderu
-     * @param {Function} onEditFolder - Callback po kliknięciu edycji folderu (folder)
+     * @param {Object} counts - Mapa liczników lub obiekt z wątkami: { [folderId]: number }
+     * @param {Function} [onSelectFolder] - Callback po wyborze folderu (folderId)
+     * @param {Function} [onAddFolder] - Callback po kliknięciu dodawania folderu
+     * @param {Function} [onEditFolder] - Callback po kliknięciu edycji folderu (folder)
      * @returns {HTMLElement} Główny element paska #mf-folder-bar
      */
     renderFolderBar(folders = [], activeFolderId = 'all', counts = {}, onSelectFolder, onAddFolder, onEditFolder) {
+      if (typeof document === 'undefined') return null;
+
+      // Obsługa domyślnych callbacków przy integracji ze storage
+      const selectHandler = onSelectFolder || (async (folderId) => {
+        if (this.storage) {
+          await this.storage.setActiveFolder(folderId);
+        }
+      });
+
+      const addHandler = onAddFolder || (() => {
+        this.showFolderModal({
+          onSave: async (newFolder) => {
+            if (this.storage) {
+              await this.storage.saveFolder(newFolder);
+            }
+          }
+        });
+      });
+
+      const editHandler = onEditFolder || ((folder) => {
+        this.showFolderModal({
+          folder,
+          onSave: async (updated) => {
+            if (this.storage) {
+              await this.storage.saveFolder(updated);
+            }
+          },
+          onDelete: async (folderId) => {
+            if (this.storage) {
+              await this.storage.deleteFolder(folderId);
+            }
+          }
+        });
+      });
+
+      // Jeśli w parametrze `counts` przekazano obiekt mapy wątków z folderId (np. allThreads)
+      let resolvedCounts = {};
+      if (counts && typeof counts === 'object') {
+        const firstVal = Object.values(counts)[0];
+        if (firstVal && typeof firstVal === 'object' && ('folderId' in firstVal)) {
+          // Oblicz liczbę wątków dla każdego folderu
+          for (const thread of Object.values(counts)) {
+            const fId = thread.folderId || 'uncategorized';
+            resolvedCounts[fId] = (resolvedCounts[fId] || 0) + 1;
+          }
+        } else {
+          resolvedCounts = counts;
+        }
+      }
+
       let bar = document.getElementById('mf-folder-bar');
       if (!bar) {
         bar = document.createElement('div');
@@ -141,21 +203,17 @@
       btnRight.setAttribute('aria-label', 'Przewiń foldery w prawo');
       btnRight.innerHTML = ICONS.chevronRight;
 
-      // 1. Zawsze obecny folder domyślny: Wszystkie rozmowy
-      const allChatsFolder = {
-        id: 'all',
-        name: 'Wszystkie',
-        icon: '💬',
-        color: '#0084FF',
-        isDefault: true
-      };
-
-      const folderList = [allChatsFolder, ...folders];
+      // Sprawdzenie obecności folderu 'all'
+      const hasAll = folders.some(f => f.id === 'all');
+      const folderList = hasAll ? [...folders] : [
+        { id: 'all', name: 'Wszystkie', icon: '💬', color: '#0084FF', isSystem: true },
+        ...folders
+      ];
 
       // Tworzenie pigułek folderów
       folderList.forEach((folder) => {
         const isActive = folder.id === activeFolderId;
-        const count = counts[folder.id] || 0;
+        const count = resolvedCounts[folder.id] || 0;
 
         const pill = document.createElement('button');
         pill.type = 'button';
@@ -190,29 +248,29 @@
           pill.appendChild(countEl);
         }
 
-        // Przycisk edycji dla folderów użytkownika
-        if (!folder.isDefault && onEditFolder) {
+        // Przycisk edycji dla folderów innych niż 'all'
+        if (folder.id !== 'all' && editHandler) {
           const editBtn = document.createElement('span');
           editBtn.className = 'mf-pill-edit-icon';
           editBtn.title = 'Edytuj ten folder';
           editBtn.innerHTML = ICONS.edit;
           editBtn.addEventListener('click', (event) => {
             event.stopPropagation();
-            onEditFolder(folder);
+            editHandler(folder);
           });
           pill.appendChild(editBtn);
 
           // Kliknięcie prawym przyciskiem myszy również otwiera edycję
           pill.addEventListener('contextmenu', (event) => {
             event.preventDefault();
-            onEditFolder(folder);
+            editHandler(folder);
           });
         }
 
         // Wybór folderu
         pill.addEventListener('click', () => {
-          if (onSelectFolder) {
-            onSelectFolder(folder.id);
+          if (selectHandler) {
+            selectHandler(folder.id);
           }
         });
 
@@ -220,14 +278,14 @@
       });
 
       // Przycisk dodawania nowego folderu na końcu listy
-      if (onAddFolder) {
+      if (addHandler) {
         const addBtn = document.createElement('button');
         addBtn.type = 'button';
         addBtn.className = 'mf-folder-add-btn';
         addBtn.title = 'Dodaj nowy folder';
         addBtn.setAttribute('aria-label', 'Dodaj nowy folder');
         addBtn.innerHTML = ICONS.plus;
-        addBtn.addEventListener('click', () => onAddFolder());
+        addBtn.addEventListener('click', () => addHandler());
         container.appendChild(addBtn);
       }
 
@@ -263,8 +321,9 @@
       bar.appendChild(container);
       bar.appendChild(btnRight);
 
-      // Inicjalna aktualizacja widoczności strzałek
-      requestAnimationFrame(updateScrollButtons);
+      if (typeof requestAnimationFrame !== 'undefined') {
+        requestAnimationFrame(updateScrollButtons);
+      }
 
       return bar;
     }
@@ -287,18 +346,17 @@
       // 1. Obsługa plakietki folderu
       let badge = rowElement.querySelector('.mf-thread-badge');
 
-      if (currentFolder) {
+      if (currentFolder && currentFolder.id !== 'all' && currentFolder.id !== 'uncategorized') {
         if (!badge) {
           badge = document.createElement('span');
           badge.className = 'mf-thread-badge';
 
-          // Szukamy optymalnego miejsca na plakietkę (np. obok tytułu czatu)
           const titleElement = rowElement.querySelector('[role="heading"], span[dir="auto"], strong') || rowElement;
           titleElement.appendChild(badge);
         }
 
         const color = currentFolder.color || '#0084FF';
-        badge.style.backgroundColor = `${color}20`; // 12% krycia
+        badge.style.backgroundColor = `${color}20`;
         badge.style.color = color;
         badge.style.borderColor = `${color}45`;
         badge.title = `Folder: ${currentFolder.name} (kliknij, aby zmienić)`;
@@ -327,13 +385,11 @@
         actionBtn.setAttribute('aria-label', actionBtn.title);
         actionBtn.innerHTML = ICONS.folder;
 
-        // Umieszczamy przycisk w kontenerze wiersza
         rowElement.style.position = rowElement.style.position || 'relative';
         rowElement.appendChild(actionBtn);
       }
 
-      // Aktualizacja koloru ikony, jeśli czat ma folder
-      if (currentFolder) {
+      if (currentFolder && currentFolder.id !== 'all' && currentFolder.id !== 'uncategorized') {
         actionBtn.style.color = currentFolder.color || '#0084FF';
       } else {
         actionBtn.style.color = '';
@@ -369,7 +425,7 @@
         headerElement.appendChild(pill);
       }
 
-      if (currentFolder) {
+      if (currentFolder && currentFolder.id !== 'all' && currentFolder.id !== 'uncategorized') {
         pill.className = 'mf-header-pill mf-header-pill-assigned';
         const color = currentFolder.color || '#0084FF';
         pill.style.setProperty('--mf-folder-color', color);
@@ -420,17 +476,15 @@
       let selectedIcon = (folder && folder.icon) || '📁';
       let selectedColor = (folder && folder.color) || DEFAULT_COLORS[0];
 
-      // Tło nakładki
       const overlay = document.createElement('div');
       overlay.className = 'mf-modal-overlay';
       overlay.setAttribute('role', 'dialog');
       overlay.setAttribute('aria-modal', 'true');
 
-      // Okno modalne
       const modal = document.createElement('div');
       modal.className = 'mf-modal';
 
-      // 1. Nagłówek okna
+      // Nagłówek okna
       const header = document.createElement('div');
       header.className = 'mf-modal-header';
       header.innerHTML = `
@@ -440,20 +494,31 @@
         </button>
       `;
 
-      // 2. Ciało okna z polami konfiguracji
+      // Ciało okna z polami konfiguracji
       const body = document.createElement('div');
       body.className = 'mf-modal-body';
 
       // Pole nazwy
       const groupName = document.createElement('div');
       groupName.className = 'mf-modal-group';
-      groupName.innerHTML = `
-        <label class="mf-modal-label" for="mf-input-folder-name">Nazwa folderu</label>
-        <input type="text" id="mf-input-folder-name" class="mf-modal-input"
-               placeholder="np. Praca, Ważne, Znajomi" maxlength="32"
-               value="${folder ? this._escapeHtml(folder.name) : ''}" autocomplete="off" />
-        <span class="mf-modal-hint">Wpisz krótką, czytelną nazwę.</span>
-      `;
+      const nameLabel = document.createElement('label');
+      nameLabel.className = 'mf-modal-label';
+      nameLabel.setAttribute('for', 'mf-input-folder-name');
+      nameLabel.textContent = 'Nazwa folderu';
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.id = 'mf-input-folder-name';
+      nameInput.className = 'mf-modal-input';
+      nameInput.placeholder = 'np. Praca, Ważne, Znajomi';
+      nameInput.maxLength = 32;
+      nameInput.value = folder ? folder.name : '';
+      nameInput.autocomplete = 'off';
+      const nameHint = document.createElement('span');
+      nameHint.className = 'mf-modal-hint';
+      nameHint.textContent = 'Wpisz krótką, czytelną nazwę.';
+      groupName.appendChild(nameLabel);
+      groupName.appendChild(nameInput);
+      groupName.appendChild(nameHint);
 
       // Wybór ikony / emotikona
       const groupIcon = document.createElement('div');
@@ -521,27 +586,39 @@
       // Sekcja podglądu na żywo
       const groupPreview = document.createElement('div');
       groupPreview.className = 'mf-modal-group';
-      groupPreview.innerHTML = `
-        <label class="mf-modal-label">Podgląd pigułki</label>
-        <div class="mf-modal-preview-box">
-          <div id="mf-modal-live-pill" class="mf-folder-pill mf-active">
-            <span class="mf-folder-icon">${selectedIcon}</span>
-            <span class="mf-folder-name"></span>
-            <span class="mf-folder-count">3</span>
-          </div>
-        </div>
-      `;
+      const previewLabel = document.createElement('label');
+      previewLabel.className = 'mf-modal-label';
+      previewLabel.textContent = 'Podgląd pigułki';
+      const previewBox = document.createElement('div');
+      previewBox.className = 'mf-modal-preview-box';
+      const livePill = document.createElement('div');
+      livePill.id = 'mf-modal-live-pill';
+      livePill.className = 'mf-folder-pill mf-active';
+      const liveIcon = document.createElement('span');
+      liveIcon.className = 'mf-folder-icon';
+      liveIcon.textContent = selectedIcon;
+      const liveName = document.createElement('span');
+      liveName.className = 'mf-folder-name';
+      const liveCount = document.createElement('span');
+      liveCount.className = 'mf-folder-count';
+      liveCount.textContent = '3';
+      livePill.appendChild(liveIcon);
+      livePill.appendChild(liveName);
+      livePill.appendChild(liveCount);
+      previewBox.appendChild(livePill);
+      groupPreview.appendChild(previewLabel);
+      groupPreview.appendChild(previewBox);
 
       body.appendChild(groupName);
       body.appendChild(groupIcon);
       body.appendChild(groupColor);
       body.appendChild(groupPreview);
 
-      // 3. Stopka okna z przyciskami akcji
+      // Stopka okna z przyciskami akcji
       const footer = document.createElement('div');
       footer.className = 'mf-modal-footer';
 
-      if (isEdit && onDelete) {
+      if (isEdit && onDelete && (!folder || !folder.isSystem)) {
         const deleteBtn = document.createElement('button');
         deleteBtn.type = 'button';
         deleteBtn.className = 'mf-btn mf-btn-danger';
@@ -584,11 +661,6 @@
       this.activeModal = overlay;
 
       // Obsługa podglądu na żywo
-      const nameInput = groupName.querySelector('#mf-input-folder-name');
-      const livePill = groupPreview.querySelector('#mf-modal-live-pill');
-      const liveIcon = livePill.querySelector('.mf-folder-icon');
-      const liveName = livePill.querySelector('.mf-folder-name');
-
       const updatePreview = () => {
         liveIcon.textContent = selectedIcon;
         const text = nameInput.value.trim() || 'Nazwa folderu';
@@ -628,7 +700,6 @@
 
       saveBtn.addEventListener('click', handleSave);
 
-      // Zapisanie po wciśnięciu klawisza Enter w polu nazwy
       nameInput.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
           event.preventDefault();
@@ -636,7 +707,6 @@
         }
       });
 
-      // Zamknięcie po kliknięciu krzyżyka lub w tło
       header.querySelector('.mf-modal-close-btn').addEventListener('click', () => this.closeModal());
       overlay.addEventListener('click', (event) => {
         if (event.target === overlay) {
@@ -667,7 +737,7 @@
      * @param {Array<Object>} folders - Dostępne foldery
      * @param {string|null} currentFolderId - Aktualnie przypisany folder
      * @param {Function} onAssign - Callback: (threadId, newFolderId) => void
-     * @param {Function} onNewFolder - Opcjonalny callback utworzenia nowego folderu
+     * @param {Function} [onNewFolder] - Opcjonalny callback utworzenia nowego folderu
      */
     showAssignDropdown(targetElement, threadId, folders = [], currentFolderId = null, onAssign, onNewFolder) {
       this.closeDropdown();
@@ -678,26 +748,34 @@
       // 1. Nagłówek z wyszukiwarką
       const header = document.createElement('div');
       header.className = 'mf-dropdown-header';
-      header.innerHTML = `
-        <div class="mf-dropdown-title">Przypisz do folderu</div>
-        <div class="mf-dropdown-search-wrapper">
-          <span class="mf-dropdown-search-icon">${ICONS.search}</span>
-          <input type="text" class="mf-dropdown-search" placeholder="Szukaj folderu..." />
-        </div>
-      `;
+      const dropdownTitle = document.createElement('div');
+      dropdownTitle.className = 'mf-dropdown-title';
+      dropdownTitle.textContent = 'Przypisz do folderu';
+      const searchWrapper = document.createElement('div');
+      searchWrapper.className = 'mf-dropdown-search-wrapper';
+      const searchIcon = document.createElement('span');
+      searchIcon.className = 'mf-dropdown-search-icon';
+      searchIcon.innerHTML = ICONS.search;
+      const searchInput = document.createElement('input');
+      searchInput.type = 'text';
+      searchInput.className = 'mf-dropdown-search';
+      searchInput.placeholder = 'Szukaj folderu...';
+      searchWrapper.appendChild(searchIcon);
+      searchWrapper.appendChild(searchInput);
+      header.appendChild(dropdownTitle);
+      header.appendChild(searchWrapper);
 
       // 2. Lista folderów
       const list = document.createElement('div');
       list.className = 'mf-dropdown-list';
 
-      // Funkcja renderująca elementy listy
       const renderList = (filterText = '') => {
         list.innerHTML = '';
         const searchLower = filterText.toLowerCase().trim();
 
         // Opcja usunięcia z folderu (brak folderu)
         const unassignItem = document.createElement('div');
-        unassignItem.className = `mf-dropdown-item mf-dropdown-unassign ${!currentFolderId ? 'mf-selected' : ''}`;
+        unassignItem.className = `mf-dropdown-item mf-dropdown-unassign ${(!currentFolderId || currentFolderId === 'uncategorized') ? 'mf-selected' : ''}`;
         unassignItem.innerHTML = `
           <div class="mf-dropdown-item-left">
             <span class="mf-dropdown-item-icon">${ICONS.unassign}</span>
@@ -712,8 +790,9 @@
         });
         list.appendChild(unassignItem);
 
-        // Filtrowanie folderów użytkownika
-        const filtered = folders.filter(f => f.name.toLowerCase().includes(searchLower));
+        // Filtrowanie folderów (pomijając 'all')
+        const selectableFolders = folders.filter(f => f.id !== 'all');
+        const filtered = selectableFolders.filter(f => f.name.toLowerCase().includes(searchLower));
 
         filtered.forEach((folder) => {
           const isSelected = folder.id === currentFolderId;
@@ -762,9 +841,14 @@
           onNewFolder();
         } else {
           this.showFolderModal({
-            onSave: (newFolder) => {
-              folders.push(newFolder);
-              if (onAssign) onAssign(threadId, newFolder.id);
+            onSave: async (newFolder) => {
+              if (this.storage) {
+                await this.storage.saveFolder(newFolder);
+                if (onAssign) onAssign(threadId, newFolder.id);
+              } else {
+                folders.push(newFolder);
+                if (onAssign) onAssign(threadId, newFolder.id);
+              }
             }
           });
         }
@@ -777,15 +861,11 @@
       document.body.appendChild(dropdown);
       this.activeDropdown = dropdown;
 
-      // Inicjalne renderowanie listy
       renderList();
 
-      // Wyszukiwanie na żywo
-      const searchInput = header.querySelector('.mf-dropdown-search');
       searchInput.addEventListener('input', (e) => renderList(e.target.value));
       setTimeout(() => searchInput.focus(), 30);
 
-      // Pozycjonowanie względem wskazanego elementu z zabezpieczeniem krawędzi ekranu
       this._positionDropdown(dropdown, targetElement);
     }
 
@@ -804,17 +884,14 @@
       let top = rect.bottom + margin;
       let left = rect.left;
 
-      // Zapobieganie wyjściu poza dół ekranu (otwórz w górę)
       if (top + menuHeight > window.innerHeight) {
         top = Math.max(margin, rect.top - menuHeight - margin);
       }
 
-      // Zapobieganie wyjściu poza prawą krawędź ekranu
       if (left + menuWidth > window.innerWidth) {
         left = Math.max(margin, window.innerWidth - menuWidth - margin);
       }
 
-      // Zapobieganie wyjściu poza lewą krawędź
       if (left < margin) {
         left = margin;
       }
@@ -834,7 +911,87 @@
     }
 
     /* ==========================================================================
-       6. POWIADOMIENIA TOAST (showToast)
+       6. FILTROWANIE WIERSZY ROZMÓW (filterChatRows)
+       ========================================================================== */
+
+    /**
+     * Filtruje wiersze czatów w widoku według aktywnego folderu i wstrzykuje plakietki.
+     * Wykorzystywane przez skrypt content.js.
+     *
+     * @param {string} activeFolderId - ID aktywnego folderu
+     * @param {Object} allThreads - Mapa przypisanych wątków: { [threadId]: threadData }
+     */
+    filterChatRows(activeFolderId = 'all', allThreads = {}) {
+      if (!this.detector) return;
+
+      const detected = this.detector.scanChatList();
+      const folders = this.storage ? this.storage.getFoldersSync() : [];
+
+      detected.forEach((item) => {
+        const { threadId, rowElement } = item;
+        const threadData = allThreads[threadId];
+        const folderId = (threadData && threadData.folderId) ? threadData.folderId : 'uncategorized';
+        const currentFolder = folders.find(f => f.id === folderId);
+
+        // Wstrzyknięcie lub aktualizacja plakietki w wierszu
+        this.injectFolderBadge(rowElement, threadId, currentFolder, (targetEl, thId) => {
+          this.showAssignDropdown(targetEl, thId, folders, folderId, async (tId, newFolderId) => {
+            if (this.storage) {
+              if (newFolderId) {
+                await this.storage.assignThread(tId, newFolderId, {
+                  name: item.name,
+                  avatar: item.avatar
+                });
+              } else {
+                await this.storage.removeThreadAssignment(tId);
+              }
+            }
+          });
+        });
+
+        // Widoczność wiersza według aktywnego filtra
+        if (activeFolderId === 'all') {
+          rowElement.style.display = '';
+        } else if (folderId === activeFolderId) {
+          rowElement.style.display = '';
+        } else {
+          rowElement.style.display = 'none';
+        }
+      });
+
+      // Aktualizacja pigułki w nagłówku otwartego czatu
+      const openChat = this.detector.getCurrentOpenChat();
+      if (openChat && openChat.threadId) {
+        const doc = this.detector.doc || (typeof document !== 'undefined' ? document : null);
+        if (doc) {
+          const headerEl = doc.querySelector('[role="main"] header') ||
+                           doc.querySelector('[role="main"] h2')?.parentElement;
+          if (headerEl) {
+            const openThreadData = allThreads[openChat.threadId];
+            const openFolderId = (openThreadData && openThreadData.folderId) ? openThreadData.folderId : 'uncategorized';
+            const openFolder = folders.find(f => f.id === openFolderId && f.id !== 'uncategorized');
+
+            this.renderHeaderPill(headerEl, openFolder, (targetEl) => {
+              this.showAssignDropdown(targetEl, openChat.threadId, folders, openFolderId, async (tId, newFolderId) => {
+                if (this.storage) {
+                  if (newFolderId) {
+                    await this.storage.assignThread(tId, newFolderId, {
+                      name: openChat.title,
+                      avatar: openChat.avatar
+                    });
+                  } else {
+                    await this.storage.removeThreadAssignment(tId);
+                  }
+                }
+              });
+            });
+          }
+        }
+      }
+    }
+
+    /* ==========================================================================
+       7. POWIADOMIENIA TOAST (showToast)
        ========================================================================== */
 
     /**
@@ -844,6 +1001,8 @@
      * @param {number} duration - Czas wyświetlania w milisekundach
      */
     showToast(message, duration = 2600) {
+      if (typeof document === 'undefined') return;
+
       let toast = document.querySelector('.mf-toast');
       if (!toast) {
         toast = document.createElement('div');
@@ -878,10 +1037,14 @@
     }
   }
 
-  // Eksport globalny i modułowy
+  // Eksport globalny i modułowy (z aliasem MessengerFoldersUI dla zachowania kompatybilności)
+  if (typeof global !== 'undefined') {
+    global.MessengerUI = MessengerUI;
+    global.MessengerFoldersUI = MessengerUI;
+  }
+
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = MessengerUI;
   }
-  global.MessengerUI = MessengerUI;
 
-})(typeof window !== 'undefined' ? window : this);
+})(typeof globalThis !== 'undefined' ? globalThis : this);

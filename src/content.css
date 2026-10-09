@@ -1,206 +1,1063 @@
 /**
- * Messenger Folders - Style interfejsu wstrzykiwanego (CSS)
- *
- * Zapewnia spójny wygląd paska folderów, plakietek oraz menu wyboru.
- * Obsługuje motyw jasny oraz ciemny serwisu Messenger/Facebook.
+ * Messenger Folders - Style warstwy wizualnej wstrzykiwanej (content.css)
+ * Zgodność ze standardem PN-ISO 24495-1 (Prosta Polszczyzna)
+ * Integracja z motywem jasnym i ciemnym Messenger / Facebook
  */
 
+/* ==========================================================================
+   1. ZMIENNE MOTYWU I RESET DLA KOMPONENTÓW ROZSZERZENIA
+   ========================================================================== */
+
 :root {
-  --mf-bg-bar: #ffffff;
-  --mf-border-bar: #e5e7eb;
-  --mf-tab-bg: #f3f4f6;
-  --mf-tab-bg-hover: #e5e7eb;
-  --mf-tab-text: #374151;
-  --mf-tab-active-bg: #0084ff;
-  --mf-tab-active-text: #ffffff;
-  --mf-badge-bg: rgba(0, 0, 0, 0.08);
-  --mf-badge-active-bg: rgba(255, 255, 255, 0.3);
-  --mf-menu-bg: #ffffff;
-  --mf-menu-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  /* Krój pisma platformy */
+  --mf-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  /* Zmienne motywu z bezpiecznymi wartościami domyślnymi (motyw jasny) */
+  --mf-bg-surface: var(--surface-background, #ffffff);
+  --mf-bg-wash: var(--web-wash, #f0f2f5);
+  --mf-bg-card: var(--secondary-surface-background, #f5f6f8);
+  --mf-text-primary: var(--primary-text, #050505);
+  --mf-text-secondary: var(--secondary-text, #65676b);
+  --mf-text-placeholder: var(--placeholder-text, #8a8d91);
+  --mf-border: var(--divider, rgba(0, 0, 0, 0.1));
+  --mf-hover: var(--hover-overlay, rgba(0, 0, 0, 0.05));
+  --mf-active: var(--active-overlay, rgba(0, 0, 0, 0.09));
+
+  /* Kompatybilność wsteczna zmiennych */
+  --mf-bg-bar: var(--mf-bg-surface);
+  --mf-border-bar: var(--mf-border);
+  --mf-tab-bg: var(--mf-bg-wash);
+  --mf-tab-text: var(--mf-text-secondary);
+
+  /* Akcenty kolorystyczne */
+  --mf-primary: #0084ff;
+  --mf-primary-hover: #0073e6;
+  --mf-primary-subtle: rgba(0, 132, 255, 0.12);
+  --mf-danger: #fa383e;
+  --mf-danger-hover: #e0282e;
+  --mf-danger-subtle: rgba(250, 56, 62, 0.12);
+
+  /* Cienie i zaokrąglenia */
+  --mf-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --mf-shadow-md: 0 4px 14px rgba(0, 0, 0, 0.12);
+  --mf-shadow-lg: 0 12px 28px 0 rgba(0, 0, 0, 0.2), 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+  --mf-radius-pill: 9999px;
+  --mf-radius-md: 10px;
+  --mf-radius-lg: 16px;
+
+  /* Czasy animacji */
+  --mf-transition-fast: 140ms cubic-bezier(0.4, 0, 0.2, 1);
+  --mf-transition-normal: 220ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Poziomy nakładania (Z-Index) */
+  --mf-z-bar: 100;
+  --mf-z-dropdown: 99999;
+  --mf-z-modal: 100000;
 }
 
+/* Automatyczne wykrywanie ciemnego motywu systemu oraz Messengera */
 @media (prefers-color-scheme: dark) {
   :root {
-    --mf-bg-bar: #242526;
-    --mf-border-bar: #393a3b;
-    --mf-tab-bg: #3a3b3c;
-    --mf-tab-bg-hover: #4e4f50;
-    --mf-tab-text: #e4e6eb;
-    --mf-tab-active-bg: #0084ff;
-    --mf-tab-active-text: #ffffff;
-    --mf-badge-bg: rgba(255, 255, 255, 0.15);
-    --mf-badge-active-bg: rgba(255, 255, 255, 0.3);
-    --mf-menu-bg: #242526;
-    --mf-menu-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    --mf-bg-surface: var(--surface-background, #242526);
+    --mf-bg-wash: var(--web-wash, #18191a);
+    --mf-bg-card: var(--secondary-surface-background, #3a3b3c);
+    --mf-text-primary: var(--primary-text, #e4e6eb);
+    --mf-text-secondary: var(--secondary-text, #b0b3b8);
+    --mf-text-placeholder: var(--placeholder-text, #8a8d91);
+    --mf-border: var(--divider, rgba(255, 255, 255, 0.12));
+    --mf-hover: var(--hover-overlay, rgba(255, 255, 255, 0.08));
+    --mf-active: var(--active-overlay, rgba(255, 255, 255, 0.15));
+    --mf-primary-subtle: rgba(0, 132, 255, 0.22);
+    --mf-danger-subtle: rgba(250, 56, 62, 0.22);
+    --mf-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+    --mf-shadow-md: 0 4px 18px rgba(0, 0, 0, 0.5);
+    --mf-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.7), 0 2px 6px rgba(0, 0, 0, 0.4);
   }
 }
 
-/* Pasek zakładek folderów */
+/* Obsługa klas i atrybutów ciemnego motywu Messengera / Facebooka */
+.__fb-dark-mode,
+[data-theme="dark"],
+.dark-mode {
+  --mf-bg-surface: var(--surface-background, #242526);
+  --mf-bg-wash: var(--web-wash, #18191a);
+  --mf-bg-card: var(--secondary-surface-background, #3a3b3c);
+  --mf-text-primary: var(--primary-text, #e4e6eb);
+  --mf-text-secondary: var(--secondary-text, #b0b3b8);
+  --mf-text-placeholder: var(--placeholder-text, #8a8d91);
+  --mf-border: var(--divider, rgba(255, 255, 255, 0.12));
+  --mf-hover: var(--hover-overlay, rgba(255, 255, 255, 0.08));
+  --mf-active: var(--active-overlay, rgba(255, 255, 255, 0.15));
+  --mf-primary-subtle: rgba(0, 132, 255, 0.22);
+  --mf-danger-subtle: rgba(250, 56, 62, 0.22);
+  --mf-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --mf-shadow-md: 0 4px 18px rgba(0, 0, 0, 0.5);
+  --mf-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.7), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* Reset stylów dla wstrzykniętych elementów */
+#mf-folder-bar,
+.mf-folder-bar,
+.mf-thread-badge,
+.mf-folder-btn,
+.mf-dropdown-menu,
+.mf-modal-overlay,
+.mf-header-pill {
+  box-sizing: border-box !important;
+  font-family: var(--mf-font) !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#mf-folder-bar *,
+.mf-folder-bar *,
+.mf-dropdown-menu *,
+.mf-modal-overlay *,
+.mf-header-pill * {
+  box-sizing: border-box !important;
+}
+
+
+/* ==========================================================================
+   2. PASEK FOLDERÓW (#mf-folder-bar, .mf-folder-bar)
+   ========================================================================== */
+
+#mf-folder-bar,
 .mf-folder-bar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  position: relative;
+  width: 100%;
   padding: 8px 12px;
-  background-color: var(--mf-bg-bar);
-  border-bottom: 1px solid var(--mf-border-bar);
-  overflow-x: auto;
-  scrollbar-width: thin;
-  white-space: nowrap;
+  background: var(--mf-bg-surface);
+  border-bottom: 1px solid var(--mf-border);
+  z-index: var(--mf-z-bar);
   user-select: none;
-  z-index: 10;
-  box-sizing: border-box;
+  transition: background var(--mf-transition-normal), border-color var(--mf-transition-normal);
 }
 
-.mf-folder-bar::-webkit-scrollbar {
-  height: 4px;
+/* Kontener przewijany w poziomie */
+.mf-folder-scroll-container {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scroll-behavior: smooth;
+  width: 100%;
+  padding: 2px 0;
+  -ms-overflow-style: none; /* IE i Edge */
+  scrollbar-width: none;    /* Firefox */
 }
 
-.mf-folder-bar::-webkit-scrollbar-thumb {
-  background-color: rgba(150, 150, 150, 0.4);
-  border-radius: 4px;
+.mf-folder-scroll-container::-webkit-scrollbar {
+  display: none;            /* Chrome, Safari, Opera */
 }
 
-/* Pojedyncza zakładka folderu */
+/* Przyciski przewijania na krańcach paska */
+.mf-scroll-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  border-radius: var(--mf-radius-pill);
+  background: var(--mf-bg-surface);
+  color: var(--mf-text-secondary);
+  border: 1px solid var(--mf-border);
+  box-shadow: var(--mf-shadow-sm);
+  cursor: pointer;
+  z-index: 2;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--mf-transition-fast), background var(--mf-transition-fast), transform var(--mf-transition-fast);
+}
+
+.mf-scroll-btn.mf-visible {
+  opacity: 0.95;
+  pointer-events: auto;
+}
+
+.mf-scroll-btn:hover {
+  opacity: 1;
+  background: var(--mf-bg-wash);
+  color: var(--mf-text-primary);
+  transform: translateY(-50%) scale(1.06);
+}
+
+.mf-scroll-btn-left {
+  left: 4px;
+}
+
+.mf-scroll-btn-right {
+  right: 4px;
+}
+
+.mf-scroll-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+/* Pojedyncza pigułka folderu */
+.mf-folder-pill,
 .mf-folder-tab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  border: 1px solid transparent;
-  border-radius: 18px;
-  background-color: var(--mf-tab-bg);
-  color: var(--mf-tab-text);
-  font-family: inherit;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--mf-radius-pill);
+  background: var(--mf-bg-wash);
+  color: var(--mf-text-secondary);
   font-size: 13px;
   font-weight: 500;
+  border: 1px solid transparent;
   cursor: pointer;
-  transition: all 0.15s ease-in-out;
   outline: none;
+  flex-shrink: 0;
+  position: relative;
+  transition: transform var(--mf-transition-fast),
+              background var(--mf-transition-fast),
+              color var(--mf-transition-fast),
+              box-shadow var(--mf-transition-fast),
+              border-color var(--mf-transition-fast);
 }
 
+.mf-folder-pill:hover,
 .mf-folder-tab:hover {
-  background-color: var(--mf-tab-bg-hover);
+  background: var(--mf-hover);
+  color: var(--mf-text-primary);
   transform: translateY(-1px);
 }
 
-.mf-folder-tab.active {
-  background-color: var(--mf-accent-color, var(--mf-tab-active-bg));
-  color: var(--mf-tab-active-text);
-  font-weight: 600;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+.mf-folder-pill:active,
+.mf-folder-tab:active {
+  transform: translateY(0);
+  background: var(--mf-active);
 }
 
+.mf-folder-pill:focus-visible,
+.mf-folder-tab:focus-visible {
+  box-shadow: 0 0 0 2px var(--mf-bg-surface), 0 0 0 4px var(--mf-primary);
+}
+
+/* Stan aktywny pigułki */
+.mf-folder-pill.mf-active,
+.mf-folder-tab.active {
+  background: var(--mf-folder-color, var(--mf-primary)) !important;
+  color: #ffffff !important;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+}
+
+.mf-folder-pill.mf-active .mf-folder-count,
+.mf-folder-tab.active .mf-tab-badge {
+  background: rgba(255, 255, 255, 0.28) !important;
+  color: #ffffff !important;
+}
+
+.mf-folder-pill.mf-active .mf-pill-edit-icon {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.mf-folder-pill.mf-active:hover .mf-pill-edit-icon {
+  color: #ffffff;
+}
+
+/* Wnętrze pigułki */
+.mf-folder-icon,
 .mf-tab-icon {
   font-size: 14px;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
+.mf-folder-name,
 .mf-tab-name {
-  line-height: 1.2;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.mf-tab-count {
+/* Licznik wiadomości w pigułce */
+.mf-folder-count,
+.mf-tab-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
+  border-radius: var(--mf-radius-pill);
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--mf-text-secondary);
   font-size: 11px;
   font-weight: 600;
-  border-radius: 9px;
-  background-color: var(--mf-badge-bg);
   line-height: 1;
+  transition: background var(--mf-transition-fast), color var(--mf-transition-fast);
 }
 
-.mf-folder-tab.active .mf-tab-count {
-  background-color: var(--mf-badge-active-bg);
+.__fb-dark-mode .mf-folder-count,
+[data-theme="dark"] .mf-folder-count {
+  background: rgba(255, 255, 255, 0.12);
 }
 
-/* Ukrywanie wierszy przefiltrowanych wątków */
-.mf-thread-hidden {
-  display: none !important;
+/* Przycisk edycji na pigułce */
+.mf-pill-edit-icon {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 2px;
+  color: var(--mf-text-secondary);
+  opacity: 0.7;
+  cursor: pointer;
 }
 
-/* Plakietka folderu przy wierszu czatu */
-.mf-thread-tag {
+.mf-folder-pill:hover .mf-pill-edit-icon {
+  display: inline-flex;
+}
+
+.mf-pill-edit-icon:hover {
+  opacity: 1;
+}
+
+.mf-pill-edit-icon svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+}
+
+/* Przycisk dodawania nowego folderu */
+.mf-folder-add-btn,
+.mf-tab-add {
   display: inline-flex;
   align-items: center;
-  margin-left: 6px;
-  padding: 2px 6px;
-  font-size: 11px;
-  font-weight: 500;
-  border-radius: 10px;
-  border: 1px solid #cbd5e1;
-  color: inherit;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--mf-radius-pill);
+  background: transparent;
+  color: var(--mf-text-secondary);
+  border: 1px dashed var(--mf-border);
   cursor: pointer;
-  vertical-align: middle;
-  transition: transform 0.1s ease;
+  flex-shrink: 0;
+  transition: all var(--mf-transition-fast);
 }
 
-.mf-thread-tag:hover {
+.mf-folder-add-btn:hover,
+.mf-tab-add:hover {
+  background: var(--mf-hover);
+  color: var(--mf-primary);
+  border-color: var(--mf-primary);
   transform: scale(1.05);
 }
 
-/* Rozwijane menu przypisywania wątku do folderu */
-.mf-folder-picker-menu {
-  background-color: var(--mf-menu-bg);
-  border: 1px solid var(--mf-border-bar);
-  border-radius: 10px;
-  box-shadow: var(--mf-menu-shadow);
-  padding: 6px;
-  min-width: 170px;
-  font-family: inherit;
-  animation: mfFadeIn 0.12s ease-out;
+.mf-folder-add-btn svg,
+.mf-tab-add svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
 }
 
-@keyframes mfFadeIn {
+
+/* ==========================================================================
+   3. PLAKIETKA I PRZYCISK NA WIERSZU ROZMOWY (.mf-thread-badge, .mf-folder-btn)
+   ========================================================================== */
+
+/* Plakietka folderu przy czacie */
+.mf-thread-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  margin-left: 6px;
+  border: 1px solid transparent;
+  transition: transform var(--mf-transition-fast), opacity var(--mf-transition-fast), filter var(--mf-transition-fast);
+}
+
+.mf-thread-badge:hover {
+  transform: scale(1.03);
+  filter: brightness(1.08);
+}
+
+.mf-thread-badge-icon {
+  font-size: 11px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.mf-thread-badge-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Przycisk folderu na wierszu rozmowy (pojawia się przy najechaniu na wiersz) */
+.mf-folder-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--mf-radius-pill);
+  background: var(--mf-bg-surface);
+  color: var(--mf-text-secondary);
+  border: 1px solid var(--mf-border);
+  box-shadow: var(--mf-shadow-sm);
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--mf-transition-fast),
+              visibility var(--mf-transition-fast),
+              transform var(--mf-transition-fast),
+              background var(--mf-transition-fast),
+              color var(--mf-transition-fast);
+  z-index: 5;
+}
+
+[role="row"]:hover .mf-folder-btn,
+[role="gridcell"]:hover .mf-folder-btn,
+[role="listitem"]:hover .mf-folder-btn,
+div:hover > .mf-folder-btn,
+.mf-folder-btn.mf-active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.mf-folder-btn:hover {
+  background: var(--mf-bg-wash);
+  color: var(--mf-primary);
+  transform: scale(1.08);
+}
+
+.mf-folder-btn svg {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+}
+
+
+/* ==========================================================================
+   4. PIGUŁKA W NAGŁÓWKU CZATU (.mf-header-pill)
+   ========================================================================== */
+
+.mf-header-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--mf-radius-pill);
+  background: var(--mf-bg-wash);
+  color: var(--mf-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--mf-border);
+  cursor: pointer;
+  margin-left: 8px;
+  transition: all var(--mf-transition-fast);
+  user-select: none;
+}
+
+.mf-header-pill:hover {
+  background: var(--mf-hover);
+  color: var(--mf-text-primary);
+  border-color: var(--mf-primary);
+  transform: translateY(-1px);
+}
+
+.mf-header-pill-assigned {
+  background: var(--mf-folder-tint, var(--mf-primary-subtle));
+  color: var(--mf-folder-color, var(--mf-primary));
+  border-color: var(--mf-folder-color, var(--mf-primary));
+  font-weight: 600;
+}
+
+.mf-header-pill-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.mf-header-pill-title {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mf-header-pill-chevron {
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.6;
+}
+
+.mf-header-pill-chevron svg {
+  width: 10px;
+  height: 10px;
+  fill: currentColor;
+}
+
+
+/* ==========================================================================
+   5. MENU ROZWIJANE WYBORU FOLDERU (.mf-dropdown-menu)
+   ========================================================================== */
+
+.mf-dropdown-menu {
+  position: fixed;
+  width: 260px;
+  max-height: 380px;
+  display: flex;
+  flex-direction: column;
+  background: var(--mf-bg-surface);
+  border-radius: var(--mf-radius-md);
+  border: 1px solid var(--mf-border);
+  box-shadow: var(--mf-shadow-lg);
+  z-index: var(--mf-z-dropdown);
+  overflow: hidden;
+  user-select: none;
+  animation: mfFadeInDown var(--mf-transition-fast) ease-out;
+}
+
+@keyframes mfFadeInDown {
   from {
     opacity: 0;
-    transform: translateY(-4px);
+    transform: scale(0.96) translateY(-6px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: scale(1) translateY(0);
   }
 }
 
-.mf-picker-header {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: #6b7280;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--mf-border-bar);
-  margin-bottom: 4px;
+.mf-dropdown-header {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--mf-border);
 }
 
-.mf-picker-item {
+.mf-dropdown-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mf-text-primary);
+  margin-bottom: 8px;
+}
+
+.mf-dropdown-search-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.mf-dropdown-search-icon {
+  position: absolute;
+  left: 8px;
+  width: 14px;
+  height: 14px;
+  color: var(--mf-text-placeholder);
+  pointer-events: none;
+}
+
+.mf-dropdown-search-icon svg {
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}
+
+.mf-dropdown-search {
+  width: 100%;
+  height: 30px;
+  padding: 0 10px 0 28px;
+  border-radius: var(--mf-radius-pill);
+  border: 1px solid var(--mf-border);
+  background: var(--mf-bg-wash);
+  color: var(--mf-text-primary);
+  font-size: 12px;
+  outline: none;
+  transition: border-color var(--mf-transition-fast), background var(--mf-transition-fast);
+}
+
+.mf-dropdown-search:focus {
+  border-color: var(--mf-primary);
+  background: var(--mf-bg-surface);
+}
+
+.mf-dropdown-search::placeholder {
+  color: var(--mf-text-placeholder);
+}
+
+.mf-dropdown-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+  max-height: 230px;
+}
+
+.mf-dropdown-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.mf-dropdown-list::-webkit-scrollbar-thumb {
+  background: var(--mf-border);
+  border-radius: var(--mf-radius-pill);
+}
+
+.mf-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--mf-text-primary);
+  cursor: pointer;
+  transition: background var(--mf-transition-fast);
+}
+
+.mf-dropdown-item:hover {
+  background: var(--mf-hover);
+}
+
+.mf-dropdown-item-left {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
-  padding: 7px 10px;
-  border: none;
-  background: none;
-  color: var(--mf-tab-text);
-  font-size: 13px;
-  border-radius: 6px;
-  text-align: left;
-  cursor: pointer;
-  transition: background-color 0.12s ease;
+  overflow: hidden;
 }
 
-.mf-picker-item:hover {
-  background-color: var(--mf-tab-bg-hover);
+.mf-dropdown-item-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
-.mf-picker-item.selected {
-  font-weight: 600;
-  background-color: rgba(0, 132, 255, 0.1);
-  color: #0084ff;
-}
-
-.mf-item-icon {
+.mf-dropdown-item-icon {
   font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.mf-dropdown-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mf-dropdown-item-check {
+  width: 16px;
+  height: 16px;
+  color: var(--mf-primary);
+  display: none;
+  flex-shrink: 0;
+}
+
+.mf-dropdown-item.mf-selected .mf-dropdown-item-check {
+  display: inline-flex;
+}
+
+.mf-dropdown-item-check svg {
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}
+
+.mf-dropdown-unassign {
+  color: var(--mf-danger);
+  border-top: 1px solid var(--mf-border);
+  margin-top: 4px;
+  padding-top: 8px;
+}
+
+.mf-dropdown-unassign:hover {
+  background: var(--mf-danger-subtle);
+}
+
+.mf-dropdown-footer {
+  padding: 8px 10px;
+  border-top: 1px solid var(--mf-border);
+  background: var(--mf-bg-wash);
+}
+
+.mf-dropdown-new-folder-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 30px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mf-primary);
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background var(--mf-transition-fast);
+}
+
+.mf-dropdown-new-folder-btn:hover {
+  background: var(--mf-primary-subtle);
+}
+
+.mf-dropdown-new-folder-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+
+/* ==========================================================================
+   6. OKNO MODALNE TWORZENIA/EDYCJI FOLDERU (.mf-modal-overlay, .mf-modal)
+   ========================================================================== */
+
+.mf-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--mf-z-modal);
+  padding: 16px;
+  animation: mfFadeIn var(--mf-transition-normal) ease-out;
+}
+
+@keyframes mfFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.mf-modal {
+  width: 100%;
+  max-width: 440px;
+  background: var(--mf-bg-surface);
+  border-radius: var(--mf-radius-lg);
+  border: 1px solid var(--mf-border);
+  box-shadow: var(--mf-shadow-lg);
+  overflow: hidden;
+  animation: mfModalPop var(--mf-transition-normal) cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+@keyframes mfModalPop {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.mf-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--mf-border);
+}
+
+.mf-modal-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--mf-text-primary);
+  margin: 0;
+}
+
+.mf-modal-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--mf-radius-pill);
+  background: var(--mf-bg-wash);
+  color: var(--mf-text-secondary);
+  border: none;
+  cursor: pointer;
+  transition: background var(--mf-transition-fast), color var(--mf-transition-fast);
+}
+
+.mf-modal-close-btn:hover {
+  background: var(--mf-hover);
+  color: var(--mf-text-primary);
+}
+
+.mf-modal-close-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.mf-modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-height: calc(85vh - 130px);
+  overflow-y: auto;
+}
+
+.mf-modal-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mf-modal-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mf-text-primary);
+}
+
+.mf-modal-hint {
+  font-size: 12px;
+  color: var(--mf-text-secondary);
+  margin-top: -4px;
+}
+
+.mf-modal-input {
+  width: 100%;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--mf-border);
+  background: var(--mf-bg-wash);
+  color: var(--mf-text-primary);
+  font-size: 14px;
+  outline: none;
+  transition: border-color var(--mf-transition-fast), background var(--mf-transition-fast);
+}
+
+.mf-modal-input:focus {
+  border-color: var(--mf-primary);
+  background: var(--mf-bg-surface);
+  box-shadow: 0 0 0 2px var(--mf-primary-subtle);
+}
+
+.mf-modal-input::placeholder {
+  color: var(--mf-text-placeholder);
+}
+
+.mf-emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+}
+
+.mf-emoji-option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  border-radius: 8px;
+  background: var(--mf-bg-wash);
+  font-size: 18px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform var(--mf-transition-fast), background var(--mf-transition-fast);
+}
+
+.mf-emoji-option:hover {
+  background: var(--mf-hover);
+  transform: scale(1.1);
+}
+
+.mf-emoji-option.mf-selected {
+  border-color: var(--mf-primary);
+  background: var(--mf-primary-subtle);
+}
+
+.mf-color-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.mf-color-option {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  position: relative;
+  transition: transform var(--mf-transition-fast), box-shadow var(--mf-transition-fast);
+}
+
+.mf-color-option:hover {
+  transform: scale(1.15);
+}
+
+.mf-color-option.mf-selected {
+  box-shadow: 0 0 0 2px var(--mf-bg-surface), 0 0 0 4px var(--mf-primary);
+  transform: scale(1.1);
+}
+
+.mf-color-custom-wrapper {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px dashed var(--mf-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.mf-color-custom-input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+.mf-color-custom-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--mf-text-secondary);
+  pointer-events: none;
+}
+
+.mf-color-custom-icon svg {
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}
+
+.mf-modal-preview-box {
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--mf-bg-wash);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mf-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-top: 1px solid var(--mf-border);
+  background: var(--mf-bg-wash);
+}
+
+.mf-modal-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.mf-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  outline: none;
+  transition: all var(--mf-transition-fast);
+}
+
+.mf-btn-secondary {
+  background: var(--mf-bg-surface);
+  color: var(--mf-text-primary);
+  border-color: var(--mf-border);
+}
+
+.mf-btn-secondary:hover {
+  background: var(--mf-hover);
+}
+
+.mf-btn-primary {
+  background: var(--mf-primary);
+  color: #ffffff;
+}
+
+.mf-btn-primary:hover {
+  background: var(--mf-primary-hover);
+  box-shadow: 0 2px 8px rgba(0, 132, 255, 0.35);
+}
+
+.mf-btn-danger {
+  background: transparent;
+  color: var(--mf-danger);
+}
+
+.mf-btn-danger:hover {
+  background: var(--mf-danger-subtle);
+}
+
+
+/* ==========================================================================
+   7. POWIADOMIENIA TOAST (.mf-toast)
+   ========================================================================== */
+
+.mf-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: rgba(15, 15, 15, 0.9);
+  color: #ffffff;
+  padding: 10px 18px;
+  border-radius: var(--mf-radius-pill);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: var(--mf-shadow-md);
+  z-index: var(--mf-z-modal);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform var(--mf-transition-normal), opacity var(--mf-transition-normal);
+}
+
+.mf-toast.mf-show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+
+/* ==========================================================================
+   8. DOSTĘPNOŚĆ (PREFERS-REDUCED-MOTION)
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
