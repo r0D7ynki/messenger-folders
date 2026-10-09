@@ -234,16 +234,75 @@
      * @param {Element|Document} [rootNode] Węzeł początkowy przeszukiwania.
      * @returns {Array<Object>} Lista wykrytych wątków.
      */
-    scanChatList(rootNode = null) {
-      const doc = rootNode || this.doc;
-      if (!doc) return [];
+    /**
+     * Zwraca kontener paska bocznego (listy czatów).
+     * Gwarantuje, że skanowanie NIGDY nie wejdzie do role="main" (obszaru wiadomości).
+     * @returns {Element|null}
+     */
+    getSidebarContainer() {
+      if (!this.doc) return null;
 
-      // Wyszukanie wszystkich linków do wątków w interfejsie
-      const linkElements = doc.querySelectorAll('a[href*="/t/"]');
+      // 1. Dedykowana rola navigation (standard w Messengerze)
+      const nav = this.doc.querySelector('[role="navigation"]');
+      if (nav && !nav.closest('[role="main"]')) {
+        return nav;
+      }
+
+      // 2. Kontener z etykietą "Czaty" lub "Chats"
+      const chatsHeader = this.doc.querySelector(
+        'div[aria-label="Czaty"], div[aria-label="Chats"], ' +
+        'h1, [role="heading"][aria-level="1"]'
+      );
+      if (chatsHeader) {
+        let parent = chatsHeader.parentElement;
+        while (parent && parent !== this.doc.body) {
+          if (parent.getAttribute('role') === 'main') break;
+          if (parent.getAttribute('role') === 'navigation' || parent.getAttribute('role') === 'region') {
+            return parent;
+          }
+          if (parent.children.length > 2 && parent.querySelector('input, a[href*="/t/"]')) {
+            return parent;
+          }
+          parent = parent.parentElement;
+        }
+      }
+
+      // 3. Kontener nadrzędny pierwszego linku czatu poza role="main"
+      const links = this.doc.querySelectorAll('a[href*="/t/"]');
+      for (const link of links) {
+        if (!link.closest('[role="main"]')) {
+          const listContainer = link.closest('[role="grid"], [role="navigation"]') ||
+                                link.parentElement?.parentElement?.parentElement;
+          if (listContainer && !listContainer.closest('[role="main"]')) {
+            return listContainer;
+          }
+        }
+      }
+
+      return null;
+    }
+
+    /**
+     * Skanuje listę czatów w dokumencie lub wskazanym kontenerze.
+     * Oznacza każdy znaleziony wiersz atrybutem data-mf-thread-id.
+     * @param {Element|Document} [rootNode] Węzeł początkowy przeszukiwania.
+     * @returns {Array<Object>} Lista wykrytych wątków.
+     */
+    scanChatList(rootNode = null) {
+      // Skanujemy WYŁĄCZNIE boczny panel. Nigdy obszar wiadomości (role="main")!
+      const sidebar = rootNode || this.getSidebarContainer() || this.doc;
+      if (!sidebar) return [];
+
+      const linkElements = sidebar.querySelectorAll('a[href*="/t/"]');
       const detectedThreads = [];
       const seenThreadIds = new Set();
 
       for (const link of linkElements) {
+        // Rygorystyczna blokada: pomijamy wszystko co jest wewnątrz role="main"
+        if (link.closest('[role="main"]')) {
+          continue;
+        }
+
         const href = link.getAttribute('href') || link.href || '';
         const threadId = this.extractThreadIdFromUrl(href);
 
@@ -254,10 +313,14 @@
         seenThreadIds.add(threadId);
 
         const rowElement = this.findChatRow(link);
-        if (rowElement) {
-          // Oznaczenie wiersza trwałym atrybutem
-          rowElement.setAttribute('data-mf-thread-id', threadId);
-          link.setAttribute('data-mf-thread-link', threadId);
+        if (rowElement && !rowElement.closest('[role="main"]')) {
+          // Oznaczenie wiersza trwałym atrybutem bez powielania mutacji
+          if (rowElement.getAttribute('data-mf-thread-id') !== threadId) {
+            rowElement.setAttribute('data-mf-thread-id', threadId);
+          }
+          if (link.getAttribute('data-mf-thread-link') !== threadId) {
+            link.setAttribute('data-mf-thread-link', threadId);
+          }
 
           const name = this.extractThreadName(rowElement, link);
           const avatar = this.extractThreadAvatar(rowElement);
@@ -276,22 +339,18 @@
     }
 
     /**
-     * Wyszukuje optymalne miejsce do wstrzyknięcia paska folderów.
-     * Typowe położenie to obszar pod polem wyszukiwania lub pod nagłówkiem listy czatów.
-     * @returns {{ target: Element, position: string, container: Element }|null} Punkt wstrzyknięcia.
-     */
-    /**
      * Wyszukuje optymalne, stabilne miejsce do wstrzyknięcia paska folderów.
-     * Zapobiega wstrzykiwaniu paska do wnętrza pola wyszukiwania lub elementów inline.
+     * Wyłącznie w obrębie paska bocznego - nigdy w obszarze wiadomości.
      * @returns {{ target: Element, position: string, container: Element }|null} Punkt wstrzyknięcia.
      */
     findFolderBarInjectionPoint() {
       if (!this.doc) return null;
+      const sidebar = this.getSidebarContainer();
+      const scope = sidebar || this.doc;
 
-      // 1. Priorytet: Główna siatka / lista czatów (role="grid")
-      // Wstrzyknięcie bezpośrednio przed listą gwarantuje prawidłową szerokość i brak kolizji z wyszukiwarką.
-      const grid = this.doc.querySelector('[role="navigation"] [role="grid"], [role="grid"]');
-      if (grid && grid.parentElement) {
+      // 1. Priorytet: Główna siatka / lista czatów wewnątrz paska bocznego
+      const grid = scope.querySelector('[role="grid"]');
+      if (grid && grid.parentElement && !grid.closest('[role="main"]')) {
         return {
           target: grid,
           position: 'beforebegin',
@@ -299,93 +358,44 @@
         };
       }
 
-      // 2. Kontener listy rozmów wykryty przez pierwszy wiersz konwersacji
-      const firstRowLink = this.doc.querySelector('a[href*="/t/"]');
-      if (firstRowLink) {
-        const listContainer = firstRowLink.closest(
-          '[role="grid"], [role="rowgroup"], div[aria-label="Czaty"], div[aria-label="Chats"]'
-        );
-        if (listContainer && listContainer.parentElement) {
+      // 2. Pierwszy link wątku wewnątrz paska bocznego
+      const firstRowLink = scope.querySelector('a[href*="/t/"]');
+      if (firstRowLink && !firstRowLink.closest('[role="main"]')) {
+        const row = this.findChatRow(firstRowLink) || firstRowLink;
+        if (row.parentElement && !row.parentElement.closest('[role="main"]')) {
           return {
-            target: listContainer,
+            target: row.parentElement,
             position: 'beforebegin',
-            container: listContainer.parentElement,
+            container: row.parentElement.parentElement || row.parentElement,
           };
         }
       }
 
-      // 3. Bezpieczne wykrycie zewnętrznej sekcji wyszukiwania w kolumnie bocznej
-      const searchInput = this.doc.querySelector(
-        'input[placeholder*="Szukaj" i], input[placeholder*="Search" i], ' +
-        'input[aria-label*="Szukaj" i], input[aria-label*="Search" i], ' +
-        'div[role="search"] input, input[type="search"]'
-      );
-
-      if (searchInput) {
-        const navParent = this.doc.querySelector('[role="navigation"]');
+      // 3. Pod zewnętrzną sekcją wyszukiwania w pasku bocznym
+      const searchInput = scope.querySelector('input');
+      if (searchInput && !searchInput.closest('[role="main"]')) {
         let searchSection = searchInput;
-
-        // Wspinamy się do bezpośredniego dziecka paska bocznego, aby nie trafić do wnętrza pola input
-        if (navParent && navParent.contains(searchInput)) {
-          while (searchSection.parentElement && searchSection.parentElement !== navParent) {
-            searchSection = searchSection.parentElement;
-          }
-          if (searchSection && searchSection.parentElement) {
-            return {
-              target: searchSection,
-              position: 'afterend',
-              container: searchSection.parentElement,
-            };
-          }
-        } else {
-          // Szukamy nadrzędnego bloku sekcji o odpowiedniej wysokości
-          let current = searchInput;
-          while (current.parentElement &&
-                 current.parentElement !== this.doc.body &&
-                 current.parentElement.clientHeight < 100 &&
-                 current.parentElement.children.length < 4) {
-            current = current.parentElement;
-          }
-          if (current && current.parentElement) {
-            return {
-              target: current,
-              position: 'afterend',
-              container: current.parentElement,
-            };
-          }
+        while (searchSection.parentElement &&
+               searchSection.parentElement !== scope &&
+               searchSection.parentElement !== this.doc.body &&
+               searchSection.parentElement.clientHeight < 100) {
+          searchSection = searchSection.parentElement;
         }
-      }
-
-      // 4. Nagłówek listy czatów ("Czaty" / "Chats")
-      const headerCandidate = this.doc.querySelector(
-        'h1, [role="heading"][aria-level="1"], ' +
-        'div[aria-label="Czaty"], div[aria-label="Chats"]'
-      );
-
-      if (headerCandidate && headerCandidate.parentElement) {
-        let headerSection = headerCandidate;
-        const navParent = this.doc.querySelector('[role="navigation"]');
-        if (navParent && navParent.contains(headerCandidate)) {
-          while (headerSection.parentElement && headerSection.parentElement !== navParent) {
-            headerSection = headerSection.parentElement;
-          }
-        }
-        if (headerSection && headerSection.parentElement) {
+        if (searchSection && searchSection.parentElement) {
           return {
-            target: headerSection,
+            target: searchSection,
             position: 'afterend',
-            container: headerSection.parentElement,
+            container: searchSection.parentElement,
           };
         }
       }
 
-      // 5. Domyślny kontener nawigacji po lewej stronie
-      const navContainer = this.doc.querySelector('[role="navigation"]');
-      if (navContainer) {
+      // 4. Bezpośrednio na początku paska bocznego
+      if (sidebar && sidebar.firstElementChild) {
         return {
-          target: navContainer,
-          position: 'prepend',
-          container: navContainer,
+          target: sidebar.firstElementChild,
+          position: 'afterend',
+          container: sidebar,
         };
       }
 
@@ -401,6 +411,14 @@
     injectFolderBar(folderBarElement) {
       if (!folderBarElement || !(folderBarElement instanceof Element)) {
         return false;
+      }
+
+      // Jeśli pasek jest już w DOM w prawidłowym miejscu, nie ruszaj go!
+      if (this.doc?.contains(folderBarElement)) {
+        const currentParent = folderBarElement.parentElement;
+        if (currentParent && !currentParent.closest('[role="main"]')) {
+          return true; // Stabilny, poprawnie umieszczony pasek
+        }
       }
 
       const point = this.findFolderBarInjectionPoint();
@@ -521,8 +539,29 @@
         }
       };
 
-      const throttledHandler = () => {
+      const throttledHandler = (mutationsList) => {
         if (isDisconnected) return;
+
+        // Filtrowanie mutacji: ignorujemy zmiany pochodzące z naszych własnych elementów
+        if (mutationsList && mutationsList.length > 0) {
+          const onlyOurElements = mutationsList.every((mutation) => {
+            const target = mutation.target;
+            if (target && target.nodeType === 1) {
+              if (target.id === 'mf-folder-bar' ||
+                  target.closest?.('#mf-folder-bar, .mf-dropdown-menu, .mf-modal-overlay') ||
+                  target.classList?.contains('mf-thread-badge') ||
+                  target.classList?.contains('mf-folder-btn') ||
+                  target.hasAttribute?.('data-mf-thread-id') ||
+                  target.hasAttribute?.('data-mf-folder-bar')) {
+                return true;
+              }
+            }
+            return false;
+          });
+          if (onlyOurElements) {
+            return; // Zero reakcji na własne zmiany
+          }
+        }
 
         const now = Date.now();
         const elapsed = now - lastRunTime;
@@ -541,11 +580,13 @@
       // Pierwsze natychmiastowe uruchomienie
       runScan();
 
-      // Utworzenie i podpięcie MutationObserver
+      // Utworzenie i podpięcie MutationObserver na pasku bocznym (nigdy na całym document.body!)
       let observer = null;
       if (typeof MutationObserver !== 'undefined' && this.doc?.body) {
         observer = new MutationObserver(throttledHandler);
-        observer.observe(this.doc.body, {
+        const sidebar = this.getSidebarContainer();
+        const targetElement = sidebar || this.doc.body;
+        observer.observe(targetElement, {
           childList: true,
           subtree: true,
         });

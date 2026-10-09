@@ -32,6 +32,11 @@
 
       // Próba wstrzyknięcia paska folderów
       const tryInjectBar = () => {
+        const existingBar = document.getElementById('mf-folder-bar');
+        if (existingBar && document.body.contains(existingBar)) {
+          return true; // Pasek już istnieje stabilnie w DOM
+        }
+
         const bar = ui.renderFolderBar(folders, activeFolder, allThreads);
         const injected = detector.injectFolderBar(bar);
         if (injected) {
@@ -58,7 +63,7 @@
         const currentActive = await storage.getActiveFolder();
         const currentThreads = await storage.getAllThreads();
         ui.filterChatRows(currentActive, currentThreads);
-      }, { throttleMs: 150 });
+      }, { throttleMs: 250 });
 
       // Nasłuchiwanie zmian adresu URL (przełączanie czatów w aplikacji Single Page App)
       let lastUrl = window.location.href;

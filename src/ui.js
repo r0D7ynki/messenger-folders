@@ -177,8 +177,50 @@
         }
       }
 
+      // Sprawdzenie obecności folderu 'all'
+      const hasAll = folders.some(f => f.id === 'all');
+      const folderList = hasAll ? [...folders] : [
+        { id: 'all', name: 'Wszystkie', icon: '💬', color: '#0084FF', isSystem: true },
+        ...folders
+      ];
+
       let bar = document.getElementById('mf-folder-bar');
-      if (!bar) {
+      if (bar) {
+        // Jeśli pasek już istnieje w DOM, sprawdzamy czy struktura folderów jest identyczna
+        const existingPills = bar.querySelectorAll('.mf-folder-pill');
+        const existingIds = Array.from(existingPills).map(p => p.dataset.folderId);
+        const newIds = folderList.map(f => f.id);
+        const isSameStructure = existingIds.length > 0 &&
+          existingIds.length === newIds.length &&
+          existingIds.every((id, idx) => id === newIds[idx]);
+
+        if (isSameStructure) {
+          // Zaktualizuj TYLKO klasy i liczniki w istniejących elementach (zero niszczenia DOM, zero skakania!)
+          existingPills.forEach(pill => {
+            const fId = pill.dataset.folderId;
+            const isActive = fId === activeFolderId;
+            pill.classList.toggle('mf-active', isActive);
+            pill.setAttribute('aria-selected', isActive ? 'true' : 'false');
+
+            const count = resolvedCounts[fId] || 0;
+            let countEl = pill.querySelector('.mf-folder-count');
+            if (count > 0 || isActive) {
+              if (!countEl) {
+                countEl = document.createElement('span');
+                countEl.className = 'mf-folder-count';
+                pill.appendChild(countEl);
+              }
+              const countText = count > 99 ? '99+' : String(count);
+              if (countEl.textContent !== countText) {
+                countEl.textContent = countText;
+              }
+            } else if (countEl) {
+              countEl.remove();
+            }
+          });
+          return bar; // Gotowe, zero resetu DOM!
+        }
+      } else {
         bar = document.createElement('div');
         bar.id = 'mf-folder-bar';
       }
@@ -204,13 +246,6 @@
       btnRight.className = 'mf-scroll-btn mf-scroll-btn-right';
       btnRight.setAttribute('aria-label', 'Przewiń foldery w prawo');
       btnRight.innerHTML = ICONS.chevronRight;
-
-      // Sprawdzenie obecności folderu 'all'
-      const hasAll = folders.some(f => f.id === 'all');
-      const folderList = hasAll ? [...folders] : [
-        { id: 'all', name: 'Wszystkie', icon: '💬', color: '#0084FF', isSystem: true },
-        ...folders
-      ];
 
       // Tworzenie pigułek folderów
       folderList.forEach((folder) => {
@@ -363,15 +398,18 @@
         }
 
         const color = currentFolder.color || '#0084FF';
-        badge.style.backgroundColor = `${color}20`;
-        badge.style.color = color;
-        badge.style.borderColor = `${color}45`;
-        badge.title = `Folder: ${currentFolder.name} (kliknij, aby zmienić)`;
+        if (badge.dataset.folderId !== currentFolder.id) {
+          badge.dataset.folderId = currentFolder.id;
+          badge.style.backgroundColor = `${color}20`;
+          badge.style.color = color;
+          badge.style.borderColor = `${color}45`;
+          badge.title = `Folder: ${currentFolder.name} (kliknij, aby zmienić)`;
 
-        badge.innerHTML = `
-          <span class="mf-thread-badge-icon">${currentFolder.icon || '📁'}</span>
-          <span class="mf-thread-badge-text">${currentFolder.name}</span>
-        `;
+          badge.innerHTML = `
+            <span class="mf-thread-badge-icon">${currentFolder.icon || '📁'}</span>
+            <span class="mf-thread-badge-text">${currentFolder.name}</span>
+          `;
+        }
 
         badge.onclick = (event) => {
           event.stopPropagation();
@@ -435,12 +473,22 @@
       if (!headerElement) return null;
 
       let pill = headerElement.querySelector('.mf-header-pill');
+      const targetFolderId = currentFolder && currentFolder.id !== 'all' && currentFolder.id !== 'uncategorized'
+        ? currentFolder.id
+        : 'none';
+
+      // Jeśli pigułka już istnieje i wyświetla właściwy folder, pomijamy mutacje DOM
+      if (pill && pill.dataset.folderId === targetFolderId) {
+        return pill;
+      }
+
       if (!pill) {
         pill = document.createElement('button');
         pill.type = 'button';
         pill.className = 'mf-header-pill';
         headerElement.appendChild(pill);
       }
+      pill.dataset.folderId = targetFolderId;
 
       if (currentFolder && currentFolder.id !== 'all' && currentFolder.id !== 'uncategorized') {
         pill.className = 'mf-header-pill mf-header-pill-assigned';
@@ -970,12 +1018,10 @@
         });
 
         // Widoczność wiersza według aktywnego filtra
-        if (activeFolderId === 'all') {
-          rowElement.style.display = '';
-        } else if (folderId === activeFolderId) {
-          rowElement.style.display = '';
-        } else {
-          rowElement.style.display = 'none';
+        const shouldBeVisible = (activeFolderId === 'all') || (folderId === activeFolderId);
+        const targetDisplay = shouldBeVisible ? '' : 'none';
+        if (rowElement.style.display !== targetDisplay) {
+          rowElement.style.display = targetDisplay;
         }
       });
 
