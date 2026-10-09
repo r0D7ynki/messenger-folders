@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="folderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00C6FF" />
+      <stop offset="100%" stop-color="#0072FF" />
+    </linearGradient>
+    <linearGradient id="bubbleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#E0E7FF" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Folder Back Tab -->
+  <path d="M16 32 C16 26, 20 22, 26 22 L48 22 C52 22, 56 25, 59 28 L66 36 L102 36 C108 36, 112 40, 112 46 L112 56 L16 56 Z" fill="#0056b3" />
+
+  <!-- Folder Main Body -->
+  <rect x="14" y="40" width="100" height="70" rx="12" fill="url(#folderGrad)" filter="url(#shadow)" />
+
+  <!-- Chat Bubble Inside Folder -->
+  <path d="M44 65 C44 56.7, 53 50, 64 50 C75 50, 84 56.7, 84 65 C84 73.3, 75 80, 64 80 C60.8 80, 57.8 79.4, 55.2 78.3 L47 82 L48.8 75.2 C45.8 72.4, 44 68.9, 44 65 Z" fill="url(#bubbleGrad)" />
+
+  <!-- Horizontal lines in chat bubble representing folders/categories -->
+  <line x1="54" y1="62" x2="74" y2="62" stroke="#0072FF" stroke-width="3" stroke-linecap="round" />
+  <line x1="54" y1="68" x2="68" y2="68" stroke="#00C6FF" stroke-width="3" stroke-linecap="round" />
+</svg>

@@ -1,0 +1,206 @@
+/**
+ * Messenger Folders - Style interfejsu wstrzykiwanego (CSS)
+ *
+ * Zapewnia spójny wygląd paska folderów, plakietek oraz menu wyboru.
+ * Obsługuje motyw jasny oraz ciemny serwisu Messenger/Facebook.
+ */
+
+:root {
+  --mf-bg-bar: #ffffff;
+  --mf-border-bar: #e5e7eb;
+  --mf-tab-bg: #f3f4f6;
+  --mf-tab-bg-hover: #e5e7eb;
+  --mf-tab-text: #374151;
+  --mf-tab-active-bg: #0084ff;
+  --mf-tab-active-text: #ffffff;
+  --mf-badge-bg: rgba(0, 0, 0, 0.08);
+  --mf-badge-active-bg: rgba(255, 255, 255, 0.3);
+  --mf-menu-bg: #ffffff;
+  --mf-menu-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --mf-bg-bar: #242526;
+    --mf-border-bar: #393a3b;
+    --mf-tab-bg: #3a3b3c;
+    --mf-tab-bg-hover: #4e4f50;
+    --mf-tab-text: #e4e6eb;
+    --mf-tab-active-bg: #0084ff;
+    --mf-tab-active-text: #ffffff;
+    --mf-badge-bg: rgba(255, 255, 255, 0.15);
+    --mf-badge-active-bg: rgba(255, 255, 255, 0.3);
+    --mf-menu-bg: #242526;
+    --mf-menu-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* Pasek zakładek folderów */
+.mf-folder-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background-color: var(--mf-bg-bar);
+  border-bottom: 1px solid var(--mf-border-bar);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  white-space: nowrap;
+  user-select: none;
+  z-index: 10;
+  box-sizing: border-box;
+}
+
+.mf-folder-bar::-webkit-scrollbar {
+  height: 4px;
+}
+
+.mf-folder-bar::-webkit-scrollbar-thumb {
+  background-color: rgba(150, 150, 150, 0.4);
+  border-radius: 4px;
+}
+
+/* Pojedyncza zakładka folderu */
+.mf-folder-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  background-color: var(--mf-tab-bg);
+  color: var(--mf-tab-text);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  outline: none;
+}
+
+.mf-folder-tab:hover {
+  background-color: var(--mf-tab-bg-hover);
+  transform: translateY(-1px);
+}
+
+.mf-folder-tab.active {
+  background-color: var(--mf-accent-color, var(--mf-tab-active-bg));
+  color: var(--mf-tab-active-text);
+  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.mf-tab-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.mf-tab-name {
+  line-height: 1.2;
+}
+
+.mf-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 9px;
+  background-color: var(--mf-badge-bg);
+  line-height: 1;
+}
+
+.mf-folder-tab.active .mf-tab-count {
+  background-color: var(--mf-badge-active-bg);
+}
+
+/* Ukrywanie wierszy przefiltrowanych wątków */
+.mf-thread-hidden {
+  display: none !important;
+}
+
+/* Plakietka folderu przy wierszu czatu */
+.mf-thread-tag {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  color: inherit;
+  cursor: pointer;
+  vertical-align: middle;
+  transition: transform 0.1s ease;
+}
+
+.mf-thread-tag:hover {
+  transform: scale(1.05);
+}
+
+/* Rozwijane menu przypisywania wątku do folderu */
+.mf-folder-picker-menu {
+  background-color: var(--mf-menu-bg);
+  border: 1px solid var(--mf-border-bar);
+  border-radius: 10px;
+  box-shadow: var(--mf-menu-shadow);
+  padding: 6px;
+  min-width: 170px;
+  font-family: inherit;
+  animation: mfFadeIn 0.12s ease-out;
+}
+
+@keyframes mfFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mf-picker-header {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #6b7280;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--mf-border-bar);
+  margin-bottom: 4px;
+}
+
+.mf-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  background: none;
+  color: var(--mf-tab-text);
+  font-size: 13px;
+  border-radius: 6px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.mf-picker-item:hover {
+  background-color: var(--mf-tab-bg-hover);
+}
+
+.mf-picker-item.selected {
+  font-weight: 600;
+  background-color: rgba(0, 132, 255, 0.1);
+  color: #0084ff;
+}
+
+.mf-item-icon {
+  font-size: 14px;
+}

@@ -1,0 +1,839 @@
+/**
+ * Messenger Folders - Style panelu popup rozszerzenia
+ * Zgodność ze standardem PN-ISO 24495-1 (Prosta Polszczyzna)
+ * Integracja z motywem jasnym i ciemnym Messenger / Facebook
+ */
+
+:root {
+  --mf-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mf-bg: #ffffff;
+  --mf-wash: #f0f2f5;
+  --mf-card: #f8f9fa;
+  --mf-text-primary: #050505;
+  --mf-text-secondary: #65676b;
+  --mf-border: rgba(0, 0, 0, 0.1);
+  --mf-hover: rgba(0, 0, 0, 0.05);
+  --mf-active: rgba(0, 0, 0, 0.09);
+
+  --mf-primary: #0084ff;
+  --mf-primary-hover: #0073e6;
+  --mf-primary-subtle: rgba(0, 132, 255, 0.12);
+  --mf-danger: #fa383e;
+  --mf-danger-hover: #e0282e;
+  --mf-danger-subtle: rgba(250, 56, 62, 0.1);
+  --mf-success: #00c853;
+
+  --mf-radius-pill: 9999px;
+  --mf-radius-md: 10px;
+  --mf-radius-lg: 14px;
+  --mf-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --mf-bg: #242526;
+    --mf-wash: #18191a;
+    --mf-card: #303031;
+    --mf-text-primary: #e4e6eb;
+    --mf-text-secondary: #b0b3b8;
+    --mf-border: rgba(255, 255, 255, 0.12);
+    --mf-hover: rgba(255, 255, 255, 0.08);
+    --mf-active: rgba(255, 255, 255, 0.14);
+    --mf-primary-subtle: rgba(0, 132, 255, 0.22);
+    --mf-danger-subtle: rgba(250, 56, 62, 0.22);
+    --mf-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  }
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  width: 380px;
+  min-height: 520px;
+  max-height: 580px;
+  margin: 0;
+  font-family: var(--mf-font);
+  background: var(--mf-bg);
+  color: var(--mf-text-primary);
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+.mf-popup-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  position: relative;
+}
+
+/* ==========================================================================
+   NAGŁÓWEK PANELU
+   ========================================================================== */
+
+.mf-popup-header {
+  padding: 14px 16px;
+  background: var(--mf-bg);
+  border-bottom: 1px solid var(--mf-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mf-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mf-header-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.mf-header-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.mf-header-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--mf-text-primary);
+  line-height: 1.2;
+}
+
+.mf-header-status {
+  font-size: 11px;
+  color: var(--mf-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.mf-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mf-success);
+  box-shadow: 0 0 6px rgba(0, 200, 83, 0.6);
+}
+
+/* ==========================================================================
+   PASEK ZAKŁADEK
+   ========================================================================== */
+
+.mf-popup-nav {
+  display: flex;
+  background: var(--mf-wash);
+  padding: 6px 8px;
+  gap: 4px;
+  border-bottom: 1px solid var(--mf-border);
+}
+
+.mf-nav-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 32px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--mf-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  outline: none;
+  transition: all 140ms ease;
+}
+
+.mf-nav-tab:hover {
+  background: var(--mf-hover);
+  color: var(--mf-text-primary);
+}
+
+.mf-nav-tab.mf-tab-active {
+  background: var(--mf-bg);
+  color: var(--mf-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.mf-nav-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* ==========================================================================
+   ZAWARTOŚĆ ZAKŁADEK
+   ========================================================================== */
+
+.mf-popup-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+  background: var(--mf-bg);
+}
+
+.mf-popup-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.mf-popup-content::-webkit-scrollbar-thumb {
+  background: var(--mf-border);
+  border-radius: 4px;
+}
+
+.mf-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.mf-heading-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--mf-text-primary);
+}
+
+.mf-badge-counter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: var(--mf-radius-pill);
+  background: var(--mf-wash);
+  color: var(--mf-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ==========================================================================
+   KARTY FOLDERÓW W ZAKŁADCE 1
+   ========================================================================== */
+
+.mf-folder-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mf-folder-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--mf-card);
+  border: 1px solid var(--mf-border);
+  border-radius: var(--mf-radius-md);
+  transition: transform 120ms ease, background 120ms ease;
+}
+
+.mf-folder-card:hover {
+  background: var(--mf-wash);
+  transform: translateY(-1px);
+}
+
+.mf-card-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.mf-card-icon-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.mf-card-meta {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.mf-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mf-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mf-card-count {
+  font-size: 11px;
+  color: var(--mf-text-secondary);
+  margin-top: 2px;
+}
+
+.mf-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mf-card-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mf-text-secondary);
+  border: none;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.mf-card-btn:hover {
+  background: var(--mf-hover);
+  color: var(--mf-text-primary);
+}
+
+.mf-card-btn.mf-btn-del:hover {
+  background: var(--mf-danger-subtle);
+  color: var(--mf-danger);
+}
+
+.mf-card-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+/* Stan pusty */
+.mf-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 36px 16px;
+}
+
+.mf-empty-icon {
+  font-size: 40px;
+  margin-bottom: 10px;
+}
+
+.mf-empty-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--mf-text-primary);
+  margin-bottom: 6px;
+}
+
+.mf-empty-text {
+  font-size: 12px;
+  color: var(--mf-text-secondary);
+  line-height: 1.4;
+}
+
+/* ==========================================================================
+   USTAWIENIA (ZAKŁADKA 2)
+   ========================================================================== */
+
+.mf-settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mf-setting-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background: var(--mf-card);
+  border: 1px solid var(--mf-border);
+  border-radius: var(--mf-radius-md);
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.mf-setting-card:hover {
+  background: var(--mf-wash);
+}
+
+.mf-setting-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 12px;
+}
+
+.mf-setting-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mf-text-primary);
+}
+
+.mf-setting-desc {
+  font-size: 11px;
+  color: var(--mf-text-secondary);
+  line-height: 1.3;
+}
+
+/* Przełącznik toggle (Switch) */
+.mf-switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.mf-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.mf-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: var(--mf-border);
+  border-radius: var(--mf-radius-pill);
+  transition: 180ms ease;
+}
+
+.mf-slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background-color: #ffffff;
+  border-radius: 50%;
+  transition: 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.mf-switch input:checked + .mf-slider {
+  background-color: var(--mf-primary);
+}
+
+.mf-switch input:checked + .mf-slider:before {
+  transform: translateX(18px);
+}
+
+/* ==========================================================================
+   KOPIA ZAPASOWA (ZAKŁADKA 3)
+   ========================================================================== */
+
+.mf-backup-card {
+  padding: 16px;
+  background: var(--mf-card);
+  border: 1px solid var(--mf-border);
+  border-radius: var(--mf-radius-md);
+  margin-bottom: 12px;
+}
+
+.mf-backup-desc {
+  font-size: 12px;
+  color: var(--mf-text-secondary);
+  line-height: 1.4;
+  margin-bottom: 14px;
+}
+
+.mf-backup-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.mf-backup-actions .mf-btn {
+  flex: 1;
+}
+
+.mf-info-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  background: var(--mf-wash);
+  border-radius: var(--mf-radius-md);
+  font-size: 11px;
+  color: var(--mf-text-secondary);
+  line-height: 1.4;
+}
+
+.mf-info-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* ==========================================================================
+   POMOC I INSTRUKCJA (ZAKŁADKA 4)
+   ========================================================================== */
+
+.mf-help-accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.mf-help-item {
+  background: var(--mf-card);
+  border: 1px solid var(--mf-border);
+  border-radius: var(--mf-radius-md);
+  overflow: hidden;
+}
+
+.mf-help-question {
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mf-text-primary);
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mf-help-question::-webkit-details-marker {
+  display: none;
+}
+
+.mf-help-question:after {
+  content: "▾";
+  font-size: 12px;
+  color: var(--mf-text-secondary);
+  transition: transform 140ms ease;
+}
+
+.mf-help-item[open] .mf-help-question:after {
+  transform: rotate(180deg);
+}
+
+.mf-help-answer {
+  padding: 0 12px 10px 12px;
+  font-size: 12px;
+  color: var(--mf-text-secondary);
+  line-height: 1.4;
+}
+
+.mf-help-links {
+  text-align: center;
+}
+
+.mf-link-btn {
+  font-size: 12px;
+  color: var(--mf-primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.mf-link-btn:hover {
+  text-decoration: underline;
+}
+
+/* ==========================================================================
+   PRZYCISKI OGÓLNE
+   ========================================================================== */
+
+.mf-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  outline: none;
+  transition: all 140ms ease;
+}
+
+.mf-btn-sm {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+
+.mf-btn-primary {
+  background: var(--mf-primary);
+  color: #ffffff;
+}
+
+.mf-btn-primary:hover {
+  background: var(--mf-primary-hover);
+}
+
+.mf-btn-secondary {
+  background: var(--mf-wash);
+  color: var(--mf-text-primary);
+  border-color: var(--mf-border);
+}
+
+.mf-btn-secondary:hover {
+  background: var(--mf-hover);
+}
+
+.mf-btn-outline {
+  background: transparent;
+  border-color: var(--mf-border);
+  color: var(--mf-text-primary);
+}
+
+.mf-btn-outline:hover {
+  background: var(--mf-hover);
+  border-color: var(--mf-text-secondary);
+}
+
+/* ==========================================================================
+   STOPKA PANELU
+   ========================================================================== */
+
+.mf-popup-footer {
+  padding: 10px 16px;
+  background: var(--mf-wash);
+  border-top: 1px solid var(--mf-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--mf-text-secondary);
+}
+
+/* ==========================================================================
+   POWIADOMIENIE TOAST W POPUPIE
+   ========================================================================== */
+
+.mf-popup-toast {
+  position: absolute;
+  bottom: 46px;
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  background: rgba(20, 20, 20, 0.94);
+  color: #ffffff;
+  padding: 8px 14px;
+  border-radius: var(--mf-radius-pill);
+  font-size: 11px;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 180ms ease, opacity 180ms ease;
+  z-index: 1000;
+  white-space: nowrap;
+}
+
+.mf-popup-toast.mf-show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ==========================================================================
+   WBUDOWANE OKNO DIALOGOWE W POPUPIE
+   ========================================================================== */
+
+.mf-dialog-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+  z-index: 500;
+}
+
+.mf-dialog-card {
+  width: 100%;
+  background: var(--mf-bg);
+  border-radius: var(--mf-radius-lg);
+  border: 1px solid var(--mf-border);
+  box-shadow: var(--mf-shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: mfPop 180ms ease-out;
+}
+
+@keyframes mfPop {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.mf-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--mf-border);
+}
+
+.mf-dialog-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.mf-dialog-close {
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  color: var(--mf-text-secondary);
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mf-dialog-close:hover {
+  background: var(--mf-hover);
+  color: var(--mf-text-primary);
+}
+
+.mf-dialog-body {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.mf-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mf-form-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mf-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.mf-form-input {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--mf-border);
+  background: var(--mf-wash);
+  color: var(--mf-text-primary);
+  font-size: 13px;
+  outline: none;
+}
+
+.mf-form-input:focus {
+  border-color: var(--mf-primary);
+  background: var(--mf-bg);
+}
+
+.mf-dialog-emojis {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+
+.mf-dialog-emoji-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  border-radius: 6px;
+  background: var(--mf-wash);
+  border: 1px solid transparent;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.mf-dialog-emoji-btn:hover {
+  background: var(--mf-hover);
+}
+
+.mf-dialog-emoji-btn.mf-selected {
+  border-color: var(--mf-primary);
+  background: var(--mf-primary-subtle);
+}
+
+.mf-dialog-colors {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+}
+
+.mf-dialog-color-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+
+.mf-dialog-color-btn.mf-selected {
+  border-color: var(--mf-bg);
+  box-shadow: 0 0 0 2px var(--mf-primary);
+}
+
+.mf-dialog-preview {
+  padding: 8px;
+  background: var(--mf-wash);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mf-dialog-preview .mf-folder-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--mf-radius-pill);
+  background: var(--mf-folder-color, var(--mf-primary));
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mf-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--mf-border);
+  background: var(--mf-wash);
+}
