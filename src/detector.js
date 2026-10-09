@@ -49,7 +49,17 @@
         }
       }
 
-      // 2. Dopasowanie parametrów w adresie URL
+      // 2. Dopasowanie ścieżek /messages/:id lub /messages/group/:id (gdzie id to identyfikator)
+      const msgMatch = url.match(/\/messages\/(?:group\/)?([a-zA-Z0-9._-]+)(?:[/?#]|$)/i);
+      if (msgMatch && msgMatch[1]) {
+        const id = msgMatch[1].toLowerCase();
+        const nonThreadKeywords = ['new', 'requests', 'marketplace', 'settings', 'archive', 'unread', 'active', 'group'];
+        if (!nonThreadKeywords.includes(id)) {
+          return msgMatch[1];
+        }
+      }
+
+      // 3. Dopasowanie parametrów w adresie URL
       try {
         const base = this.win?.location?.origin || 'https://www.messenger.com';
         const parsedUrl = new URL(url, base);
@@ -77,22 +87,23 @@
       }
 
       // Sprawdzenie semantycznych ról wiersza listy
-      const semanticRow = linkElement.closest('[role="row"], [role="listitem"], li');
-      if (semanticRow) {
+      const semanticRow = linkElement.closest('[role="row"], [role="gridcell"], [role="listitem"], li');
+      if (semanticRow && !semanticRow.closest('[role="main"]')) {
         return semanticRow;
       }
 
       // Wędrówka w górę drzewa DOM do kontenera wiersza
       let current = linkElement;
-      for (let depth = 0; depth < 6; depth++) {
+      for (let depth = 0; depth < 8; depth++) {
         if (!current.parentElement) break;
         current = current.parentElement;
+        if (current.closest('[role="main"]')) break;
 
         // Jeśli rodzic zawiera rodzeństwo z podobnymi linkami, bieżący element jest wierszem
         const parent = current.parentElement;
         if (parent && parent.children.length > 1) {
           const hasSiblingLinks = Array.from(parent.children).some((sibling) => {
-            return sibling !== current && sibling.querySelector('a[href*="/t/"]');
+            return sibling !== current && sibling.querySelector('a[href*="/t/"], a[href*="/messages/"]');
           });
           if (hasSiblingLinks) {
             return current;
@@ -129,6 +140,9 @@
       // 2. Wyszukanie elementów span[dir="auto"] z tekstem (najczęstszy wzorzec w Meta)
       const textSpans = rowElement.querySelectorAll('span[dir="auto"]');
       for (const span of textSpans) {
+        if (span.closest && (span.closest('.mf-thread-badge') || span.closest('.mf-folder-btn'))) {
+          continue;
+        }
         const text = span.textContent?.trim() || '';
         // Pomijamy krótkie oznaczenia czasu, liczby i puste ciągi
         if (text && text.length > 1 && !this._isTimeOrBadge(text)) {
@@ -138,9 +152,9 @@
 
       // 3. Sprawdzenie nagłówków lub elementów pogrubionych
       const heading = rowElement.querySelector('h2, h3, strong, [role="heading"]');
-      if (heading && heading.textContent?.trim()) {
-        const text = heading.textContent.trim();
-        if (!this._isTimeOrBadge(text)) {
+      if (heading && (!heading.closest || (!heading.closest('.mf-thread-badge') && !heading.closest('.mf-folder-btn')))) {
+        const text = heading.textContent?.trim() || '';
+        if (text && !this._isTimeOrBadge(text)) {
           return text;
         }
       }
@@ -242,13 +256,21 @@
     getSidebarContainer() {
       if (!this.doc) return null;
 
-      // 1. Dedykowana rola navigation (standard w Messengerze)
-      const nav = this.doc.querySelector('[role="navigation"]');
-      if (nav && !nav.closest('[role="main"]')) {
-        return nav;
+      // 1. Główna siatka listy czatów poza role="main"
+      const grid = this.doc.querySelector('[role="grid"]');
+      if (grid && !grid.closest('[role="main"]') && grid.querySelector('a[href*="/t/"], a[href*="/messages/"]')) {
+        return grid;
       }
 
-      // 2. Kontener z etykietą "Czaty" lub "Chats"
+      // 2. Dedykowana rola navigation zawierająca linki do wątków
+      const navs = this.doc.querySelectorAll('[role="navigation"], [role="region"]');
+      for (const nav of navs) {
+        if (!nav.closest('[role="main"]') && nav.querySelector('a[href*="/t/"], a[href*="/messages/"]')) {
+          return nav;
+        }
+      }
+
+      // 3. Kontener z nagłówkiem "Czaty" lub "Chats"
       const chatsHeader = this.doc.querySelector(
         'div[aria-label="Czaty"], div[aria-label="Chats"], ' +
         'h1, [role="heading"][aria-level="1"]'
@@ -257,21 +279,18 @@
         let parent = chatsHeader.parentElement;
         while (parent && parent !== this.doc.body) {
           if (parent.getAttribute('role') === 'main') break;
-          if (parent.getAttribute('role') === 'navigation' || parent.getAttribute('role') === 'region') {
-            return parent;
-          }
-          if (parent.children.length > 2 && parent.querySelector('input, a[href*="/t/"]')) {
+          if (parent.querySelector('a[href*="/t/"], a[href*="/messages/"]')) {
             return parent;
           }
           parent = parent.parentElement;
         }
       }
 
-      // 3. Kontener nadrzędny pierwszego linku czatu poza role="main"
-      const links = this.doc.querySelectorAll('a[href*="/t/"]');
+      // 4. Przodek pierwszego linku czatu poza role="main"
+      const links = this.doc.querySelectorAll('a[href*="/t/"], a[href*="/messages/"]');
       for (const link of links) {
         if (!link.closest('[role="main"]')) {
-          const listContainer = link.closest('[role="grid"], [role="navigation"]') ||
+          const listContainer = link.closest('[role="grid"], [role="navigation"], [role="region"]') ||
                                 link.parentElement?.parentElement?.parentElement;
           if (listContainer && !listContainer.closest('[role="main"]')) {
             return listContainer;
@@ -289,21 +308,28 @@
      * @returns {Array<Object>} Lista wykrytych wątków.
      */
     scanChatList(rootNode = null) {
-      // Skanujemy WYŁĄCZNIE boczny panel. Nigdy obszar wiadomości (role="main")!
-      const sidebar = rootNode || this.getSidebarContainer() || this.doc;
-      if (!sidebar) return [];
+      if (!this.doc) return [];
 
-      const linkElements = sidebar.querySelectorAll('a[href*="/t/"]');
+      // Skanujemy dedykowany kontener lub cały dokument poza role="main"
+      const sidebar = rootNode || this.getSidebarContainer() || this.doc;
+      const selector = 'a[href*="/t/"], a[href*="/messages/t/"], a[href*="/e2ee/t/"], a[href*="/messages/"]';
+      let linkElements = sidebar.querySelectorAll(selector);
+
+      // Niezawodny fallback: jeśli kontener nie zawierał linków, skanujemy cały dokument
+      if (linkElements.length === 0 && sidebar !== this.doc) {
+        linkElements = this.doc.querySelectorAll(selector);
+      }
+
       const detectedThreads = [];
       const seenThreadIds = new Set();
 
       for (const link of linkElements) {
         // Rygorystyczna blokada: pomijamy wszystko co jest wewnątrz role="main"
-        if (link.closest('[role="main"]')) {
+        if (link.closest && link.closest('[role="main"]')) {
           continue;
         }
 
-        const href = link.getAttribute('href') || link.href || '';
+        const href = (link.getAttribute && link.getAttribute('href')) || link.href || '';
         const threadId = this.extractThreadIdFromUrl(href);
 
         if (!threadId || seenThreadIds.has(threadId)) {
@@ -313,12 +339,12 @@
         seenThreadIds.add(threadId);
 
         const rowElement = this.findChatRow(link);
-        if (rowElement && !rowElement.closest('[role="main"]')) {
+        if (rowElement && (!rowElement.closest || !rowElement.closest('[role="main"]'))) {
           // Oznaczenie wiersza trwałym atrybutem bez powielania mutacji
-          if (rowElement.getAttribute('data-mf-thread-id') !== threadId) {
+          if (rowElement.getAttribute && rowElement.getAttribute('data-mf-thread-id') !== threadId) {
             rowElement.setAttribute('data-mf-thread-id', threadId);
           }
-          if (link.getAttribute('data-mf-thread-link') !== threadId) {
+          if (link.getAttribute && link.getAttribute('data-mf-thread-link') !== threadId) {
             link.setAttribute('data-mf-thread-link', threadId);
           }
 
@@ -395,17 +421,7 @@
       const sidebar = this.getSidebarContainer();
       const scope = sidebar || this.doc;
 
-      // 1. Priorytet BEZWZGLĘDNY: Bezpośrednio pod polem wyszukiwarki w pasku bocznym
-      const searchContainer = this.findSearchContainer(scope);
-      if (searchContainer && searchContainer.parentElement && !searchContainer.closest('[role="main"]')) {
-        return {
-          target: searchContainer,
-          position: 'afterend',
-          container: searchContainer.parentElement,
-        };
-      }
-
-      // 2. Priorytet: Główna siatka / lista czatów wewnątrz paska bocznego
+      // 1. Priorytet: Bezpośrednio nad główną listą czatów (idealnie pod wyszukiwarką, bez rozpychania jej wnętrza)
       const grid = scope.querySelector('[role="grid"]');
       if (grid && grid.parentElement && !grid.closest('[role="main"]')) {
         return {
@@ -415,8 +431,18 @@
         };
       }
 
-      // 3. Priorytet: Pierwszy link wątku wewnątrz paska bocznego
-      const firstRowLink = scope.querySelector('a[href*="/t/"]');
+      // 2. Priorytet: Bezpośrednio pod zewnętrznym kontenerem wyszukiwarki
+      const searchContainer = this.findSearchContainer(scope);
+      if (searchContainer && searchContainer.parentElement && !searchContainer.closest('[role="main"]')) {
+        return {
+          target: searchContainer,
+          position: 'afterend',
+          container: searchContainer.parentElement,
+        };
+      }
+
+      // 3. Priorytet: Przed pierwszym linkiem wątku wewnątrz paska bocznego
+      const firstRowLink = scope.querySelector('a[href*="/t/"], a[href*="/messages/"]');
       if (firstRowLink && !firstRowLink.closest('[role="main"]')) {
         const row = this.findChatRow(firstRowLink) || firstRowLink;
         if (row.parentElement && !row.parentElement.closest('[role="main"]')) {

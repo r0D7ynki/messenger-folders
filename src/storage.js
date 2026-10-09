@@ -239,10 +239,10 @@
         const index = folders.findIndex((f) => f.id === id);
         if (index >= 0) {
           const existing = folders[index];
-          // Foldery systemowe zachowują swoją rolę i identyfikator
+          // Folder główny 'all' zachowuje swoją stałą nazwę
           folders[index] = {
             ...existing,
-            name: existing.isSystem ? existing.name : trimmedName,
+            name: existing.id === 'all' ? existing.name : trimmedName,
             icon: safeIcon,
             color: safeColor,
           };

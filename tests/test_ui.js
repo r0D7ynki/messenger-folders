@@ -75,6 +75,16 @@ class MockElement {
       if (classMatch) child.className = classMatch[1];
       const idMatch = attrsStr.match(/id=["']([^"']+)["']/i);
       if (idMatch) child.id = idMatch[1];
+      const attrMatches = attrsStr.matchAll(/([a-z0-9_-]+)=["']([^"']*)["']/gi);
+      for (const m of attrMatches) {
+        const attrName = m[1].toLowerCase();
+        const attrVal = m[2];
+        child.setAttribute(attrName, attrVal);
+        if (attrName.startsWith('data-')) {
+          const camel = attrName.slice(5).replace(/-([a-z])/g, (_, l) => l.toUpperCase());
+          child.dataset[camel] = attrVal;
+        }
+      }
       child.textContent = content.replace(/<[^>]*>/g, '').trim();
       child.parentElement = this;
       this.children.push(child);
@@ -350,6 +360,16 @@ const wideModal = ui.activeModal.querySelector('.mf-modal-wide');
 assert.ok(wideModal, 'Okno dialogowe powinno mieć klasę .mf-modal-wide');
 const settingsNav = ui.activeModal.querySelector('.mf-settings-nav');
 assert.ok(settingsNav, 'Okno powinno zawierać pasek nawigacji');
+const navButtons = ui.activeModal.querySelectorAll('.mf-settings-nav-btn');
+assert.strictEqual(navButtons.length, 3, 'Pasek nawigacji powinien mieć 3 zakładki');
+
+// Sprawdzenie przejścia do zakładki Rozmowy
+const threadsTabBtn = navButtons.find(b => b.dataset.tab === 'threads');
+assert.ok(threadsTabBtn, 'Zakładka Rozmowy powinna istnieć');
+threadsTabBtn.dispatchEvent({ type: 'click' });
+const searchBox = ui.activeModal.querySelector('.mf-settings-threads-search-box');
+assert.ok(searchBox, 'Zakładka Rozmowy powinna zawierać pole wyszukiwania');
+
 ui.closeModal();
 assert.strictEqual(ui.activeModal, null, 'Okno powinno się zamknąć');
 console.log('✓ showSettingsModal() działa poprawnie.');

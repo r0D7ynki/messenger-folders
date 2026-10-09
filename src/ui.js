@@ -201,12 +201,29 @@
           existingIds.every((id, idx) => id === newIds[idx]);
 
         if (isSameStructure) {
-          // Zaktualizuj TYLKO klasy i liczniki w istniejących elementach (zero niszczenia DOM, zero skakania!)
+          // Zaktualizuj stan, nazwy, ikony, kolory i liczniki w istniejących elementach
           existingPills.forEach(pill => {
             const fId = pill.dataset.folderId;
+            const folderObj = folderList.find(f => f.id === fId);
             const isActive = fId === activeFolderId;
             pill.classList.toggle('mf-active', isActive);
             pill.setAttribute('aria-selected', isActive ? 'true' : 'false');
+
+            if (folderObj) {
+              const iconEl = pill.querySelector('.mf-folder-icon');
+              if (iconEl && iconEl.textContent !== (folderObj.icon || '📁')) {
+                iconEl.textContent = folderObj.icon || '📁';
+              }
+              const nameEl = pill.querySelector('.mf-folder-name');
+              if (nameEl && nameEl.textContent !== folderObj.name) {
+                nameEl.textContent = folderObj.name;
+              }
+              if (folderObj.color) {
+                pill.style.setProperty('--mf-folder-color', folderObj.color);
+              }
+              const countVal = resolvedCounts[fId] || 0;
+              pill.title = `${folderObj.name} (${countVal} rozmów)`;
+            }
 
             const count = resolvedCounts[fId] || 0;
             let countEl = pill.querySelector('.mf-folder-count');
@@ -445,8 +462,12 @@
           badge.className = 'mf-thread-badge';
           badge.setAttribute('data-mf-badge', 'true');
 
-          const titleElement = rowElement.querySelector('[role="heading"], span[dir="auto"], strong') || rowElement;
-          titleElement.appendChild(badge);
+          const titleElement = rowElement.querySelector('[role="heading"], span[dir="auto"], strong');
+          if (titleElement && titleElement.parentElement) {
+            titleElement.insertAdjacentElement('afterend', badge);
+          } else {
+            rowElement.appendChild(badge);
+          }
         }
 
         const color = currentFolder.color || '#0084FF';
@@ -878,6 +899,9 @@
         <button type="button" class="mf-settings-nav-btn mf-active" data-tab="folders">
           <span>📁 Foldery</span>
         </button>
+        <button type="button" class="mf-settings-nav-btn" data-tab="threads">
+          <span>💬 Rozmowy</span>
+        </button>
         <button type="button" class="mf-settings-nav-btn" data-tab="backup">
           <span>💾 Kopia zapasowa</span>
         </button>
@@ -1076,12 +1100,166 @@
         contentContainer.appendChild(backupBox);
       };
 
+      const renderThreadsTab = () => {
+        contentContainer.innerHTML = '';
+
+        const folders = this.storage ? this.storage.getFoldersSync() : [];
+        const savedThreads = this.storage ? (this.storage._threads || {}) : {};
+        const detected = this.detector ? this.detector.scanChatList() : [];
+
+        // Łączymy wątki wykryte w bieżącej sesji oraz wątki zapisane w pamięci
+        const threadsMap = new Map();
+
+        // 1. Dodaj wątki zapisane w magazynie
+        for (const [tId, tData] of Object.entries(savedThreads)) {
+          threadsMap.set(tId, {
+            id: tId,
+            name: tData.name || `Rozmowa ${tId}`,
+            avatar: tData.avatar || '',
+            folderId: tData.folderId || 'uncategorized'
+          });
+        }
+
+        // 2. Dodaj wątki aktualnie widoczne na stronie
+        detected.forEach(item => {
+          if (!threadsMap.has(item.threadId)) {
+            threadsMap.set(item.threadId, {
+              id: item.threadId,
+              name: item.name || `Rozmowa ${item.threadId}`,
+              avatar: item.avatar || '',
+              folderId: 'uncategorized'
+            });
+          } else {
+            const existing = threadsMap.get(item.threadId);
+            if (item.name && item.name !== `Rozmowa ${item.threadId}`) {
+              existing.name = item.name;
+            }
+            if (item.avatar) {
+              existing.avatar = item.avatar;
+            }
+          }
+        });
+
+        const threadList = Array.from(threadsMap.values());
+
+        // Wyszukiwarka rozmów
+        const searchBox = document.createElement('div');
+        searchBox.className = 'mf-settings-threads-search-box';
+        const searchInput = document.createElement('input');
+        searchInput.type = 'text';
+        searchInput.className = 'mf-modal-input';
+        searchInput.placeholder = 'Filtruj rozmowy po nazwie...';
+        searchBox.appendChild(searchInput);
+        contentContainer.appendChild(searchBox);
+
+        const listContainer = document.createElement('div');
+        listContainer.className = 'mf-settings-threads-list';
+
+        const renderThreadItems = (filterText = '') => {
+          listContainer.innerHTML = '';
+          const filterLower = filterText.toLowerCase().trim();
+          const filtered = threadList.filter(t => t.name.toLowerCase().includes(filterLower));
+
+          if (filtered.length === 0) {
+            const emptyEl = document.createElement('div');
+            emptyEl.className = 'mf-settings-empty';
+            emptyEl.textContent = threadList.length === 0
+              ? 'Nie wykryto jeszcze żadnych rozmów. Przewiń listę czatów na Messengerze, aby rozszerzenie mogło je odczytać.'
+              : 'Brak rozmów pasujących do wyszukiwania.';
+            listContainer.appendChild(emptyEl);
+            return;
+          }
+
+          filtered.forEach(thread => {
+            const row = document.createElement('div');
+            row.className = 'mf-settings-thread-item';
+
+            const left = document.createElement('div');
+            left.className = 'mf-settings-thread-left';
+
+            if (thread.avatar) {
+              const img = document.createElement('img');
+              img.className = 'mf-settings-thread-avatar';
+              img.src = thread.avatar;
+              img.alt = '';
+              left.appendChild(img);
+            } else {
+              const placeholder = document.createElement('div');
+              placeholder.className = 'mf-settings-thread-avatar mf-settings-thread-avatar-placeholder';
+              placeholder.textContent = '💬';
+              left.appendChild(placeholder);
+            }
+
+            const title = document.createElement('span');
+            title.className = 'mf-settings-thread-name';
+            title.textContent = thread.name;
+            title.title = thread.name;
+            left.appendChild(title);
+
+            const select = document.createElement('select');
+            select.className = 'mf-settings-thread-select';
+
+            const optNone = document.createElement('option');
+            optNone.value = 'uncategorized';
+            optNone.textContent = '📁 Brak folderu';
+            if (!thread.folderId || thread.folderId === 'uncategorized') {
+              optNone.selected = true;
+            }
+            select.appendChild(optNone);
+
+            folders.filter(f => f.id !== 'all' && f.id !== 'uncategorized').forEach(f => {
+              const opt = document.createElement('option');
+              opt.value = f.id;
+              opt.textContent = `${f.icon || '📁'} ${f.name}`;
+              if (f.id === thread.folderId) {
+                opt.selected = true;
+              }
+              select.appendChild(opt);
+            });
+
+            select.onchange = async () => {
+              const newFId = select.value === 'uncategorized' ? null : select.value;
+              thread.folderId = select.value;
+              if (this.storage) {
+                if (newFId) {
+                  await this.storage.assignThread(thread.id, newFId, {
+                    name: thread.name,
+                    avatar: thread.avatar
+                  });
+                } else {
+                  await this.storage.removeThreadAssignment(thread.id);
+                }
+                const currentActive = await this.storage.getActiveFolder();
+                const currentThreads = await this.storage.getAllThreads();
+                this.filterChatRows(currentActive, currentThreads);
+                const currentFolders = await this.storage.getFolders();
+                this.renderFolderBar(currentFolders, currentActive, currentThreads);
+              }
+              const targetFolder = folders.find(f => f.id === select.value);
+              this.showToast(targetFolder ? `Przypisano do folderu "${targetFolder.name}"` : 'Usunięto przypisanie do folderu');
+            };
+
+            row.appendChild(left);
+            row.appendChild(select);
+            listContainer.appendChild(row);
+          });
+        };
+
+        contentContainer.appendChild(listContainer);
+        renderThreadItems();
+
+        searchInput.oninput = (e) => renderThreadItems(e.target.value);
+        setTimeout(() => searchInput.focus(), 50);
+      };
+
       nav.querySelectorAll('.mf-settings-nav-btn').forEach(btn => {
         btn.onclick = () => {
           nav.querySelectorAll('.mf-settings-nav-btn').forEach(b => b.classList.remove('mf-active'));
           btn.classList.add('mf-active');
           if (btn.dataset.tab === 'folders') {
             renderFoldersTab();
+          } else if (btn.dataset.tab === 'threads') {
+            renderThreadsTab();
           } else {
             renderBackupTab();
           }
@@ -1337,6 +1515,11 @@
               } else {
                 await this.storage.removeThreadAssignment(tId);
               }
+              const currentActive = await this.storage.getActiveFolder();
+              const currentThreads = await this.storage.getAllThreads();
+              this.filterChatRows(currentActive, currentThreads);
+              const currentFolders = await this.storage.getFolders();
+              this.renderFolderBar(currentFolders, currentActive, currentThreads);
             }
           });
         });
@@ -1386,6 +1569,11 @@
                   } else {
                     await this.storage.removeThreadAssignment(tId);
                   }
+                  const currentActive = await this.storage.getActiveFolder();
+                  const currentThreads = await this.storage.getAllThreads();
+                  this.filterChatRows(currentActive, currentThreads);
+                  const currentFolders = await this.storage.getFolders();
+                  this.renderFolderBar(currentFolders, currentActive, currentThreads);
                 }
               });
             });

@@ -49,6 +49,7 @@
             ui.showFolderModal({
               onSave: async (newFolder) => {
                 await storage.saveFolder(newFolder);
+                await storage.setActiveFolder(newFolder.id);
                 const f = await storage.getFolders();
                 const th = await storage.getAllThreads();
                 ui.renderFolderBar(f, newFolder.id, th);
@@ -62,8 +63,10 @@
               onSave: async (updated) => {
                 await storage.saveFolder(updated);
                 const f = await storage.getFolders();
+                const active = await storage.getActiveFolder();
                 const th = await storage.getAllThreads();
-                ui.renderFolderBar(f, currentActive, th);
+                ui.renderFolderBar(f, active, th);
+                ui.filterChatRows(active, th);
               },
               onDelete: async (fId) => {
                 await storage.deleteFolder(fId);

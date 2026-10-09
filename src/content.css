@@ -133,15 +133,15 @@
   width: 100% !important;
   min-width: 0 !important;
   max-width: 100% !important;
-  height: 48px !important;
-  min-height: 48px !important;
-  max-height: 48px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  max-height: 40px !important;
   padding: 0 8px !important;
   margin: 0 !important;
   box-sizing: border-box !important;
   background: var(--mf-bg-surface) !important;
   border-bottom: 1px solid var(--mf-border) !important;
-  z-index: var(--mf-z-bar) !important;
+  z-index: 10 !important;
   pointer-events: auto !important;
   user-select: none !important;
   flex-shrink: 0 !important;
@@ -526,42 +526,43 @@
   white-space: nowrap;
 }
 
-/* Przycisk folderu na wierszu rozmowy (pojawia się przy najechaniu na wiersz) */
+/* Przycisk folderu na wierszu rozmowy (zawsze dostępny i widoczny) */
 .mf-folder-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--mf-radius-pill);
-  background: var(--mf-bg-surface);
-  color: var(--mf-text-secondary);
-  border: 1px solid var(--mf-border);
-  box-shadow: var(--mf-shadow-sm);
-  cursor: pointer;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity var(--mf-transition-fast),
-              visibility var(--mf-transition-fast),
-              transform var(--mf-transition-fast),
-              background var(--mf-transition-fast),
-              color var(--mf-transition-fast);
-  z-index: 5;
+  position: absolute !important;
+  right: 46px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: var(--mf-radius-pill) !important;
+  background: var(--mf-bg-surface) !important;
+  color: var(--mf-text-secondary) !important;
+  border: 1px solid var(--mf-border) !important;
+  box-shadow: var(--mf-shadow-sm) !important;
+  cursor: pointer !important;
+  pointer-events: auto !important;
+  opacity: 0.75 !important;
+  visibility: visible !important;
+  z-index: 20 !important;
+  transition: all var(--mf-transition-fast) !important;
 }
 
 [role="row"]:hover .mf-folder-btn,
 [role="gridcell"]:hover .mf-folder-btn,
 [role="listitem"]:hover .mf-folder-btn,
 div:hover > .mf-folder-btn,
+.mf-folder-btn:hover,
 .mf-folder-btn.mf-active {
-  opacity: 1;
-  visibility: visible;
-}
-
-.mf-folder-btn:hover {
-  background: var(--mf-bg-wash);
-  color: var(--mf-primary);
-  transform: scale(1.08);
+  opacity: 1 !important;
+  visibility: visible !important;
+  background: var(--mf-bg-wash) !important;
+  color: var(--mf-primary) !important;
+  border-color: var(--mf-primary) !important;
+  transform: translateY(-50%) scale(1.12) !important;
+  box-shadow: var(--mf-shadow-md) !important;
 }
 
 .mf-folder-btn svg {
@@ -1301,6 +1302,95 @@ div:hover > .mf-folder-btn,
 .mf-settings-backup-actions {
   display: flex;
   gap: 10px;
+}
+
+/* Style zakładki zarządzania rozmowami */
+.mf-settings-threads-search-box {
+  margin-bottom: 12px;
+}
+
+.mf-settings-threads-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.mf-settings-thread-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--mf-bg-wash);
+  border: 1px solid var(--mf-border);
+  border-radius: var(--mf-radius-md);
+  transition: background var(--mf-transition-fast);
+}
+
+.mf-settings-thread-item:hover {
+  background: var(--mf-hover);
+}
+
+.mf-settings-thread-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.mf-settings-thread-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.mf-settings-thread-avatar-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--mf-bg-card);
+  font-size: 14px;
+}
+
+.mf-settings-thread-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--mf-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mf-settings-thread-select {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--mf-border);
+  background: var(--mf-bg-surface);
+  color: var(--mf-text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  max-width: 160px;
+  flex-shrink: 0;
+  transition: border-color var(--mf-transition-fast);
+}
+
+.mf-settings-thread-select:focus {
+  border-color: var(--mf-primary);
+}
+
+.mf-settings-empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--mf-text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 

@@ -126,15 +126,26 @@ Możesz zarządzać folderami na trzy wygodne sposoby:
 
 ### 2. Przypisywanie rozmowy do folderu
 
-1. Najedź kursorem myszy na wybrany czat na liście rozmów.
-2. Kliknij małą ikonę folderu, która pojawi się z prawej strony wiersza.
-3. Wyszukaj lub wybierz odpowiedni folder z listy rozwijanej.
-4. Wtyczka natychmiast przypisze rozmowę i wyświetli kolorową plakietkę.
+Rozmowę możesz przypisać na cztery sposoby:
 
-Możesz także przypisać otwarty czat:
-1. Spójrz na nagłówek otwartej konwersacji u góry ekranu.
-2. Kliknij pigułkę z napisem **Dodaj folder** lub nazwą bieżącego folderu.
-3. Wybierz nową kategorię z menu.
+1. **Przycisk folderu w wierszu**:
+   - Najedź kursorem na rozmowę.
+   - Kliknij ikonę folderu z prawej strony wiersza.
+   - Wybierz folder z menu.
+
+2. **Menu pod prawym przyciskiem myszy**:
+   - Kliknij prawym przyciskiem myszy na wiersz rozmowy.
+   - Wybierz folder z otwartego menu.
+
+3. **Pigułka w nagłówku aktywnego czatu**:
+   - Otwórz wybraną rozmowę.
+   - Kliknij pigułkę folderu w nagłówku u góry ekranu.
+   - Wybierz nową kategorię.
+
+4. **Zakładka „Rozmowy” w oknie ustawień**:
+   - Kliknij zębatkę `⚙️` na pasku folderów.
+   - Przejdź do zakładki **💬 Rozmowy**.
+   - Wybierz folder z listy rozwijanej obok nazwy wybranego czatu.
 
 ### 3. Filtrowanie i przeglądanie wiadomości
 
