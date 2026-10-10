@@ -313,7 +313,10 @@ const maliciousFolder = {
 const evilPill = ui.renderHeaderPill(new MockElement('header'), maliciousFolder, () => {});
 assert.ok(!evilPill.innerHTML.includes('<img'), 'Nazwa folderu nie może trafić do innerHTML jako znacznik');
 assert.ok(!evilPill.innerHTML.includes('<svg onload'), 'Ikona folderu nie może trafić do innerHTML jako znacznik');
-assert.ok(evilPill.innerHTML.includes('&lt;img src=x onerror=alert(1)&gt;'), 'Nazwa powinna być wyświetlona jako tekst');
+assert.ok(
+  evilPill.innerHTML.includes('&lt;img src=x onerror=alert(1)&gt;'),
+  'Nazwa powinna być wyświetlona jako tekst'
+);
 console.log('✓ renderHeaderPill() escapuje HTML w nazwie i ikonie.');
 
 // 5. showFolderModal
