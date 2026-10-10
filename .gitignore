@@ -7,3 +7,5 @@ node_modules/
 *.zip
 *.crx
 web-ext-artifacts/
+__pycache__/
+*.pyc

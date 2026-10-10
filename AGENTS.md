@@ -52,9 +52,9 @@ npm run check            # składnia wszystkich JS + poprawność manifest.json
 npm run lint             # ESLint z no-unsanitized (bezpieczny DOM)
 npm run format           # Prettier — formatuj TYLKO pliki, które zmieniasz w zadaniu
 npm run board            # tablica Kanban
-node tools/kanban.mjs next <model>        # moje następne zadanie
-node tools/kanban.mjs move MF-001 in-progress
-node tools/kanban.mjs check               # walidacja wszystkich kart
+python3 scripts/kanban/kanban.py next <model>        # moje następne zadanie
+python3 scripts/kanban/kanban.py move MF-001 in-progress
+python3 scripts/kanban/kanban.py check               # walidacja wszystkich kart
 ```
 
 Ręczny test w przeglądarce: `chrome://extensions` → Tryb dewelopera → Załaduj rozpakowane → ten
@@ -63,9 +63,9 @@ katalog → po każdej zmianie przycisk ↻ przy rozszerzeniu i odświeżenie ka
 ## Proces pracy (skrót — pełny opis: `docs/agents/WORKFLOW.md`)
 
 Tablica to pliki `kanban/tasks/MF-XXX.md`. Kolumny: `backlog → ready → in-progress → review → done`.
-Przesuwaj **tylko** przez `node tools/kanban.mjs move` — skrypt pilnuje bramek.
+Przesuwaj **tylko** przez `python3 scripts/kanban/kanban.py move` — skrypt pilnuje bramek.
 
-1. Weź zadanie: `node tools/kanban.mjs next <twój-model>`. Pracuj **tylko** nad zadaniami ze swoim
+1. Weź zadanie: `python3 scripts/kanban/kanban.py next <twój-model>`. Pracuj **tylko** nad zadaniami ze swoim
    `model:`. Nie bierz zadań z `backlog` — nie spełniają DoR.
 2. `move <ID> in-progress`, utwórz gałąź `mf-XXX-...`.
 3. Zmieniaj **tylko pliki z sekcji Pliki**. Potrzebujesz innego pliku → dopisz to w Logu, cofnij

@@ -13,7 +13,7 @@ pre-commit:
       run: npm run check --silent
     - name: karty kanban
       glob: 'kanban/**'
-      run: node tools/kanban.mjs check
+      run: python3 scripts/kanban/kanban.py check
 
 pre-push:
   jobs:

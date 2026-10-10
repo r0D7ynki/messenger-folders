@@ -55,5 +55,8 @@
     "Dane od użytkownika i z DOM Messengera trafiają do DOM przez `textContent` lub `_escapeHtml`, nigdy surowo do `innerHTML`",
     "Komentarze i teksty UI po polsku, w stylu otaczającego kodu",
     "Dokumentacja (`README.md`, `docs/ARCHITECTURE.md`) zaktualizowana, jeśli zmienia się zachowanie"
+  ],
+  "gate": [
+    "npm run verify"
   ]
 }

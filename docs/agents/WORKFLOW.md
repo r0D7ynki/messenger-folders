@@ -5,7 +5,7 @@ Uzupełnienie `AGENTS.md`. Opisuje tablicę, bramki jakości, role modeli i dals
 ## Tablica
 
 Każda karta to plik `kanban/tasks/MF-XXX.md`. Konfiguracja (kolumny, limity WIP, modele, DoD)
-leży w `kanban/config.json`, a bramki egzekwuje `tools/kanban.mjs`.
+leży w `kanban/config.json`, a bramki egzekwuje `scripts/kanban/kanban.py`.
 
 | Kolumna | Znaczenie | Kto przesuwa | Bramka przy wejściu |
 |---|---|---|---|
@@ -54,7 +54,7 @@ Rotacja reviewera: `deepseek` → przegląda `claude`; `claude` → przegląda `
 
 ## Cykl pracy wykonawcy (do wklejenia jako prompt startowy)
 
-> Przeczytaj `AGENTS.md`. Uruchom `node tools/kanban.mjs next <model>`, przeczytaj wskazaną kartę,
+> Przeczytaj `AGENTS.md`. Uruchom `python3 scripts/kanban/kanban.py next <model>`, przeczytaj wskazaną kartę,
 > przenieś ją do `in-progress`, utwórz gałąź `mf-XXX-opis`. Zmieniaj tylko pliki z sekcji Pliki.
 > Gdy kryteria są spełnione, wypełnij Dowód i przenieś kartę do `review`. Nie przenoś do `done`.
 
@@ -96,7 +96,7 @@ do paczki rozszerzenia.
 | **GitHub Actions** (`verify.yml`) | każdy pull request i push do `master` | `npm ci && npm run verify` |
 | **web-ext lint** (Mozilla) | `npm run lint:firefox`, **poza** `verify` | zgodność z Firefoksem; obecnie 2 błędy manifestu, istotne tylko przy wsparciu Firefoksa (MF-009) |
 | **Prettier** | `npm run format`, pre-commit (sprawdzanie), CI | jeden format kodu dla wszystkich modeli (`printWidth` 120, bez przecinków końcowych); commit formatujący w `.git-blame-ignore-revs` |
-| `tools/kanban.mjs` | `npm run verify`, bramki kart | DoR, WIP, DoD; bramka `done` uruchamia testy, `check` i `lint` |
+| `scripts/kanban/kanban.py` | `npm run verify`, bramki kart | DoR, WIP, DoD; bramka `done` uruchamia testy, `check` i `lint` |
 
 `npm run verify` = `check` + `format:check` + `lint` + `test` + `kanban check` — **jedna komenda DoD** dla ludzi,
 agentów i CI.
