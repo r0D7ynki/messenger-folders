@@ -376,14 +376,22 @@
     }
 
     /**
-     * Pobiera identyfikator aktywnego folderu.
+     * Zwraca aktywny folder z pamięci podręcznej bez oczekiwania na Promise.
+     * @returns {string}
+     */
+    getActiveFolderSync() {
+      return this._activeFolder;
+    }
+
+    /**
+     * Pobiera aktywny folder filtrowania.
      * @returns {Promise<string>}
      */
     async getActiveFolder() {
       if (!this._isInitialized) {
         await this.init();
       }
-      return this._activeFolder;
+      return this.getActiveFolderSync();
     }
 
     /**
@@ -519,6 +527,14 @@
     }
 
     /**
+     * Zwraca mapę wszystkich wątków z pamięci podręcznej bez oczekiwania na Promise.
+     * @returns {Object} Mapa wątków klucz-wartość.
+     */
+    getAllThreadsSync() {
+      return { ...this._threads };
+    }
+
+    /**
      * Pobiera wszystkie zarejestrowane wątki.
      * @returns {Promise<Object>} Mapa wątków klucz-wartość.
      */
@@ -526,7 +542,7 @@
       if (!this._isInitialized) {
         await this.init();
       }
-      return { ...this._threads };
+      return this.getAllThreadsSync();
     }
 
     /**

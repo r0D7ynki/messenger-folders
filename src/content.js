@@ -17,8 +17,6 @@
   const detector = new MessengerDOMDetector();
   const ui = new MessengerFoldersUI({ storage, detector });
 
-  let isInitialized = false;
-
   /**
    * Główna funkcja uruchamiająca wtyczkę na stronie.
    */
@@ -26,34 +24,35 @@
     try {
       await storage.init();
 
-      const folders = await storage.getFolders();
-      const activeFolder = await storage.getActiveFolder();
-      const allThreads = await storage.getAllThreads();
+      let currentFolders = storage.getFoldersSync();
+      let currentActiveFolder = storage.getActiveFolderSync();
+      let currentThreads = storage.getAllThreadsSync();
+      let lastUrl = window.location.href;
 
-      // Próba wstrzyknięcia paska folderów
-      const tryInjectBar = async () => {
-        const currentFolders = await storage.getFolders();
-        const currentActive = await storage.getActiveFolder();
-        const currentThreads = await storage.getAllThreads();
-
+      /**
+       * Renderuje pasek folderów na podstawie stanu pamięci podręcznej i wstrzykuje go w DOM.
+       * @returns {boolean} Czy pasek został poprawnie wstrzyknięty lub jest już w DOM.
+       */
+      const renderAndInjectBar = () => {
         const bar = ui.renderFolderBar(
           currentFolders,
-          currentActive,
+          currentActiveFolder,
           currentThreads,
           async (folderId) => {
+            currentActiveFolder = folderId;
             await storage.setActiveFolder(folderId);
-            const th = await storage.getAllThreads();
-            ui.filterChatRows(folderId, th);
+            ui.filterChatRows(folderId, currentThreads);
           },
           () => {
             ui.showFolderModal({
               onSave: async (newFolder) => {
                 await storage.saveFolder(newFolder);
                 await storage.setActiveFolder(newFolder.id);
-                const f = await storage.getFolders();
-                const th = await storage.getAllThreads();
-                ui.renderFolderBar(f, newFolder.id, th);
-                ui.filterChatRows(newFolder.id, th);
+                currentFolders = storage.getFoldersSync();
+                currentActiveFolder = newFolder.id;
+                currentThreads = storage.getAllThreadsSync();
+                renderAndInjectBar();
+                ui.filterChatRows(newFolder.id, currentThreads);
               }
             });
           },
@@ -62,18 +61,19 @@
               folder,
               onSave: async (updated) => {
                 await storage.saveFolder(updated);
-                const f = await storage.getFolders();
-                const active = await storage.getActiveFolder();
-                const th = await storage.getAllThreads();
-                ui.renderFolderBar(f, active, th);
-                ui.filterChatRows(active, th);
+                currentFolders = storage.getFoldersSync();
+                currentActiveFolder = storage.getActiveFolderSync();
+                currentThreads = storage.getAllThreadsSync();
+                renderAndInjectBar();
+                ui.filterChatRows(currentActiveFolder, currentThreads);
               },
               onDelete: async (fId) => {
                 await storage.deleteFolder(fId);
-                const f = await storage.getFolders();
-                const th = await storage.getAllThreads();
-                ui.renderFolderBar(f, 'all', th);
-                ui.filterChatRows('all', th);
+                currentFolders = storage.getFoldersSync();
+                currentActiveFolder = 'all';
+                currentThreads = storage.getAllThreadsSync();
+                renderAndInjectBar();
+                ui.filterChatRows('all', currentThreads);
               }
             });
           },
@@ -84,15 +84,15 @@
 
         const injected = detector.injectFolderBar(bar);
         if (injected) {
-          ui.filterChatRows(currentActive, currentThreads);
+          ui.filterChatRows(currentActiveFolder, currentThreads);
         }
         return injected;
       };
 
-      if (!(await tryInjectBar())) {
-        // Ponawianie próby, dopóki strona nie załaduje struktury DOM
-        const retryTimer = setInterval(async () => {
-          if (await tryInjectBar()) {
+      if (!renderAndInjectBar()) {
+        // Ponawianie próby przy starcie, dopóki strona nie załaduje struktury DOM
+        const retryTimer = setInterval(() => {
+          if (renderAndInjectBar()) {
             clearInterval(retryTimer);
           }
         }, 500);
@@ -101,35 +101,48 @@
       }
 
       // Podpięcie obserwatora dynamicznego ładowania listy czatów (virtual scrolling)
+      // Wykorzystuje pamięć podręczną — nie odpytuje storage przy mutacjach DOM
       detector.setupObserver(
-        async () => {
-          tryInjectBar();
-          const currentActive = await storage.getActiveFolder();
-          const currentThreads = await storage.getAllThreads();
-          ui.filterChatRows(currentActive, currentThreads);
+        () => {
+          // Wstrzyknij pasek tylko wtedy, gdy nie istnieje w DOM (np. po przebudowie kontenera przez aplikację)
+          const barExists = document.getElementById('mf-folder-bar')?.isConnected;
+          if (!barExists) {
+            renderAndInjectBar();
+          }
+
+          // Sprawdzenie zmiany adresu URL przy przełączaniu wątków podczas mutacji DOM
+          if (window.location.href !== lastUrl) {
+            lastUrl = window.location.href;
+          }
+
+          ui.filterChatRows(currentActiveFolder, currentThreads);
         },
         { throttleMs: 250 }
       );
 
-      // Nasłuchiwanie zmian adresu URL (przełączanie czatów w aplikacji Single Page App)
-      let lastUrl = window.location.href;
-      setInterval(async () => {
+      // Obsługa nawigacji w aplikacji Single Page App (SPA) bez ciągłego odpytywania w pętli setInterval
+      const handleNavigationChange = () => {
         if (window.location.href !== lastUrl) {
           lastUrl = window.location.href;
-          const currentActive = await storage.getActiveFolder();
-          const currentThreads = await storage.getAllThreads();
-          ui.filterChatRows(currentActive, currentThreads);
+          ui.filterChatRows(currentActiveFolder, currentThreads);
         }
-      }, 500);
+      };
 
-      // Nasłuchiwanie zmian w konfiguracji i magazynie danych
+      if (typeof window.navigation !== 'undefined' && window.navigation.addEventListener) {
+        window.navigation.addEventListener('currententrychange', handleNavigationChange);
+      }
+      window.addEventListener('popstate', handleNavigationChange);
+
+      // Nasłuchiwanie zmian w konfiguracji i magazynie danych (aktualizacja pamięci podręcznej)
       storage.onChange((payload) => {
         const { folders: updatedFolders, activeFolder: updatedActive, threads: updatedThreads } = payload;
-        ui.renderFolderBar(updatedFolders, updatedActive, updatedThreads);
+        currentFolders = updatedFolders;
+        currentActiveFolder = updatedActive;
+        currentThreads = updatedThreads;
+        renderAndInjectBar();
         ui.filterChatRows(updatedActive, updatedThreads);
       });
 
-      isInitialized = true;
       console.log('Messenger Folders: Gotowy do działania.');
     } catch (error) {
       console.error('Błąd podczas uruchamiania Messenger Folders:', error);
