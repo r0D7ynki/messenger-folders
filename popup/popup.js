@@ -255,7 +255,7 @@
       card.innerHTML = `
         <div class="mf-card-info">
           <div class="mf-card-icon-badge" style="background-color: ${color}20; color: ${color};">
-            ${folder.icon || '📁'}
+            ${escapeHtml(folder.icon || '📁')}
           </div>
           <div class="mf-card-meta">
             <span class="mf-card-name" title="${escapeHtml(folder.name)}">${escapeHtml(folder.name)}</span>

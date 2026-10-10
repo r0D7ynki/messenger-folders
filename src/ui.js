@@ -645,8 +645,8 @@
         pill.title = `Folder: ${currentFolder.name} (kliknij, aby zmienić)`;
 
         pill.innerHTML = `
-          <span class="mf-header-pill-icon">${currentFolder.icon || '📁'}</span>
-          <span class="mf-header-pill-title">${currentFolder.name}</span>
+          <span class="mf-header-pill-icon">${this._escapeHtml(currentFolder.icon || '📁')}</span>
+          <span class="mf-header-pill-title">${this._escapeHtml(currentFolder.name)}</span>
           <span class="mf-header-pill-chevron">${ICONS.chevronDown}</span>
         `;
       } else {
@@ -1688,7 +1688,7 @@
           item.innerHTML = `
             <div class="mf-dropdown-item-left">
               <span class="mf-dropdown-item-dot" style="background-color: ${folder.color || '#0084FF'}"></span>
-              <span class="mf-dropdown-item-icon">${folder.icon || '📁'}</span>
+              <span class="mf-dropdown-item-icon">${this._escapeHtml(folder.icon || '📁')}</span>
               <span class="mf-dropdown-item-name">${this._escapeHtml(folder.name)}</span>
             </div>
             <span class="mf-dropdown-item-check">${ICONS.check}</span>

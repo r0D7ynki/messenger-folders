@@ -302,6 +302,23 @@ headerPill.dispatchEvent({ type: 'click', stopPropagation() {} });
 assert.strictEqual(headerAssign, true, 'Kliknięcie pigułki nagłówka powinno wywołać callback');
 console.log('✓ renderHeaderPill() działa poprawnie.');
 
+// 4b. renderHeaderPill escapuje nazwę i ikonę folderu (dane z importu JSON są niezaufane)
+console.log('Test 4b: renderHeaderPill() escapuje HTML w nazwie i ikonie...');
+const maliciousFolder = {
+  id: 'evil',
+  name: '<img src=x onerror=alert(1)>',
+  icon: '<svg onload=alert(2)>',
+  color: '#FF0000'
+};
+const evilPill = ui.renderHeaderPill(new MockElement('header'), maliciousFolder, () => {});
+assert.ok(!evilPill.innerHTML.includes('<img'), 'Nazwa folderu nie może trafić do innerHTML jako znacznik');
+assert.ok(!evilPill.innerHTML.includes('<svg onload'), 'Ikona folderu nie może trafić do innerHTML jako znacznik');
+assert.ok(
+  evilPill.innerHTML.includes('&lt;img src=x onerror=alert(1)&gt;'),
+  'Nazwa powinna być wyświetlona jako tekst'
+);
+console.log('✓ renderHeaderPill() escapuje HTML w nazwie i ikonie.');
+
 // 5. showFolderModal
 console.log('Test 5: showFolderModal()...');
 let savedFolder = null;
