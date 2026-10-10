@@ -66,21 +66,21 @@ Tabela przedstawia pliki wchodzące w skład rozszerzenia:
 
 | Plik | Rola techniczna | Odpowiedzialność |
 | :--- | :--- | :--- |
-| [manifest.json](file:///home/grz3chu/messenger-folders/manifest.json) | Plik manifestu | Deklaruje uprawnienia, skrypty oraz punkty wejścia. |
-| [background/background.js](file:///home/grz3chu/messenger-folders/background/background.js) | Service Worker | Inicjalizuje domyślne foldery po instalacji rozszerzenia. |
-| [src/storage.js](file:///home/grz3chu/messenger-folders/src/storage.js) | Warstwa danych | Zarządza strukturą folderów i przypisaniami wątków. |
-| [src/detector.js](file:///home/grz3chu/messenger-folders/src/detector.js) | Silnik detekcji DOM | Odnajduje czaty, linki i punkty wstrzyknięcia interfejsu. |
-| [src/ui.js](file:///home/grz3chu/messenger-folders/src/ui.js) | Generator interfejsu | Tworzy pasek pigułek, plakietki, menu i okna edycji. |
-| [src/content.js](file:///home/grz3chu/messenger-folders/src/content.js) | Koordynator strony | Łączy detektor, pamięć oraz interfejs na karcie Messengera. |
-| [src/content.css](file:///home/grz3chu/messenger-folders/src/content.css) | Arkusz stylów | Nadaje wygląd komponentom i wspiera motyw ciemny. |
-| [popup/popup.js](file:///home/grz3chu/messenger-folders/popup/popup.js) | Logika okna popup | Obsługuje edycję folderów oraz eksport i import JSON. |
-| [tests/test_storage_detector.js](file:///home/grz3chu/messenger-folders/tests/test_storage_detector.js) | Testy jednostkowe | Sprawdza poprawność logiki magazynu danych i detektora. |
+| [manifest.json](../manifest.json) | Plik manifestu | Deklaruje uprawnienia, skrypty oraz punkty wejścia. |
+| [background/background.js](../background/background.js) | Service Worker | Inicjalizuje domyślne foldery po instalacji rozszerzenia. |
+| [src/storage.js](../src/storage.js) | Warstwa danych | Zarządza strukturą folderów i przypisaniami wątków. |
+| [src/detector.js](../src/detector.js) | Silnik detekcji DOM | Odnajduje czaty, linki i punkty wstrzyknięcia interfejsu. |
+| [src/ui.js](../src/ui.js) | Generator interfejsu | Tworzy pasek pigułek, plakietki, menu i okna edycji. |
+| [src/content.js](../src/content.js) | Koordynator strony | Łączy detektor, pamięć oraz interfejs na karcie Messengera. |
+| [src/content.css](../src/content.css) | Arkusz stylów | Nadaje wygląd komponentom i wspiera motyw ciemny. |
+| [popup/popup.js](../popup/popup.js) | Logika okna popup | Obsługuje edycję folderów oraz eksport i import JSON. |
+| [tests/test_storage_detector.js](../tests/test_storage_detector.js) | Testy jednostkowe | Sprawdza poprawność logiki magazynu danych i detektora. |
 
 ---
 
 ## Moduł pamięci (Storage)
 
-Klasa [`MessengerFoldersStorage`](file:///home/grz3chu/messenger-folders/src/storage.js#L30-L580) w pliku [src/storage.js](file:///home/grz3chu/messenger-folders/src/storage.js) zarządza danymi użytkownika.
+Klasa [`MessengerFoldersStorage`](../src/storage.js#L30-L580) w pliku [src/storage.js](../src/storage.js) zarządza danymi użytkownika.
 Wszystkie operacje wykonuje asynchronicznie za pośrednictwem interfejsu `chrome.storage.local`.
 
 ### Model danych
@@ -134,7 +134,7 @@ Nie musisz przeładowywać strony po dodaniu nowego folderu.
 
 ## Moduł detektora DOM (Detector)
 
-Klasa [`MessengerDOMDetector`](file:///home/grz3chu/messenger-folders/src/detector.js#L14-L511) w pliku [src/detector.js](file:///home/grz3chu/messenger-folders/src/detector.js) odnajduje elementy w drzewie strony.
+Klasa [`MessengerDOMDetector`](../src/detector.js#L14-L511) w pliku [src/detector.js](../src/detector.js) odnajduje elementy w drzewie strony.
 Przekształca surowe elementy HTML w uporządkowane obiekty wątków.
 
 ### Rozpoznawanie identyfikatorów wątków
@@ -221,7 +221,7 @@ Aby zapewnić płynne działanie, detektor tworzy obiekt `MutationObserver`:
 
 ## Warstwa interfejsu użytkownika (UI)
 
-Klasa [`MessengerUI`](file:///home/grz3chu/messenger-folders/src/ui.js) w pliku [src/ui.js](file:///home/grz3chu/messenger-folders/src/ui.js) tworzy wszystkie elementy graficzne:
+Klasa [`MessengerUI`](../src/ui.js) w pliku [src/ui.js](../src/ui.js) tworzy wszystkie elementy graficzne:
 
 - **Moduł paska folderów (`#mf-folder-bar`)**:
   Dwurzędowy kontener umieszczony nad listą czatów:
@@ -237,7 +237,7 @@ Klasa [`MessengerUI`](file:///home/grz3chu/messenger-folders/src/ui.js) w pliku 
 
 ### Zgodność z motywem jasnym i ciemnym
 
-Plik [src/content.css](file:///home/grz3chu/messenger-folders/src/content.css) pobiera wartości kolorów bezpośrednio ze zmiennych środowiskowych Meta:
+Plik [src/content.css](../src/content.css) pobiera wartości kolorów bezpośrednio ze zmiennych środowiskowych Meta:
 - `--surface-background`
 - `--primary-text`
 - `--secondary-text`
@@ -291,7 +291,7 @@ sequenceDiagram
 
 ## Testy jednostkowe
 
-Projekt zawiera zautomatyzowany zestaw testów w pliku [tests/test_storage_detector.js](file:///home/grz3chu/messenger-folders/tests/test_storage_detector.js).
+Projekt zawiera zautomatyzowany zestaw testów w pliku [tests/test_storage_detector.js](../tests/test_storage_detector.js).
 Testy nie wymagają zewnętrznych bibliotek i uruchamiają się bezpośrednio w środowisku Node.js.
 
 ### Zakres testów

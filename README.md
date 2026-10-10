@@ -71,7 +71,7 @@ Przesuń suwak w pozycję aktywną.
 ### Krok 4: Wczytaj rozszerzenie
 
 1. Kliknij przycisk **Załaduj rozpakowane** (Load unpacked) w lewym górnym rogu.
-2. Wskaż pobrany katalog [messenger-folders](file:///home/grz3chu/messenger-folders).
+2. Wskaż pobrany katalog [messenger-folders](./).
 3. Zatwierdź wybór folderu.
 4. Przeglądarka od razu doda ikonę Messenger Folders do paska rozszerzeń.
 
@@ -98,7 +98,7 @@ Skrócona instrukcja:
 4. Otwórz stronę `messenger.com`.
 5. Włącz opcję **Wersja na komputer** (Desktop site) w menu przeglądarki.
 
-Szczegółowy przewodnik ze zrzutami i poradami znajdziesz w dokumencie [docs/INSTALL_MOBILE.md](file:///home/grz3chu/messenger-folders/docs/INSTALL_MOBILE.md).
+Szczegółowy przewodnik ze zrzutami i poradami znajdziesz w dokumencie [docs/INSTALL_MOBILE.md](docs/INSTALL_MOBILE.md).
 
 ---
 
@@ -206,7 +206,7 @@ messenger-folders/
     └── ARCHITECTURE.md        # Szczegółowa dokumentacja techniczna
 ```
 
-Szczegółowy opis architektury, przepływu danych i mechanizmu odporności na zmiany CSS znajdziesz w dokumencie [docs/ARCHITECTURE.md](file:///home/grz3chu/messenger-folders/docs/ARCHITECTURE.md).
+Szczegółowy opis architektury, przepływu danych i mechanizmu odporności na zmiany CSS znajdziesz w dokumencie [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 
@@ -221,7 +221,7 @@ Repozytorium jest przygotowane do pracy z agentami AI — zasady dla nich opisuj
 ## Prawa autorskie i licencja
 
 Projekt Messenger Folders jest oprogramowaniem open-source.
-Kod źródłowy udostępniamy na warunkach otwartej licencji [MIT](file:///home/grz3chu/messenger-folders/LICENSE).
+Kod źródłowy udostępniamy na warunkach otwartej licencji [MIT](LICENSE).
 
 Copyright (c) 2026 Filip Stankiewicz.
 Możesz swobodnie używać, modyfikować i rozpowszechniać ten projekt zgodnie z licencją MIT.

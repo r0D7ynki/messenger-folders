@@ -53,7 +53,7 @@ Zanim zaczniesz, przygotuj:
 
 > [!TIP]
 > Możesz także rozpakować plik ZIP dowolnym menedżerem plików w telefonie.
-> Rozpakowany katalog zawiera plik [manifest.json](file:///home/grz3chu/messenger-folders/manifest.json) oraz kod źródłowy.
+> Rozpakowany katalog zawiera plik [manifest.json](../manifest.json) oraz kod źródłowy.
 
 ### Krok 3: Otwórz stronę rozszerzeń w Kiwi
 

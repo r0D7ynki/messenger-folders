@@ -115,7 +115,7 @@ Spłata wyjątków: po naprawie miejsca z `eslint-suppressions.json` uruchom
 | **Semgrep**, **gitleaks** | SAST i sekrety (agenci dostają klucze API) | — |
 | **ast-grep** | własne reguły strukturalne w repo | — |
 | **jscpd**, **stylelint** | duplikaty (`ui.js` ↔ `popup.js`), porządek w `content.css` (1700+ linii) | — |
-| **markdownlint-cli2** + **lychee** | dokumentacja i martwe linki (`file:///home/grz3chu/...`, MF-003) | — |
+| **markdownlint-cli2** + **lychee** | dokumentacja i martwe linki (ścieżki bezwzględne autora, MF-003) | — |
 | **commitlint** + **git-cliff** | Conventional Commits z `MF-XXX`, automatyczny CHANGELOG | — |
 
 ## GitHub Issues a karty Kanban
