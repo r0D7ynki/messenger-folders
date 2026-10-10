@@ -34,8 +34,8 @@ Szczegóły: `docs/ARCHITECTURE.md`.
    stałych szablonów i ikon z `ICONS`. Kolor walidowany jako `#RRGGBB`.
 4. **Nie zakładaj klas CSS Messengera.** Detekcja przez role ARIA, atrybuty, strukturę i linki
    `/t/<id>` — tak jak w `src/detector.js`.
-5. **Kod i komentarze po polsku**, JSDoc nad metodami publicznymi, styl jak w otaczającym kodzie
-   (2 spacje, pojedyncze cudzysłowy, średniki).
+5. **Kod i komentarze po polsku**, JSDoc nad metodami publicznymi. Format pilnuje Prettier
+   (`.prettierrc.json`) — nie formatuj ręcznie i nie zmieniaj jego konfiguracji w zadaniach.
 6. **Testy offline** w `tests/`, bez przeglądarki i bez sieci.
    **Nie dopisuj wyjątków** do `eslint-suppressions.json` — popraw kod. Po naprawie starego
    miejsca: `npx eslint . --prune-suppressions`.
@@ -46,10 +46,11 @@ Szczegóły: `docs/ARCHITECTURE.md`.
 ## Komendy
 
 ```bash
-npm run verify           # WSZYSTKO: składnia, manifest, ESLint, testy, karty — to samo co CI
+npm run verify           # WSZYSTKO: składnia, manifest, format, ESLint, testy, karty — to samo co CI
 npm test                 # testy jednostkowe
 npm run check            # składnia wszystkich JS + poprawność manifest.json
 npm run lint             # ESLint z no-unsanitized (bezpieczny DOM)
+npm run format           # Prettier — formatuj TYLKO pliki, które zmieniasz w zadaniu
 npm run board            # tablica Kanban
 node tools/kanban.mjs next <model>        # moje następne zadanie
 node tools/kanban.mjs move MF-001 in-progress

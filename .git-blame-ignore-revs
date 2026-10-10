@@ -1,0 +1,6 @@
+# Commity wyłącznie formatujące — pomijane przez git blame.
+# GitHub stosuje ten plik automatycznie; lokalnie:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# Sformatuj kod Prettierem
+cef08b8aa35dc798ff84cccc9ffd2899d76f515e

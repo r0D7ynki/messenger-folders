@@ -10,7 +10,7 @@
     "lint:firefox": "web-ext lint --source-dir . --ignore-files \"node_modules/**\" \"tests/**\" \"tools/**\" \"kanban/**\" \"docs/**\" \"*.md\" \"eslint.config.js\" \"eslint-suppressions.json\" \"package*.json\" \"lefthook.yml\" \".agent/**\" \".aider.conf.yml\"",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify": "npm run check --silent && npm run lint --silent && npm test --silent && node tools/kanban.mjs check",
+    "verify": "npm run check --silent && npm run format:check --silent && npm run lint --silent && npm test --silent && node tools/kanban.mjs check",
     "board": "node tools/kanban.mjs",
     "kanban": "node tools/kanban.mjs",
     "prepare": "lefthook install || true"

@@ -25,11 +25,15 @@ Rozszerzenie nie ma zależności w runtime — `npm install` instaluje wyłączn
 | `npm test` | testy jednostkowe (Node, bez przeglądarki i sieci) |
 | `npm run check` | składnia wszystkich plików JS i poprawność `manifest.json` |
 | `npm run lint` | ESLint z regułami bezpieczeństwa DOM (`no-unsanitized`) |
-| `npm run verify` | wszystko powyżej + walidacja kart Kanban — **to samo uruchamia CI** |
+| `npm run format` | Prettier — formatowanie kodu |
+| `npm run verify` | wszystko powyżej (format w trybie sprawdzania) + walidacja kart Kanban — **to samo uruchamia CI** |
 | `npm run lint:firefox` | informacyjnie: zgodność z Firefoksem (`web-ext lint`) |
 | `npm run board` | tablica zadań |
 
-Git hooki: przed commitem ESLint na zmienionych plikach, składnia i karty; przed pushem testy.
+Git hooki: przed commitem Prettier i ESLint na zmienionych plikach, składnia i karty; przed pushem testy.
+
+`git blame` pomija commit formatujący, jeśli raz ustawisz:
+`git config blame.ignoreRevsFile .git-blame-ignore-revs` (GitHub robi to sam).
 
 ## Zgłoszenia i zadania
 
