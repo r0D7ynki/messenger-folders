@@ -6,7 +6,22 @@
   "scripts": {
     "test": "node tests/test_storage_detector.js && node tests/test_ui.js",
     "check": "for f in background/*.js src/*.js popup/*.js tests/*.js tools/*.mjs; do node --check \"$f\" || exit 1; done && node -e \"JSON.parse(require('fs').readFileSync('manifest.json'))\"",
+    "lint": "eslint .",
+    "lint:firefox": "web-ext lint --source-dir . --ignore-files \"node_modules/**\" \"tests/**\" \"tools/**\" \"kanban/**\" \"docs/**\" \"*.md\" \"eslint.config.js\" \"eslint-suppressions.json\" \"package*.json\" \"lefthook.yml\" \".agent/**\" \".aider.conf.yml\"",
+    "verify": "npm run check --silent && npm run lint --silent && npm test --silent && node tools/kanban.mjs check",
     "board": "node tools/kanban.mjs",
-    "kanban": "node tools/kanban.mjs"
+    "kanban": "node tools/kanban.mjs",
+    "prepare": "lefthook install || true"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.12.0",
+    "eslint-plugin-no-unsanitized": "^4.1.5",
+    "globals": "^17.13.0",
+    "lefthook": "^2.2.1",
+    "web-ext": "^10.7.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

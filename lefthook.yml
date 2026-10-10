@@ -1,0 +1,18 @@
+# Git hooki (lefthook) — instalowane automatycznie przez `npm install` (skrypt prepare).
+# Pominięcie w wyjątkowej sytuacji: LEFTHOOK=0 git commit ...
+pre-commit:
+  parallel: true
+  jobs:
+    - name: eslint
+      glob: "*.{js,mjs}"
+      run: npx eslint {staged_files}
+    - name: składnia i manifest
+      run: npm run check --silent
+    - name: karty kanban
+      glob: "kanban/**"
+      run: node tools/kanban.mjs check
+
+pre-push:
+  jobs:
+    - name: testy
+      run: npm test --silent

@@ -4,7 +4,8 @@
  *
  * Każde zadanie to plik kanban/tasks/<ID>.md z nagłówkiem (frontmatter).
  * Skrypt pilnuje bramek: DoR przy wejściu do `ready`, kryteriów akceptacji
- * przy wejściu do `review` i DoD (ogólnego + modelowego) przy wejściu do `done`.
+ * przy wejściu do `review` i DoD (ogólnego + modelowego) przy wejściu do `done`
+ * (wraz z `npm test`, `npm run check` i `npm run lint`).
  *
  * Użycie:
  *   node tools/kanban.mjs                         tablica
@@ -143,7 +144,7 @@ function checkDoD(task, { runTests }) {
   }
   if (!task.meta.reviewer) errors.push('brak pola reviewer');
   if (runTests && errors.length === 0) {
-    for (const cmd of ['npm test --silent', 'npm run check --silent']) {
+    for (const cmd of ['npm test --silent', 'npm run check --silent', 'npm run lint --silent']) {
       try {
         execSync(cmd, { cwd: ROOT, stdio: 'pipe' });
       } catch (e) {
