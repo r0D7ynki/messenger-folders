@@ -1,0 +1,59 @@
+{
+  "prefix": "MF",
+  "columns": [
+    "backlog",
+    "ready",
+    "in-progress",
+    "review",
+    "done"
+  ],
+  "wip": {
+    "in-progress": 3,
+    "in-progress-per-model": 1,
+    "review": 4
+  },
+  "sizes": {
+    "S": "1 plik, do ~50 zmienionych linii, bez zmian w API modułów",
+    "M": "do 3 plików, jeden moduł + testy",
+    "L": "wiele modułów, zmiana kontraktu między modułami lub UX"
+  },
+  "models": {
+    "claude": {
+      "tool": "Claude Code",
+      "max_size": "L",
+      "dod": [
+        "Diff przejrzany przez `/code-review` lub drugi model przed `review`"
+      ]
+    },
+    "gemini": {
+      "tool": "Google Antigravity (Gemini)",
+      "max_size": "L",
+      "dod": [
+        "Zmiana UI zweryfikowana w przeglądarce agenta Antigravity na messenger.com — zrzut ekranu lub opis w sekcji Dowód",
+        "Artefakty Antigravity (plan, walkthrough) streszczone w sekcji Dowód, nie wklejone w całości"
+      ]
+    },
+    "deepseek": {
+      "tool": "DeepSeek przez opencode / aider / Cline",
+      "max_size": "M",
+      "dod": [
+        "Zmieniono wyłącznie pliki z sekcji Pliki — każdy inny plik wymaga powrotu zadania do `ready` z poprawionym zakresem",
+        "Wynik `npm test` wklejony dosłownie (ostatnie linie) w sekcji Dowód"
+      ]
+    },
+    "human": {
+      "tool": "człowiek",
+      "max_size": "L",
+      "dod": []
+    }
+  },
+  "dod": [
+    "`npm test` przechodzi",
+    "`npm run check` (składnia JS, manifest) i `npm run lint` (ESLint z no-unsanitized) przechodzą — bez dopisywania nowych wyjątków do `eslint-suppressions.json`",
+    "Nowa logika ma test w `tests/` albo w sekcji Dowód jest uzasadnienie, dlaczego nie da się jej przetestować offline",
+    "Żadnych wywołań sieciowych, nowych uprawnień w `manifest.json` ani zewnętrznych zależności bez decyzji w `docs/agents/DECYZJE.md`",
+    "Dane od użytkownika i z DOM Messengera trafiają do DOM przez `textContent` lub `_escapeHtml`, nigdy surowo do `innerHTML`",
+    "Komentarze i teksty UI po polsku, w stylu otaczającego kodu",
+    "Dokumentacja (`README.md`, `docs/ARCHITECTURE.md`) zaktualizowana, jeśli zmienia się zachowanie"
+  ]
+}

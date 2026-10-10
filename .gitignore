@@ -6,3 +6,4 @@ node_modules/
 .idea/
 *.zip
 *.crx
+web-ext-artifacts/

@@ -1,0 +1,9 @@
+# Konfiguracja aider (np. z DeepSeek: aider --model deepseek/deepseek-chat)
+# Zasady projektu ładowane jako kontekst tylko do odczytu.
+read:
+  - AGENTS.md
+  - docs/agents/models/deepseek.md
+auto-commits: false
+test-cmd: npm test
+auto-test: true
+lint-cmd: "javascript: node --check"

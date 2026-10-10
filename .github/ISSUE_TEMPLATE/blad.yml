@@ -1,0 +1,36 @@
+name: Zgłoszenie błędu
+description: Coś nie działa w rozszerzeniu
+labels: [błąd]
+body:
+  - type: textarea
+    id: opis
+    attributes:
+      label: Co się dzieje?
+      description: Co zrobiłeś, czego oczekiwałeś, co się stało.
+    validations:
+      required: true
+  - type: textarea
+    id: kroki
+    attributes:
+      label: Kroki do odtworzenia
+      placeholder: |
+        1. Otwórz messenger.com
+        2. Kliknij ...
+    validations:
+      required: true
+  - type: input
+    id: przegladarka
+    attributes:
+      label: Przeglądarka i wersja
+      placeholder: Chrome 141 / Brave 1.80 / Edge ...
+    validations:
+      required: true
+  - type: dropdown
+    id: strona
+    attributes:
+      label: Strona
+      options: [messenger.com, facebook.com/messages, obie]
+  - type: markdown
+    attributes:
+      value: |
+        **Nie wklejaj zrzutów z treścią prywatnych rozmów.** Zamaż nazwy i wiadomości.
