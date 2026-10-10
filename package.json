@@ -1,0 +1,12 @@
+{
+  "name": "messenger-folders",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Rozszerzenie przeglądarki porządkujące czaty Messengera w foldery",
+  "scripts": {
+    "test": "node tests/test_storage_detector.js && node tests/test_ui.js",
+    "check": "for f in background/*.js src/*.js popup/*.js tests/*.js tools/*.mjs; do node --check \"$f\" || exit 1; done && node -e \"JSON.parse(require('fs').readFileSync('manifest.json'))\"",
+    "board": "node tools/kanban.mjs",
+    "kanban": "node tools/kanban.mjs"
+  }
+}
