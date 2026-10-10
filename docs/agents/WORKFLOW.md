@@ -65,7 +65,7 @@ zapisuj w `docs/agents/DECYZJE.md` w formacie ADR-lite: data, decyzja, powód, a
 
 ---
 
-## Rozszerzenia procesu (propozycje — do decyzji)
+## Rozszerzenia procesu (do decyzji)
 
 Kanban sprawdza się tu najlepiej jako baza: praca jest ciągła, zadania są małe, a wykonawców jest kilku
 i pracują asynchronicznie. Inne metody warto **nałożyć** na Kanban zamiast go zastępować:
@@ -81,47 +81,46 @@ i pracują asynchronicznie. Inne metody warto **nałożyć** na Kanban zamiast g
 **Rekomendacja:** Kanban + Planner/Executor/Reviewer (już działa) + TDD krzyżowe dla błędów.
 Spec-driven dodać przy pierwszej dużej funkcji.
 
-## Narzędzia open source CLI (propozycje — do decyzji)
+## Narzędzia jakości
 
-Obecnie projekt **nie ma żadnych zależności** (`npm test` i `npm run check` to czysty Node).
-Poniższe narzędzia byłyby wyłącznie `devDependencies` lub binarkami, nigdy nie trafiłyby do
-rozszerzenia. Kolejność odpowiada stosunkowi korzyści do kosztu.
+Kod rozszerzenia **nie ma zależności**. Narzędzia są wyłącznie `devDependencies` i nie trafiają
+do paczki rozszerzenia.
 
-### Etap 1 — największy zysk od razu
+### Wdrożone
 
-| Narzędzie | Po co tutaj | Co by złapało w obecnym kodzie |
+| Narzędzie | Gdzie działa | Co pilnuje |
 |---|---|---|
-| **ESLint** (flat config) + **eslint-plugin-no-unsanitized** (Mozilla) | lint JS; plugin oznacza każde `innerHTML`/`insertAdjacentHTML` z interpolacją | XSS w `src/ui.js:653` (MF-001) i podobne miejsca |
-| **web-ext lint** (Mozilla) | walidacja manifestu i paczki rozszerzenia, niebezpieczne wzorce | błędy manifestu przed publikacją |
-| **Prettier** albo **Biome** | jeden format kodu dla wszystkich modeli — koniec diffów, w których model przy okazji przeformatował plik | — (Biome = lint + format w jednej binarce Rust; prostszy, ale nie ma odpowiednika `no-unsanitized`) |
-| **lefthook** | git hooki: `check` + lint + testy przed commitem, niezależnie od tego, który agent commituje | wymusza DoD lokalnie |
-| **tsc --checkJs** (TypeScript tylko jako checker, z JSDoc) | typy bez migracji na TS; JSDoc w kodzie już jest | rozjazdy kształtu `folder`/`thread` między `storage` a `ui` |
+| **ESLint** + **eslint-plugin-no-unsanitized** | `npm run lint`, pre-commit, CI | błędy JS; każde `innerHTML` / `insertAdjacentHTML` z dynamiczną treścią jest błędem, chyba że przechodzi przez `_escapeHtml` / `escapeHtml` |
+| **ESLint bulk suppressions** | `eslint-suppressions.json` | 27 naruszeń istniejących w chwili wdrożenia (głównie `innerHTML` ze stałymi `ICONS`) — **nowe są blokowane**, stare do spłaty (MF-008) |
+| **lefthook** | git hooki, instalowane przez `npm install` | pre-commit: ESLint na zmienionych plikach, składnia, manifest, karty; pre-push: testy |
+| **GitHub Actions** (`verify.yml`) | każdy pull request i push do `master` | `npm ci && npm run verify` |
+| **web-ext lint** (Mozilla) | `npm run lint:firefox`, **poza** `verify` | zgodność z Firefoksem; obecnie 2 błędy manifestu, istotne tylko przy wsparciu Firefoksa (MF-009) |
+| `tools/kanban.mjs` | `npm run verify`, bramki kart | DoR, WIP, DoD; bramka `done` uruchamia testy, `check` i `lint` |
 
-### Etap 2 — testy i bezpieczeństwo
+`npm run verify` = `check` + `lint` + `test` + `kanban check` — **jedna komenda DoD** dla ludzi,
+agentów i CI.
 
-| Narzędzie | Po co |
-|---|---|
-| **node:test** + **c8** | wbudowany runner Node zamiast ręcznych skryptów + pokrycie kodu w DoD (np. ≥ 70% dla `storage.js`) |
-| **Playwright** | E2E: ładuje rozszerzenie do Chromium i testuje na statycznej kopii DOM Messengera (fixture) — wykrywa regresje detektora bez logowania |
-| **Semgrep** (reguły OSS) | SAST: wzorce XSS, `postMessage` bez sprawdzenia origin |
-| **gitleaks** | sekrety w historii (istotne, gdy agenci dostają klucze API do DeepSeek/Gemini) |
-| **ast-grep** | własne reguły strukturalne zapisane w repo, np. „zakaz `innerHTML = \`...${x}...\`` poza `ICONS`” — czytelne dla każdego modelu |
+Spłata wyjątków: po naprawie miejsca z `eslint-suppressions.json` uruchom
+`npx eslint . --prune-suppressions` i zacommituj zmniejszony plik. Dopisywanie nowych wyjątków
+(`--suppress-rule`) wymaga uzasadnienia w pull requeście.
 
-### Etap 3 — porządek i utrzymanie
+### Następne kroki (do decyzji)
 
-| Narzędzie | Po co |
-|---|---|
-| **jscpd** | duplikaty — `src/ui.js` (1900 linii) i `popup/popup.js` mają podobne renderowanie folderów |
-| **knip** | martwy kod i nieużywane eksporty (po przejściu na moduły) |
-| **markdownlint-cli2** + **lychee** | dokumentacja; lychee złapie zepsute linki `file:///home/grz3chu/...` (MF-003) |
-| **commitlint** + **git-cliff** | Conventional Commits z `MF-XXX` w treści, automatyczny CHANGELOG |
-| **stylelint** | `content.css` ma 1700+ linii; wykrywa duplikaty selektorów i `!important` |
+| Narzędzie | Po co | Karta |
+|---|---|---|
+| **Prettier** | jeden format kodu dla wszystkich modeli; jednorazowe przeformatowanie w osobnym pull requeście | MF-010 |
+| **node:test** + **c8** | wbudowany runner Node zamiast ręcznych skryptów + próg pokrycia w DoD | — |
+| **Playwright** | E2E: rozszerzenie w Chromium na statycznej kopii DOM Messengera | MF-006 |
+| **tsc --checkJs** | sprawdzanie typów na podstawie istniejącego JSDoc, bez migracji na TS | — |
+| **Semgrep**, **gitleaks** | SAST i sekrety (agenci dostają klucze API) | — |
+| **ast-grep** | własne reguły strukturalne w repo | — |
+| **jscpd**, **stylelint** | duplikaty (`ui.js` ↔ `popup.js`), porządek w `content.css` (1700+ linii) | — |
+| **markdownlint-cli2** + **lychee** | dokumentacja i martwe linki (`file:///home/grz3chu/...`, MF-003) | — |
+| **commitlint** + **git-cliff** | Conventional Commits z `MF-XXX`, automatyczny CHANGELOG | — |
 
-Proponowany docelowy `npm run verify` (jedna komenda DoD dla wszystkich agentów):
+## GitHub Issues a karty Kanban
 
-```bash
-npm run check && npm run lint && npm run typecheck && npm test && npx web-ext lint
-```
-
-Wdrożenie etapu 1 to osobna karta (propozycja: MF-007) z decyzją w `DECYZJE.md`, bo łamie obecną
-zasadę braku zależności.
+- **Issues** są wejściem z zewnątrz: błędy od użytkowników i propozycje (szablony w `.github/ISSUE_TEMPLATE/`).
+- **Karty `kanban/tasks/`** są źródłem prawdy dla pracy ludzi i agentów — agent czyta plik, nie issue.
+- Planista zamienia issue na kartę (`npm run kanban -- new "..."`), w Kontekście wpisuje `#numer`,
+  a w issue link do karty. Pull request zamyka issue (`Closes #numer`) i przesuwa kartę.

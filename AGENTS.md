@@ -37,6 +37,8 @@ Szczegóły: `docs/ARCHITECTURE.md`.
 5. **Kod i komentarze po polsku**, JSDoc nad metodami publicznymi, styl jak w otaczającym kodzie
    (2 spacje, pojedyncze cudzysłowy, średniki).
 6. **Testy offline** w `tests/`, bez przeglądarki i bez sieci.
+   **Nie dopisuj wyjątków** do `eslint-suppressions.json` — popraw kod. Po naprawie starego
+   miejsca: `npx eslint . --prune-suppressions`.
 7. **Gałęzie i pull requesty.** Praca na gałęziach `mf-XXX-krotki-opis` od `master`, zmiany
    trafiają przez pull request. Agent nigdy nie pushuje do `master` i nie scala — robi to opiekun
    repozytorium. Kontrybutorzy zewnętrzni pracują na forku.
@@ -44,8 +46,10 @@ Szczegóły: `docs/ARCHITECTURE.md`.
 ## Komendy
 
 ```bash
+npm run verify           # WSZYSTKO: składnia, manifest, ESLint, testy, karty — to samo co CI
 npm test                 # testy jednostkowe
 npm run check            # składnia wszystkich JS + poprawność manifest.json
+npm run lint             # ESLint z no-unsanitized (bezpieczny DOM)
 npm run board            # tablica Kanban
 node tools/kanban.mjs next <model>        # moje następne zadanie
 node tools/kanban.mjs move MF-001 in-progress
@@ -65,7 +69,7 @@ Przesuwaj **tylko** przez `node tools/kanban.mjs move` — skrypt pilnuje bramek
 2. `move <ID> in-progress`, utwórz gałąź `mf-XXX-...`.
 3. Zmieniaj **tylko pliki z sekcji Pliki**. Potrzebujesz innego pliku → dopisz to w Logu, cofnij
    zadanie do `ready` i zatrzymaj się.
-4. Odhacz kryteria akceptacji, wypełnij sekcję **Dowód** (wynik `npm test`, opis weryfikacji).
+4. Odhacz kryteria akceptacji, wypełnij sekcję **Dowód** (wynik `npm run verify`, opis weryfikacji).
 5. `move <ID> review`. **Nie przenoś własnego zadania do `done`** — robi to reviewer (inny model
    lub człowiek), który odhacza DoD i wpisuje się w `reviewer:`.
 6. Coś niejasnego? Dopisz pytanie w Logu karty, zostaw zadanie w obecnej kolumnie, zakończ.
