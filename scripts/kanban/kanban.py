@@ -7,9 +7,9 @@ Skrypt pilnuje bramek: DoR przy wejściu do `ready`, DoR + WIP + gotowych zależ
 `in-progress`, kryteriów akceptacji i sekcji Evidence przy `review`, DoD (ogólnego + modelowego)
 i polecenia bramki projektu (`gate` w kanban/config.json) przy `done`.
 
-Plik jest samowystarczalny (tylko biblioteka standardowa) — `swarmboard.py init` kopiuje go do
+Plik jest samowystarczalny (tylko biblioteka standardowa) — `sb init` kopiuje go do
 projektu (domyślnie scripts/kanban/kanban.py), żeby tablica działała bez swarmboard.
-Most z rojem agentów (swarm_kanban.py) importuje ten moduł i używa tych samych bramek.
+Most z rojem (bridge.py w pakiecie swarmboard) importuje ten moduł i używa tych samych bramek.
 
 Użycie (z katalogu projektu albo z --root ŚCIEŻKA / KANBAN_ROOT):
   kanban.py                               tablica
@@ -31,7 +31,12 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from i18n import tr
+try:  # w pakiecie swarmboard
+    from .i18n import tr
+except ImportError:  # kopia w projekcie (scripts/kanban/), bez pakietu
+    # i18n.py leży obok; dopisujemy katalog jawnie, bo `python3 -I` go pomija
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from i18n import tr  # type: ignore[no-redef]
 
 COLUMNS = ["backlog", "ready", "in-progress", "review", "done"]
 SIZE_ORDER = ["S", "M", "L"]
