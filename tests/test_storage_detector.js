@@ -238,6 +238,95 @@ async function runStorageTests() {
   assert.strictEqual(threadAfterImport, 'custom1');
   console.log('✓ storage.importData() poprawnie importuje dane i zachowuje foldery systemowe');
 
+  // Test MF-002: Walidacja i normalizacja folderów (saveFolder oraz importData)
+  // 1. saveFolder z złośliwym kolorem, za długą nazwą i niepoprawną ikoną
+  const validatedFolder = await storage.saveFolder({
+    name: 'Ta nazwa folderu jest zdecydowanie za długa i przekracza limit czterdziestu znaków',
+    icon: '<script>alert(1)</script>',
+    color: 'red;background:url(x)'
+  });
+  assert.strictEqual(
+    validatedFolder.name,
+    'Ta nazwa folderu jest zdecydowanie za dł',
+    'Nazwa powinna zostać przycięta do 40 znaków'
+  );
+  assert.strictEqual(validatedFolder.icon, '📁', 'Ikona zawierająca znaki < lub > powinna zostać zastąpiona przez 📁');
+  assert.strictEqual(
+    validatedFolder.color,
+    '#0084FF',
+    'Kolor spoza formatu #RRGGBB powinien zostać zamieniony na #0084FF'
+  );
+
+  // Ikona dłuższa niż 8 znaków
+  const longIconFolder = await storage.saveFolder({
+    name: 'Test Ikona',
+    icon: '123456789',
+    color: '#123456'
+  });
+  assert.strictEqual(longIconFolder.icon, '📁', 'Ikona dłuższa niż 8 znaków powinna zostać zastąpiona przez 📁');
+  assert.strictEqual(longIconFolder.color, '#123456', 'Prawidłowy kolor HEX powinien zostać zachowany');
+
+  // 2. importData z niepoprawnymi folderami i nieobiektowymi wątkami
+  const maliciousBackup = {
+    version: 1,
+    folders: [
+      { id: 'valid_1', name: 'Poprawny', icon: '⭐', color: '#AABBCC' },
+      { id: 'bad/id', name: 'Złe ID ze slashem', icon: '📁', color: '#112233' },
+      { id: 'bad<script>', name: 'Złe ID z tagami', icon: '📁', color: '#112233' },
+      { id: 'bad_color', name: 'Zły Kolor', icon: '⭐', color: 'red;background:url(x)' },
+      { id: 'bad_icon_long', name: 'Długa Ikona', icon: 'bardzo_dluga_ikona', color: '#AABBCC' },
+      { id: 'bad_icon_tag', name: 'Ikona z tagiem', icon: '<b>x</b>', color: '#AABBCC' },
+      { id: 'bad_name_toolong', name: '1234567890123456789012345678901234567890EXTRA', icon: '📁', color: '#AABBCC' }
+    ],
+    threads: {
+      thread_ok: { folderId: 'valid_1', name: 'Poprawny wątek' },
+      thread_string: 'to_nie_jest_obiekt',
+      thread_null: null,
+      thread_array: ['element']
+    },
+    activeFolder: 'valid_1'
+  };
+
+  await storage.importData(maliciousBackup);
+  const importedList = await storage.getFolders();
+  const importedMap = new Map(importedList.map((f) => [f.id, f]));
+
+  // Poprawny folder powinien istnieć
+  assert.ok(importedMap.has('valid_1'), 'Folder valid_1 powinien zostać zaimportowany');
+  assert.strictEqual(importedMap.get('valid_1').color, '#AABBCC');
+
+  // Niepoprawne ID powinny zostać pominięte
+  assert.ok(!importedMap.has('bad/id'), 'Folder z niebezpiecznym ID bad/id powinien zostać pominięty');
+  assert.ok(!importedMap.has('bad<script>'), 'Folder z niebezpiecznym ID bad<script> powinien zostać pominięty');
+
+  // Zły kolor zamieniony na domyślny
+  assert.ok(importedMap.has('bad_color'), 'Folder bad_color powinien zostać zaimportowany');
+  assert.strictEqual(
+    importedMap.get('bad_color').color,
+    '#0084FF',
+    'Złośliwy kolor powinien zostać zneutralizowany do #0084FF'
+  );
+
+  // Złe ikony zamienione na 📁
+  assert.strictEqual(importedMap.get('bad_icon_long').icon, '📁', 'Za długa ikona powinna zostać zamieniona na 📁');
+  assert.strictEqual(importedMap.get('bad_icon_tag').icon, '📁', 'Ikona z tagami powinna zostać zamieniona na 📁');
+
+  // Za długa nazwa przycięta do 40 znaków
+  assert.strictEqual(
+    importedMap.get('bad_name_toolong').name.length,
+    40,
+    'Nazwa powinna zostać przycięta do 40 znaków'
+  );
+
+  // Wątki: nieobiektowe wpisy powinny zostać pominięte
+  const maliciousThreads = await storage.getAllThreads();
+  assert.deepStrictEqual(maliciousThreads.thread_ok, { folderId: 'valid_1', name: 'Poprawny wątek' });
+  assert.strictEqual(maliciousThreads.thread_string, undefined, 'Nieobiektowy wątek-string powinien zostać pominięty');
+  assert.strictEqual(maliciousThreads.thread_null, undefined, 'Wątek null powinien zostać pominięty');
+  assert.strictEqual(maliciousThreads.thread_array, undefined, 'Wątek-tablica powinien zostać pominięty');
+
+  console.log('✓ storage waliduje i normalizuje foldery oraz importowane wątki (MF-002)');
+
   // Test onChange()
   let notified = false;
   const unsubscribe = storage.onChange((payload) => {

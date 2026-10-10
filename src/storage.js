@@ -208,6 +208,58 @@
     }
 
     /**
+     * Normalizuje i weryfikuje dane folderu.
+     * Zwraca znormalizowany obiekt folderu lub null, jeśli dane są niepoprawne.
+     * @param {Object} folder Obiekt folderu do normalizacji.
+     * @param {Object} [fallback] Wartości zastępcze dla brakujących pól.
+     * @returns {Object|null}
+     * @private
+     */
+    _normalizeFolder(folder, fallback = {}) {
+      if (!folder || typeof folder !== 'object') {
+        return null;
+      }
+
+      // Identyfikator: dopuszczalny tylko bezpieczny alfabet /^[a-z0-9_-]{1,64}$/i
+      const rawId = typeof folder.id === 'string' && folder.id.trim() ? folder.id.trim() : fallback.id || '';
+      if (!rawId || !/^[a-z0-9_-]{1,64}$/i.test(rawId)) {
+        return null;
+      }
+
+      // Nazwa: niepusta, przycinana do maksymalnie 40 znaków
+      const rawName = typeof folder.name === 'string' && folder.name.trim() ? folder.name.trim() : fallback.name || '';
+      if (!rawName) {
+        return null;
+      }
+      const safeName = rawName.slice(0, 40);
+
+      // Kolor: poprawny format HEX #RRGGBB, inaczej domyślny #0084FF
+      const rawColor = typeof folder.color === 'string' ? folder.color.trim() : '';
+      const safeColor = /^#[0-9a-fA-F]{6}$/.test(rawColor)
+        ? rawColor
+        : fallback.color && /^#[0-9a-fA-F]{6}$/.test(fallback.color)
+          ? fallback.color
+          : '#0084FF';
+
+      // Ikona: do 8 znaków, bez znaków < lub >, inaczej domyślna 📁
+      const rawIcon = typeof folder.icon === 'string' ? folder.icon.trim() : '';
+      const safeIcon =
+        rawIcon && rawIcon.length <= 8 && !/[<>]/.test(rawIcon)
+          ? rawIcon
+          : fallback.icon && fallback.icon.length <= 8 && !/[<>]/.test(fallback.icon)
+            ? fallback.icon
+            : '📁';
+
+      return {
+        id: rawId,
+        name: safeName,
+        icon: safeIcon,
+        color: safeColor,
+        isSystem: Boolean(folder.isSystem ?? fallback.isSystem ?? false)
+      };
+    }
+
+    /**
      * Zapisuje nowy folder lub aktualizuje istniejący.
      * @param {Object} folder Dane folderu.
      * @param {string} [folder.id] Identyfikator folderu (jeśli brak, zostanie wygenerowany).
@@ -225,22 +277,28 @@
         throw new Error('Nazwa folderu nie może być pusta.');
       }
 
-      const trimmedName = name.trim();
-      const safeIcon = icon && typeof icon === 'string' && icon.trim() ? icon.trim() : '📁';
-      const safeColor = color && typeof color === 'string' && color.trim() ? color.trim() : '#0084FF';
+      const generatedId =
+        id && typeof id === 'string' && id.trim()
+          ? id.trim()
+          : `folder_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+      const normalized = this._normalizeFolder({ id: generatedId, name, icon, color });
+      if (!normalized) {
+        throw new Error('Niepoprawne dane folderu.');
+      }
 
       const folders = [...this._folders];
 
       if (id) {
-        const index = folders.findIndex((f) => f.id === id);
+        const index = folders.findIndex((f) => f.id === normalized.id);
         if (index >= 0) {
           const existing = folders[index];
           // Folder główny 'all' zachowuje swoją stałą nazwę
           folders[index] = {
             ...existing,
-            name: existing.id === 'all' ? existing.name : trimmedName,
-            icon: safeIcon,
-            color: safeColor
+            name: existing.id === 'all' ? existing.name : normalized.name,
+            icon: normalized.icon,
+            color: normalized.color
           };
           this._folders = folders;
           await this._set({ [STORAGE_KEYS.FOLDERS]: folders });
@@ -249,12 +307,8 @@
       }
 
       // Utworzenie nowego folderu użytkownika
-      const newId = id || `folder_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const newFolder = {
-        id: newId,
-        name: trimmedName,
-        icon: safeIcon,
-        color: safeColor,
+        ...normalized,
         isSystem: false
       };
 
@@ -526,20 +580,42 @@
         throw new Error('Dane importu nie zawierają poprawnej listy folderów.');
       }
 
-      // Upewnienie się, że foldery systemowe zawsze istnieją
-      const importedFolders = parsed.folders.filter((f) => f && typeof f.id === 'string' && f.name);
+      // Upewnienie się, że foldery systemowe zawsze istnieją oraz normalizacja folderów
       const systemFolderIds = new Set(DEFAULT_FOLDERS.map((f) => f.id));
+      const seenIds = new Set();
+      const importedFolders = [];
+
+      for (const rawFolder of parsed.folders) {
+        const normalized = this._normalizeFolder(rawFolder);
+        // Pomija foldery z id spoza bezpiecznego formatu lub bez poprawnej nazwy
+        if (!normalized || seenIds.has(normalized.id)) {
+          continue;
+        }
+        seenIds.add(normalized.id);
+        normalized.isSystem = systemFolderIds.has(normalized.id);
+        importedFolders.push(normalized);
+      }
 
       for (const defaultFolder of DEFAULT_FOLDERS) {
         const found = importedFolders.find((f) => f.id === defaultFolder.id);
         if (!found) {
           importedFolders.unshift({ ...defaultFolder });
+          seenIds.add(defaultFolder.id);
         } else {
-          found.isSystem = systemFolderIds.has(found.id);
+          found.isSystem = true;
         }
       }
 
-      const importedThreads = parsed.threads && typeof parsed.threads === 'object' ? parsed.threads : {};
+      const importedThreads = {};
+      if (parsed.threads && typeof parsed.threads === 'object' && !Array.isArray(parsed.threads)) {
+        for (const [threadId, threadData] of Object.entries(parsed.threads)) {
+          // Pomijanie nieobiektowych przypisań wątków
+          if (threadData && typeof threadData === 'object' && !Array.isArray(threadData)) {
+            importedThreads[threadId] = threadData;
+          }
+        }
+      }
+
       const activeFolder =
         typeof parsed.activeFolder === 'string' && importedFolders.some((f) => f.id === parsed.activeFolder)
           ? parsed.activeFolder
