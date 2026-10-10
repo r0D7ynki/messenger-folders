@@ -39,3 +39,14 @@ Wraca do `verify`, jeśli zapadnie decyzja o wsparciu Firefoksa (MF-009).
 
 **Decyzja:** zgłoszenia z zewnątrz przez GitHub Issues (szablony z polami DoR), praca agentów
 i ludzi według kart `kanban/tasks/`. Szczegóły: `WORKFLOW.md` → „GitHub Issues a karty Kanban”.
+
+## D-006 · 2026-10-10 · przyjęta — Prettier i jednorazowe przeformatowanie
+
+**Decyzja:** Prettier (`printWidth` 120, `trailingComma` none, pojedyncze cudzysłowy) dla kodu;
+Markdown, karty i dokumentacja poza formatowaniem. Przeformatowanie w osobnym pull requeście
+i osobnym commicie wpisanym do `.git-blame-ignore-revs`.
+**Powód:** różne modele formatują inaczej — bez wspólnego formatera diffy zadań puchną od zmian
+stylu. Ustawienia dobrane pomiarem: najmniej zmienionych linii (~1390 z ~8800) przy zgodności
+z dotychczasowym stylem.
+**Alternatywy:** Biome (szybszy, lint + format w jednym, ale bez odpowiednika `no-unsanitized`);
+`printWidth` 100 (~1715 zmienionych linii).

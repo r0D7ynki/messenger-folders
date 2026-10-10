@@ -6,4 +6,4 @@ read:
 auto-commits: false
 test-cmd: npm test
 auto-test: true
-lint-cmd: "javascript: node --check"
+lint-cmd: 'javascript: node --check'

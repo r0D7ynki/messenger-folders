@@ -95,9 +95,10 @@ do paczki rozszerzenia.
 | **lefthook** | git hooki, instalowane przez `npm install` | pre-commit: ESLint na zmienionych plikach, składnia, manifest, karty; pre-push: testy |
 | **GitHub Actions** (`verify.yml`) | każdy pull request i push do `master` | `npm ci && npm run verify` |
 | **web-ext lint** (Mozilla) | `npm run lint:firefox`, **poza** `verify` | zgodność z Firefoksem; obecnie 2 błędy manifestu, istotne tylko przy wsparciu Firefoksa (MF-009) |
+| **Prettier** | `npm run format`, pre-commit (sprawdzanie), CI | jeden format kodu dla wszystkich modeli (`printWidth` 120, bez przecinków końcowych); commit formatujący w `.git-blame-ignore-revs` |
 | `tools/kanban.mjs` | `npm run verify`, bramki kart | DoR, WIP, DoD; bramka `done` uruchamia testy, `check` i `lint` |
 
-`npm run verify` = `check` + `lint` + `test` + `kanban check` — **jedna komenda DoD** dla ludzi,
+`npm run verify` = `check` + `format:check` + `lint` + `test` + `kanban check` — **jedna komenda DoD** dla ludzi,
 agentów i CI.
 
 Spłata wyjątków: po naprawie miejsca z `eslint-suppressions.json` uruchom
@@ -108,7 +109,6 @@ Spłata wyjątków: po naprawie miejsca z `eslint-suppressions.json` uruchom
 
 | Narzędzie | Po co | Karta |
 |---|---|---|
-| **Prettier** | jeden format kodu dla wszystkich modeli; jednorazowe przeformatowanie w osobnym pull requeście | MF-010 |
 | **node:test** + **c8** | wbudowany runner Node zamiast ręcznych skryptów + próg pokrycia w DoD | — |
 | **Playwright** | E2E: rozszerzenie w Chromium na statycznej kopii DOM Messengera | MF-006 |
 | **tsc --checkJs** | sprawdzanie typów na podstawie istniejącego JSDoc, bez migracji na TS | — |

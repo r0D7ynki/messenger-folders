@@ -14,7 +14,7 @@
   const STORAGE_KEYS = {
     FOLDERS: 'mf_folders',
     ACTIVE_FOLDER: 'mf_active_folder',
-    THREADS: 'mf_threads',
+    THREADS: 'mf_threads'
   };
 
   // Domyślna lista folderów startowych
@@ -24,7 +24,7 @@
     { id: 'work', name: 'Praca', icon: '💼', color: '#10B981', isSystem: false },
     { id: 'friends', name: 'Znajomi', icon: '👥', color: '#8B5CF6', isSystem: false },
     { id: 'groups', name: 'Grupy', icon: '📢', color: '#EC4899', isSystem: false },
-    { id: 'uncategorized', name: 'Inne', icon: '📁', color: '#6B7280', isSystem: true },
+    { id: 'uncategorized', name: 'Inne', icon: '📁', color: '#6B7280', isSystem: true }
   ];
 
   class MessengerFoldersStorage {
@@ -133,7 +133,7 @@
           changes,
           folders: this._folders,
           activeFolder: this._activeFolder,
-          threads: this._threads,
+          threads: this._threads
         };
         for (const listener of this._listeners) {
           try {
@@ -151,11 +151,7 @@
      * @returns {Promise<{ folders: Array, activeFolder: string, threads: Object }>}
      */
     async init() {
-      const stored = await this._get([
-        STORAGE_KEYS.FOLDERS,
-        STORAGE_KEYS.ACTIVE_FOLDER,
-        STORAGE_KEYS.THREADS,
-      ]);
+      const stored = await this._get([STORAGE_KEYS.FOLDERS, STORAGE_KEYS.ACTIVE_FOLDER, STORAGE_KEYS.THREADS]);
 
       const updates = {};
 
@@ -188,7 +184,7 @@
       return {
         folders: this.getFoldersSync(),
         activeFolder: this._activeFolder,
-        threads: { ...this._threads },
+        threads: { ...this._threads }
       };
     }
 
@@ -230,8 +226,8 @@
       }
 
       const trimmedName = name.trim();
-      const safeIcon = (icon && typeof icon === 'string' && icon.trim()) ? icon.trim() : '📁';
-      const safeColor = (color && typeof color === 'string' && color.trim()) ? color.trim() : '#0084FF';
+      const safeIcon = icon && typeof icon === 'string' && icon.trim() ? icon.trim() : '📁';
+      const safeColor = color && typeof color === 'string' && color.trim() ? color.trim() : '#0084FF';
 
       const folders = [...this._folders];
 
@@ -244,7 +240,7 @@
             ...existing,
             name: existing.id === 'all' ? existing.name : trimmedName,
             icon: safeIcon,
-            color: safeColor,
+            color: safeColor
           };
           this._folders = folders;
           await this._set({ [STORAGE_KEYS.FOLDERS]: folders });
@@ -259,7 +255,7 @@
         name: trimmedName,
         icon: safeIcon,
         color: safeColor,
-        isSystem: false,
+        isSystem: false
       };
 
       folders.push(newFolder);
@@ -299,14 +295,14 @@
           updatedThreads[threadId] = {
             ...threadData,
             folderId: 'uncategorized',
-            updatedAt: Date.now(),
+            updatedAt: Date.now()
           };
           threadsChanged = true;
         }
       }
 
       const payload = {
-        [STORAGE_KEYS.FOLDERS]: updatedFolders,
+        [STORAGE_KEYS.FOLDERS]: updatedFolders
       };
 
       if (threadsChanged) {
@@ -384,7 +380,7 @@
         name: (metadata && metadata.name) || existing.name || '',
         avatar: (metadata && metadata.avatar) || existing.avatar || '',
         assignedAt: existing.assignedAt || Date.now(),
-        updatedAt: Date.now(),
+        updatedAt: Date.now()
       };
 
       // Zapis opcjonalnych dodatkowych pól z metadata
@@ -398,7 +394,7 @@
 
       const updatedThreads = {
         ...this._threads,
-        [cleanThreadId]: updatedRecord,
+        [cleanThreadId]: updatedRecord
       };
 
       this._threads = updatedThreads;
@@ -441,7 +437,7 @@
 
       const cleanThreadId = String(threadId).trim();
       const thread = this._threads[cleanThreadId];
-      return (thread && thread.folderId) ? thread.folderId : 'uncategorized';
+      return thread && thread.folderId ? thread.folderId : 'uncategorized';
     }
 
     /**
@@ -492,7 +488,7 @@
         exportedAt: new Date().toISOString(),
         folders: this.getFoldersSync(),
         threads: { ...this._threads },
-        activeFolder: this._activeFolder,
+        activeFolder: this._activeFolder
       };
 
       return JSON.stringify(bundle, null, 2);
@@ -543,15 +539,16 @@
         }
       }
 
-      const importedThreads = (parsed.threads && typeof parsed.threads === 'object') ? parsed.threads : {};
-      const activeFolder = (typeof parsed.activeFolder === 'string' && importedFolders.some((f) => f.id === parsed.activeFolder))
-        ? parsed.activeFolder
-        : 'all';
+      const importedThreads = parsed.threads && typeof parsed.threads === 'object' ? parsed.threads : {};
+      const activeFolder =
+        typeof parsed.activeFolder === 'string' && importedFolders.some((f) => f.id === parsed.activeFolder)
+          ? parsed.activeFolder
+          : 'all';
 
       const payload = {
         [STORAGE_KEYS.FOLDERS]: importedFolders,
         [STORAGE_KEYS.THREADS]: importedThreads,
-        [STORAGE_KEYS.ACTIVE_FOLDER]: activeFolder,
+        [STORAGE_KEYS.ACTIVE_FOLDER]: activeFolder
       };
 
       await this._set(payload);
@@ -589,7 +586,7 @@
     module.exports = {
       MessengerFoldersStorage,
       DEFAULT_FOLDERS,
-      STORAGE_KEYS,
+      STORAGE_KEYS
     };
   }
 })(typeof globalThis !== 'undefined' ? globalThis : this);

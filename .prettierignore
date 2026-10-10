@@ -1,0 +1,9 @@
+# Formatujemy tylko kod; dokumentacja i karty są pisane ręcznie
+node_modules/
+web-ext-artifacts/
+*.md
+package-lock.json
+eslint-suppressions.json
+kanban/
+docs/
+icons/

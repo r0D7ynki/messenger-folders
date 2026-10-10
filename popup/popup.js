@@ -9,16 +9,44 @@
 
   // Domyślny zestaw emotikonów do wyboru
   const EMOJI_LIST = [
-    '📁', '💼', '👥', '⭐', '💡', '🏷️', '🛒', '📌',
-    '🎯', '🔒', '💬', '🚀', '❤️', '🔔', '🎮', '🏠',
-    '📚', '🎨', '🛠️', '✈️', '🎵', '🔥', '💻', '🤝'
+    '📁',
+    '💼',
+    '👥',
+    '⭐',
+    '💡',
+    '🏷️',
+    '🛒',
+    '📌',
+    '🎯',
+    '🔒',
+    '💬',
+    '🚀',
+    '❤️',
+    '🔔',
+    '🎮',
+    '🏠',
+    '📚',
+    '🎨',
+    '🛠️',
+    '✈️',
+    '🎵',
+    '🔥',
+    '💻',
+    '🤝'
   ];
 
   // Domyślna paleta kolorów
   const COLOR_LIST = [
-    '#0084FF', '#00C6FF', '#00C853', '#FFAB00',
-    '#FF3B30', '#AF52DE', '#5856D6', '#FF2D55',
-    '#FF9500', '#64748B'
+    '#0084FF',
+    '#00C6FF',
+    '#00C853',
+    '#FFAB00',
+    '#FF3B30',
+    '#AF52DE',
+    '#5856D6',
+    '#FF2D55',
+    '#FF9500',
+    '#64748B'
   ];
 
   // Domyślne ustawienia
@@ -136,12 +164,14 @@
       // Fallback lokalny
       const localFolders = localStorage.getItem('mf_folders');
       const localThreads = localStorage.getItem('mf_threads');
-      state.folders = localFolders ? JSON.parse(localFolders) : [
-        { id: 'all', name: 'Wszystkie', icon: '💬', color: '#0084FF', isSystem: true },
-        { id: 'work', name: 'Praca', icon: '💼', color: '#10B981', isSystem: false },
-        { id: 'friends', name: 'Znajomi', icon: '👥', color: '#8B5CF6', isSystem: false },
-        { id: 'important', name: 'Ważne', icon: '⭐', color: '#FFB800', isSystem: false }
-      ];
+      state.folders = localFolders
+        ? JSON.parse(localFolders)
+        : [
+            { id: 'all', name: 'Wszystkie', icon: '💬', color: '#0084FF', isSystem: true },
+            { id: 'work', name: 'Praca', icon: '💼', color: '#10B981', isSystem: false },
+            { id: 'friends', name: 'Znajomi', icon: '👥', color: '#8B5CF6', isSystem: false },
+            { id: 'important', name: 'Ważne', icon: '⭐', color: '#FFB800', isSystem: false }
+          ];
       state.threads = localThreads ? JSON.parse(localThreads) : {};
     }
 
@@ -266,11 +296,15 @@
           <button type="button" class="mf-card-btn mf-btn-edit" title="Edytuj folder" data-id="${folder.id}">
             <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
           </button>
-          ${!isSystem ? `
+          ${
+            !isSystem
+              ? `
           <button type="button" class="mf-card-btn mf-btn-del" title="Usuń folder" data-id="${folder.id}">
             <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
           </button>
-          ` : ''}
+          `
+              : ''
+          }
         </div>
       `;
 
@@ -449,7 +483,7 @@
         return;
       }
 
-      const targetId = state.currentEditId || ('f_' + Date.now().toString(36));
+      const targetId = state.currentEditId || 'f_' + Date.now().toString(36);
 
       if (state.currentEditId) {
         if (storage) {
@@ -530,7 +564,7 @@
       folderId: data.folderId || 'uncategorized'
     }));
 
-    const filtered = threads.filter(t => t.name.toLowerCase().includes(q));
+    const filtered = threads.filter((t) => t.name.toLowerCase().includes(q));
     filtered.sort((a, b) => {
       const aIn = state.assignedThreadIds.has(a.id) ? 1 : 0;
       const bIn = state.assignedThreadIds.has(b.id) ? 1 : 0;
@@ -550,7 +584,7 @@
       return;
     }
 
-    filtered.forEach(thread => {
+    filtered.forEach((thread) => {
       const isAssigned = state.assignedThreadIds.has(thread.id);
       const row = document.createElement('div');
       row.className = `mf-dialog-thread-item ${isAssigned ? 'mf-selected' : ''}`;

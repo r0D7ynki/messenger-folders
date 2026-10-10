@@ -13,8 +13,12 @@ class MockClassList {
   constructor() {
     this._classes = new Set();
   }
-  add(...cls) { cls.forEach(c => this._classes.add(c)); }
-  remove(...cls) { cls.forEach(c => this._classes.delete(c)); }
+  add(...cls) {
+    cls.forEach((c) => this._classes.add(c));
+  }
+  remove(...cls) {
+    cls.forEach((c) => this._classes.delete(c));
+  }
   toggle(cls, force) {
     if (force === undefined) {
       if (this._classes.has(cls)) this._classes.delete(cls);
@@ -25,8 +29,12 @@ class MockClassList {
       this._classes.delete(cls);
     }
   }
-  contains(cls) { return this._classes.has(cls); }
-  get value() { return Array.from(this._classes).join(' '); }
+  contains(cls) {
+    return this._classes.has(cls);
+  }
+  get value() {
+    return Array.from(this._classes).join(' ');
+  }
 }
 
 class MockElement {
@@ -41,9 +49,15 @@ class MockElement {
     this.attributes = {};
     this.style = {
       _props: {},
-      setProperty(k, v) { this._props[k] = v; },
-      removeProperty(k) { delete this._props[k]; },
-      getPropertyValue(k) { return this._props[k] || ''; }
+      setProperty(k, v) {
+        this._props[k] = v;
+      },
+      removeProperty(k) {
+        delete this._props[k];
+      },
+      getPropertyValue(k) {
+        return this._props[k] || '';
+      }
     };
     this.textContent = '';
     this._innerHTML = '';
@@ -91,10 +105,18 @@ class MockElement {
     }
   }
 
-  setAttribute(k, v) { this.attributes[k] = String(v); }
-  getAttribute(k) { return this.attributes[k] || null; }
-  hasAttribute(k) { return k in this.attributes; }
-  removeAttribute(k) { delete this.attributes[k]; }
+  setAttribute(k, v) {
+    this.attributes[k] = String(v);
+  }
+  getAttribute(k) {
+    return this.attributes[k] || null;
+  }
+  hasAttribute(k) {
+    return k in this.attributes;
+  }
+  removeAttribute(k) {
+    delete this.attributes[k];
+  }
 
   appendChild(child) {
     child.parentElement = this;
@@ -154,7 +176,7 @@ class MockElement {
       this[fnName](event);
     }
     const handlers = this._listeners[event.type] || [];
-    handlers.forEach(h => h(event));
+    handlers.forEach((h) => h(event));
   }
 
   getBoundingClientRect() {
@@ -172,7 +194,9 @@ class MockElement {
 const mockBody = new MockElement('body');
 global.document = {
   body: mockBody,
-  createElement(tag) { return new MockElement(tag); },
+  createElement(tag) {
+    return new MockElement(tag);
+  },
   getElementById(id) {
     const find = (el) => {
       if (el.id === id) return el;
@@ -184,8 +208,12 @@ global.document = {
     };
     return find(mockBody);
   },
-  querySelector(sel) { return mockBody.querySelector(sel); },
-  querySelectorAll(sel) { return mockBody.querySelectorAll(sel); },
+  querySelector(sel) {
+    return mockBody.querySelector(sel);
+  },
+  querySelectorAll(sel) {
+    return mockBody.querySelectorAll(sel);
+  },
   addEventListener() {},
   removeEventListener() {}
 };
@@ -221,9 +249,15 @@ const bar = ui.renderFolderBar(
   sampleFolders,
   'work',
   { work: 4, friends: 0 },
-  (id) => { selectedId = id; },
-  () => { addClicked = true; },
-  (folder) => { editedFolder = folder; }
+  (id) => {
+    selectedId = id;
+  },
+  () => {
+    addClicked = true;
+  },
+  (folder) => {
+    editedFolder = folder;
+  }
 );
 
 assert.strictEqual(bar.id, 'mf-folder-bar', 'Element paska powinien mieć ID #mf-folder-bar');
@@ -295,7 +329,10 @@ const headerPill = ui.renderHeaderPill(mockHeader, sampleFolders[1], () => {
 });
 
 assert.ok(headerPill, 'Pigułka nagłówka powinna zostać utworzona');
-assert.ok(headerPill.classList.contains('mf-header-pill-assigned'), 'Pigułka powinna mieć klasę mf-header-pill-assigned');
+assert.ok(
+  headerPill.classList.contains('mf-header-pill-assigned'),
+  'Pigułka powinna mieć klasę mf-header-pill-assigned'
+);
 assert.strictEqual(headerPill.querySelector('.mf-header-pill-title').textContent, 'Praca');
 
 headerPill.dispatchEvent({ type: 'click', stopPropagation() {} });
@@ -324,7 +361,9 @@ console.log('Test 5: showFolderModal()...');
 let savedFolder = null;
 ui.showFolderModal({
   folder: null,
-  onSave: (data) => { savedFolder = data; }
+  onSave: (data) => {
+    savedFolder = data;
+  }
 });
 
 assert.ok(ui.activeModal, 'Aktywne okno modalne powinno istnieć w DOM');
@@ -348,7 +387,9 @@ assert.strictEqual(ui.activeModal, null, 'Okno modalne powinno zostać zamknięt
 let backCalled = false;
 ui.showFolderModal({
   folder: sampleFolders[1],
-  onBack: () => { backCalled = true; }
+  onBack: () => {
+    backCalled = true;
+  }
 });
 const backBtn = ui.activeModal.querySelector('.mf-modal-back-btn');
 assert.ok(backBtn, 'Okno modalne folderu musi zawierać przycisk powrotu, gdy przekazano onBack');
@@ -369,7 +410,8 @@ const dropdownItems = ui.activeDropdown.querySelectorAll('.mf-dropdown-item');
 assert.ok(dropdownItems.length >= 3, 'Menu powinno zawierać opcje folderów');
 
 // Kliknięcie w folder friends
-const friendsItem = dropdownItems.find(item => item.textContent && item.textContent.includes('Znajomi')) || dropdownItems[2];
+const friendsItem =
+  dropdownItems.find((item) => item.textContent && item.textContent.includes('Znajomi')) || dropdownItems[2];
 friendsItem.dispatchEvent({ type: 'click' });
 assert.strictEqual(dropdownAssignedFolder, 'friends');
 assert.strictEqual(ui.activeDropdown, null, 'Menu powinno zamknąć się po wyborze');
@@ -419,7 +461,7 @@ const navButtons = ui.activeModal.querySelectorAll('.mf-settings-nav-btn');
 assert.strictEqual(navButtons.length, 3, 'Pasek nawigacji powinien mieć 3 zakładki');
 
 // Sprawdzenie przejścia do zakładki Rozmowy
-const threadsTabBtn = navButtons.find(b => b.dataset.tab === 'threads');
+const threadsTabBtn = navButtons.find((b) => b.dataset.tab === 'threads');
 assert.ok(threadsTabBtn, 'Zakładka Rozmowy powinna istnieć');
 threadsTabBtn.dispatchEvent({ type: 'click' });
 const searchBox = ui.activeModal.querySelector('.mf-settings-threads-search-box');
@@ -438,28 +480,30 @@ assert.strictEqual(testPills.length, 3, 'Powinny być 3 pigułki folderów');
 testSearchInput.value = 'Praca';
 testSearchInput.dispatchEvent({ type: 'input' });
 
-const hiddenPills = Array.from(testPills).filter(p => p.classList.contains('mf-pill-hidden'));
-const visiblePills = Array.from(testPills).filter(p => !p.classList.contains('mf-pill-hidden'));
+const hiddenPills = Array.from(testPills).filter((p) => p.classList.contains('mf-pill-hidden'));
+const visiblePills = Array.from(testPills).filter((p) => !p.classList.contains('mf-pill-hidden'));
 assert.strictEqual(visiblePills.length, 1, 'Tylko folder "Praca" powinien być widoczny');
 assert.strictEqual(hiddenPills.length, 2, 'Pozostałe foldery muszą mieć klasę mf-pill-hidden');
 
 // Wciśnięcie klawisza Enter powinno kliknąć pierwszy widoczny folder
 let clickedPillId = null;
-visiblePills[0].addEventListener('click', () => { clickedPillId = 'work'; });
+visiblePills[0].addEventListener('click', () => {
+  clickedPillId = 'work';
+});
 testSearchInput.dispatchEvent({ type: 'keydown', key: 'Enter', preventDefault() {} });
 assert.strictEqual(clickedPillId, 'work', 'Enter w polu wyszukiwarki powinien wybrać pasujący folder');
 
 // Wyszukiwanie po emoji (np. '👥')
 testSearchInput.value = '👥';
 testSearchInput.dispatchEvent({ type: 'input' });
-const emojiVisible = Array.from(testPills).filter(p => !p.classList.contains('mf-pill-hidden'));
+const emojiVisible = Array.from(testPills).filter((p) => !p.classList.contains('mf-pill-hidden'));
 assert.strictEqual(emojiVisible.length, 1, 'Folder "Znajomi" z ikoną 👥 powinien być widoczny');
 assert.strictEqual(emojiVisible[0].dataset.folderId, 'friends');
 
 // Wyczyszczenie wyszukiwarki
 testSearchInput.value = '';
 testSearchInput.dispatchEvent({ type: 'input' });
-const allVisibleAgain = Array.from(testPills).filter(p => !p.classList.contains('mf-pill-hidden'));
+const allVisibleAgain = Array.from(testPills).filter((p) => !p.classList.contains('mf-pill-hidden'));
 assert.strictEqual(allVisibleAgain.length, 3, 'Wszystkie foldery powinny znów być widoczne po wyczyszczeniu');
 console.log('✓ Wyszukiwarka folderów filtruje pigułki i obsługuje klawisz Enter.');
 
@@ -487,15 +531,21 @@ const threadItems = mockDetector.scanChatList();
 uiWithDetector.detector.scanChatList = () => threadItems;
 
 // Test a: Aktywny filtr 'work', Jan nie należy do 'work' -> Jan ukryty
-uiWithDetector.filterChatRows('work', { '102': { folderId: 'work' } });
+uiWithDetector.filterChatRows('work', { 102: { folderId: 'work' } });
 assert.ok(threadItems[0].rowElement.classList.contains('mf-thread-hidden'), 'Jan powinien być ukryty');
 assert.ok(!threadItems[1].rowElement.classList.contains('mf-thread-hidden'), 'Anna powinna być widoczna');
 
 // Test b: Użytkownik korzysta z natywnego wyszukiwania Messengera -> żaden wiersz nie jest ukrywany
 mockNativeSearchActive = true;
-uiWithDetector.filterChatRows('work', { '102': { folderId: 'work' } });
-assert.ok(!threadItems[0].rowElement.classList.contains('mf-thread-hidden'), 'Jan NIE może być ukryty podczas wyszukiwania na Messengerze');
-assert.ok(!threadItems[1].rowElement.classList.contains('mf-thread-hidden'), 'Anna NIE może być ukryta podczas wyszukiwania na Messengerze');
+uiWithDetector.filterChatRows('work', { 102: { folderId: 'work' } });
+assert.ok(
+  !threadItems[0].rowElement.classList.contains('mf-thread-hidden'),
+  'Jan NIE może być ukryty podczas wyszukiwania na Messengerze'
+);
+assert.ok(
+  !threadItems[1].rowElement.classList.contains('mf-thread-hidden'),
+  'Anna NIE może być ukryta podczas wyszukiwania na Messengerze'
+);
 console.log('✓ filterChatRows() nie ukrywa wątków podczas natywnego wyszukiwania Messengera.');
 
 console.log('\n=============================================');

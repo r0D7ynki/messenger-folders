@@ -53,7 +53,16 @@
       const msgMatch = url.match(/\/messages\/(?:group\/)?([a-zA-Z0-9._-]+)(?:[/?#]|$)/i);
       if (msgMatch && msgMatch[1]) {
         const id = msgMatch[1].toLowerCase();
-        const nonThreadKeywords = ['new', 'requests', 'marketplace', 'settings', 'archive', 'unread', 'active', 'group'];
+        const nonThreadKeywords = [
+          'new',
+          'requests',
+          'marketplace',
+          'settings',
+          'archive',
+          'unread',
+          'active',
+          'group'
+        ];
         if (!nonThreadKeywords.includes(id)) {
           return msgMatch[1];
         }
@@ -63,8 +72,7 @@
       try {
         const base = this.win?.location?.origin || 'https://www.messenger.com';
         const parsedUrl = new URL(url, base);
-        const selectedId = parsedUrl.searchParams.get('selected_item_id') ||
-          parsedUrl.searchParams.get('thread_id');
+        const selectedId = parsedUrl.searchParams.get('selected_item_id') || parsedUrl.searchParams.get('thread_id');
         if (selectedId) {
           return selectedId;
         }
@@ -125,8 +133,11 @@
       if (!rowElement) return '';
 
       // 1. Sprawdzenie atrybutu aria-label na linku lub wierszu
-      const labelCandidate = (linkElement?.getAttribute('aria-label') ||
-        rowElement.getAttribute('aria-label') || '').trim();
+      const labelCandidate = (
+        linkElement?.getAttribute('aria-label') ||
+        rowElement.getAttribute('aria-label') ||
+        ''
+      ).trim();
 
       if (labelCandidate) {
         // Meta często formatuje aria-label jako: "Imię Nazwisko, Ostatnia wiadomość:..."
@@ -152,7 +163,10 @@
 
       // 3. Sprawdzenie nagłówków lub elementów pogrubionych
       const heading = rowElement.querySelector('h2, h3, strong, [role="heading"]');
-      if (heading && (!heading.closest || (!heading.closest('.mf-thread-badge') && !heading.closest('.mf-folder-btn')))) {
+      if (
+        heading &&
+        (!heading.closest || (!heading.closest('.mf-thread-badge') && !heading.closest('.mf-folder-btn')))
+      ) {
         const text = heading.textContent?.trim() || '';
         if (text && !this._isTimeOrBadge(text)) {
           return text;
@@ -180,7 +194,8 @@
     _isTimeOrBadge(text) {
       if (!text) return true;
       // Wzorce czasu: np. "12 min", "1 godz.", "Wczoraj", "14:30", "pn.", "wt."
-      const timePatterns = /^(?:\d{1,2}:\d{2}|\d+\s*(?:min|sek|godz|dni|h|m|s|d)|wczoraj|dzisiaj|pon|wt|śr|czw|pt|sob|niedz|mon|tue|wed|thu|fri|sat|sun)\.?$/i;
+      const timePatterns =
+        /^(?:\d{1,2}:\d{2}|\d+\s*(?:min|sek|godz|dni|h|m|s|d)|wczoraj|dzisiaj|pon|wt|śr|czw|pt|sob|niedz|mon|tue|wed|thu|fri|sat|sun)\.?$/i;
       if (timePatterns.test(text.trim())) {
         return true;
       }
@@ -272,8 +287,7 @@
 
       // 3. Kontener z nagłówkiem "Czaty" lub "Chats"
       const chatsHeader = this.doc.querySelector(
-        'div[aria-label="Czaty"], div[aria-label="Chats"], ' +
-        'h1, [role="heading"][aria-level="1"]'
+        'div[aria-label="Czaty"], div[aria-label="Chats"], ' + 'h1, [role="heading"][aria-level="1"]'
       );
       if (chatsHeader) {
         let parent = chatsHeader.parentElement;
@@ -290,8 +304,9 @@
       const links = this.doc.querySelectorAll('a[href*="/t/"], a[href*="/messages/"]');
       for (const link of links) {
         if (!link.closest('[role="main"]')) {
-          const listContainer = link.closest('[role="grid"], [role="navigation"], [role="region"]') ||
-                                link.parentElement?.parentElement?.parentElement;
+          const listContainer =
+            link.closest('[role="grid"], [role="navigation"], [role="region"]') ||
+            link.parentElement?.parentElement?.parentElement;
           if (listContainer && !listContainer.closest('[role="main"]')) {
             return listContainer;
           }
@@ -356,7 +371,7 @@
             rowElement,
             linkElement: link,
             name,
-            avatar,
+            avatar
           });
         }
       }
@@ -375,20 +390,21 @@
       // Szukamy pola wyszukiwarki Messengera z wykluczeniem elementów wtyczki
       const allInputs = scope.querySelectorAll(
         'input[aria-label*="Szukaj" i], input[aria-label*="Search" i], ' +
-        'input[placeholder*="Szukaj" i], input[placeholder*="Search" i], ' +
-        '[role="search"] input, input[type="search"], ' +
-        'label input, input'
+          'input[placeholder*="Szukaj" i], input[placeholder*="Search" i], ' +
+          '[role="search"] input, input[type="search"], ' +
+          'label input, input'
       );
 
       let searchInput = null;
       for (const input of allInputs) {
-        if (input.closest && (
-          input.closest('#mf-folder-bar') ||
-          input.closest('[data-mf-folder-bar]') ||
-          input.closest('.mf-modal') ||
-          input.closest('.mf-dropdown-menu') ||
-          input.closest('[role="main"]')
-        )) {
+        if (
+          input.closest &&
+          (input.closest('#mf-folder-bar') ||
+            input.closest('[data-mf-folder-bar]') ||
+            input.closest('.mf-modal') ||
+            input.closest('.mf-dropdown-menu') ||
+            input.closest('[role="main"]'))
+        ) {
           continue;
         }
         searchInput = input;
@@ -401,9 +417,7 @@
 
       // Wędrówka w górę drzewa DOM w poszukiwaniu zewnętrznego bloku wyszukiwarki
       let current = searchInput;
-      while (current.parentElement &&
-             current.parentElement !== scope &&
-             current.parentElement !== this.doc?.body) {
+      while (current.parentElement && current.parentElement !== scope && current.parentElement !== this.doc?.body) {
         const parent = current.parentElement;
 
         // Jeśli rodzic zawiera już listę czatów, a sam current jej nie zawiera
@@ -414,9 +428,11 @@
         }
 
         // Jeśli rodzic ma rodzeństwo będące listą czatów
-        if (parent.nextElementSibling &&
-            (parent.nextElementSibling.querySelector('a[href*="/t/"]') ||
-             parent.nextElementSibling.getAttribute('role') === 'grid')) {
+        if (
+          parent.nextElementSibling &&
+          (parent.nextElementSibling.querySelector('a[href*="/t/"]') ||
+            parent.nextElementSibling.getAttribute('role') === 'grid')
+        ) {
           return parent;
         }
 
@@ -435,16 +451,15 @@
       const sidebar = this.getSidebarContainer() || this.doc;
       const allInputs = sidebar.querySelectorAll(
         'input[aria-label*="Szukaj" i], input[aria-label*="Search" i], ' +
-        'input[placeholder*="Szukaj" i], input[placeholder*="Search" i], ' +
-        '[role="search"] input, input[type="search"]'
+          'input[placeholder*="Szukaj" i], input[placeholder*="Search" i], ' +
+          '[role="search"] input, input[type="search"]'
       );
 
       for (const input of allInputs) {
-        if (input.closest && (
-          input.closest('#mf-folder-bar') ||
-          input.closest('[data-mf-folder-bar]') ||
-          input.closest('.mf-modal')
-        )) {
+        if (
+          input.closest &&
+          (input.closest('#mf-folder-bar') || input.closest('[data-mf-folder-bar]') || input.closest('.mf-modal'))
+        ) {
           continue;
         }
 
@@ -469,13 +484,16 @@
 
       // 1. Priorytet: Bezpośrednio pod zewnętrznym kontenerem wyszukiwarki Messengera (bezpiecznie poza wirtualnym scrollerem!)
       const searchContainer = this.findSearchContainer(scope);
-      if (searchContainer && searchContainer.parentElement &&
-          !searchContainer.closest('[role="main"]') &&
-          !searchContainer.closest('#mf-folder-bar')) {
+      if (
+        searchContainer &&
+        searchContainer.parentElement &&
+        !searchContainer.closest('[role="main"]') &&
+        !searchContainer.closest('#mf-folder-bar')
+      ) {
         return {
           target: searchContainer,
           position: 'afterend',
-          container: searchContainer.parentElement,
+          container: searchContainer.parentElement
         };
       }
 
@@ -483,11 +501,11 @@
       const grid = scope.querySelector('[role="grid"]');
       if (grid && grid.parentElement && !grid.closest('[role="main"]') && !grid.closest('#mf-folder-bar')) {
         const gridParent = grid.parentElement;
-        const target = (gridParent && gridParent !== scope && gridParent.parentElement) ? gridParent : grid;
+        const target = gridParent && gridParent !== scope && gridParent.parentElement ? gridParent : grid;
         return {
           target: target,
           position: 'beforebegin',
-          container: target.parentElement,
+          container: target.parentElement
         };
       }
 
@@ -495,11 +513,15 @@
       const firstRowLink = scope.querySelector('a[href*="/t/"], a[href*="/messages/"]');
       if (firstRowLink && !firstRowLink.closest('[role="main"]') && !firstRowLink.closest('#mf-folder-bar')) {
         const row = this.findChatRow(firstRowLink) || firstRowLink;
-        if (row.parentElement && !row.parentElement.closest('[role="main"]') && !row.parentElement.closest('#mf-folder-bar')) {
+        if (
+          row.parentElement &&
+          !row.parentElement.closest('[role="main"]') &&
+          !row.parentElement.closest('#mf-folder-bar')
+        ) {
           return {
             target: row.parentElement,
             position: 'beforebegin',
-            container: row.parentElement.parentElement || row.parentElement,
+            container: row.parentElement.parentElement || row.parentElement
           };
         }
       }
@@ -509,7 +531,7 @@
         return {
           target: sidebar.firstElementChild,
           position: 'afterend',
-          container: sidebar,
+          container: sidebar
         };
       }
 
@@ -617,7 +639,7 @@
         threadId,
         title,
         avatar,
-        url: currentUrl,
+        url: currentUrl
       };
     }
 
@@ -664,12 +686,14 @@
               if (element.closest?.('[role="main"]')) {
                 return true;
               }
-              if (element.id === 'mf-folder-bar' ||
-                  element.closest?.('#mf-folder-bar, .mf-dropdown-menu, .mf-modal-overlay') ||
-                  element.classList?.contains('mf-thread-badge') ||
-                  element.classList?.contains('mf-folder-btn') ||
-                  element.hasAttribute?.('data-mf-thread-id') ||
-                  element.hasAttribute?.('data-mf-folder-bar')) {
+              if (
+                element.id === 'mf-folder-bar' ||
+                element.closest?.('#mf-folder-bar, .mf-dropdown-menu, .mf-modal-overlay') ||
+                element.classList?.contains('mf-thread-badge') ||
+                element.classList?.contains('mf-folder-btn') ||
+                element.hasAttribute?.('data-mf-thread-id') ||
+                element.hasAttribute?.('data-mf-folder-bar')
+              ) {
                 return true;
               }
             }
@@ -705,7 +729,7 @@
         const targetElement = sidebar || this.doc.body;
         observer.observe(targetElement, {
           childList: true,
-          subtree: true,
+          subtree: true
         });
       }
 
@@ -721,7 +745,7 @@
             observer.disconnect();
             observer = null;
           }
-        },
+        }
       };
     }
   }
