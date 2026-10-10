@@ -13,7 +13,7 @@ const noUnsanitized = require('eslint-plugin-no-unsanitized');
 
 module.exports = [
   {
-    ignores: ['node_modules/**', 'web-ext-artifacts/**']
+    ignores: ['node_modules/**', 'web-ext-artifacts/**', '.agents/**']
   },
   js.configs.recommended,
   {
@@ -30,9 +30,17 @@ module.exports = [
         MessengerDOMDetector: 'readonly',
         MessengerFoldersUI: 'readonly',
         MessengerUI: 'readonly',
-        // Eksport warunkowy dla testów w Node
+        MessengerUICore: 'readonly',
+        FolderBarComponent: 'readonly',
+        FolderModalComponent: 'readonly',
+        ThreadMenuComponent: 'readonly',
+        SettingsModalComponent: 'readonly',
+        MessengerRulesEngine: 'readonly',
+        RulesModalComponent: 'readonly',
+        // Eksport i import warunkowy dla testów w Node
         module: 'readonly',
-        global: 'readonly'
+        global: 'readonly',
+        require: 'readonly'
       }
     },
     plugins: { 'no-unsanitized': noUnsanitized },
@@ -45,7 +53,7 @@ module.exports = [
     }
   },
   {
-    files: ['tests/**/*.js', 'eslint.config.js'],
+    files: ['tests/**/*.js', 'eslint.config.js', 'playwright.config.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'commonjs',

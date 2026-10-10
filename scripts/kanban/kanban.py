@@ -14,9 +14,12 @@ Most z rojem (bridge.py w pakiecie swarmboard) importuje ten moduł i używa tyc
 Użycie (z katalogu projektu albo z --root ŚCIEŻKA / KANBAN_ROOT):
   kanban.py                               tablica
   kanban.py new "Tytuł" [--model claude] [--size M] [--priority P2]
-  kanban.py move FO-001 ready             przesunięcie z kontrolą bramki
-  kanban.py check [FO-001]                walidacja bez przesuwania
-  kanban.py next <model>                  pierwsza karta `ready` dla modelu
+  kanban.py move APP-001 ready             przesunięcie z kontrolą bramki
+  kanban.py check [APP-001]                walidacja bez przesuwania
+  kanban.py next <model> [--start]        karta `ready` dla modelu (--start: gałąź + in-progress)
+  kanban.py submit APP-001                 kryteria + Evidence + bramka projektu → review
+  --json (board, check, next, submit)     wyjście dla agentów
+Kody wyjścia: 0 sukces, 1 bramka/walidacja, 2 błąd użycia, 3 brak karty do wzięcia.
 """
 
 from __future__ import annotations
@@ -45,7 +48,7 @@ SIZE_ORDER = ["S", "M", "L"]
 DEPS_PLANNED = {"ready", "in-progress", "review", "done"}
 DEPS_AVAILABLE = {"review", "done"}
 
-# Kanoniczne nagłówki sekcji → dawne polskie nagłówki (karty z messenger-folders nadal działają)
+# Kanoniczne nagłówki sekcji → polskie nagłówki (starsze polskie karty nadal działają)
 SECTION_ALIASES = {
     "Goal": ("Cel",),
     "Context": ("Kontekst",),
@@ -180,7 +183,13 @@ class Board:
         config_file = root / "kanban" / "config.json"
         if not config_file.exists():
             raise KanbanError(tr("kanban.error.no_config", path=config_file))
-        self.config = json.loads(config_file.read_text(encoding="utf-8"))
+        try:
+            self.config = json.loads(config_file.read_text(encoding="utf-8"))
+        except ValueError as e:
+            raise KanbanError(tr("kanban.error.bad_config", path=config_file, error=e)) from e
+        if not isinstance(self.config, dict):
+            error = type(self.config).__name__
+            raise KanbanError(tr("kanban.error.bad_config", path=config_file, error=error))
         self.headings = self.config.get("headings", "en")
         if not isinstance(self.headings, str) or self.headings not in HEADINGS:
             raise KanbanError(
@@ -203,7 +212,7 @@ class Board:
         for path in sorted(self.tasks_dir.glob("*.md")):
             try:
                 cards.append(Card.load(path))
-            except (KanbanError, UnicodeDecodeError) as e:
+            except (KanbanError, UnicodeDecodeError, OSError) as e:  # OSError: znikła, brak praw
                 self.load_errors[path.name] = str(e)
         return cards
 
@@ -311,20 +320,24 @@ class Board:
         elif reviewer == card.meta.get("model"):
             errors.append(tr("kanban.dod.self_review"))
         if run_gate and not errors:
-            for cmd in self.config.get("gate", []):
-                res = subprocess.run(
-                    cmd,
-                    shell=True,
-                    cwd=self.root,
-                    text=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                )
-                if res.returncode != 0:
-                    tail = "\n".join(res.stdout.strip().splitlines()[-8:])
-                    errors.append(
-                        tr("kanban.dod.gate_failed", cmd=cmd, code=res.returncode, tail=tail)
-                    )
+            errors += self.run_gate(tail_lines=8)
+        return errors
+
+    def run_gate(self, tail_lines: int) -> list[str]:
+        """Wszystkie polecenia `gate` w katalogu projektu; każdy błąd z ostatnimi liniami."""
+        errors = []
+        for cmd in self.config.get("gate", []):
+            res = subprocess.run(
+                cmd,
+                shell=True,
+                cwd=self.root,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+            )
+            if res.returncode != 0:
+                tail = "\n".join(res.stdout.strip().splitlines()[-tail_lines:])
+                errors.append(tr("kanban.dod.gate_failed", cmd=cmd, code=res.returncode, tail=tail))
         return errors
 
     def gate_errors(self, card: Card, to: str, cards: list[Card]) -> list[str]:
@@ -443,9 +456,14 @@ class Board:
             result[c.id or c.path.name] = errors
         return result
 
-    def next_card(self, model: str) -> Card | None:
-        ready = [c for c in self.cards() if c.status == "ready" and c.meta.get("model") == model]
-        ready.sort(key=lambda c: (priority_rank(c.meta.get("priority", "")), c.id))
+    def ready_cards(self, model: str, cards: list[Card] | None = None) -> list[Card]:
+        """Karty `ready` modelu w kolejności priorytetu (P1 < P2 …), potem id."""
+        pool = self.cards() if cards is None else cards
+        ready = [c for c in pool if c.status == "ready" and c.meta.get("model") == model]
+        return sorted(ready, key=priority_key)
+
+    def next_card(self, model: str, cards: list[Card] | None = None) -> Card | None:
+        ready = self.ready_cards(model, cards)
         return ready[0] if ready else None
 
     def print_board(self) -> None:
@@ -465,6 +483,11 @@ class Board:
         print()
 
 
+def priority_key(card: Card) -> tuple[int, str]:
+    """Kolejność kart w kolumnie: priorytet (P1 < P2 …), potem id."""
+    return priority_rank(card.meta.get("priority", "")), card.id
+
+
 def priority_rank(priority: str) -> int:
     """P1 < P2 < … < P10 (liczbowo); brak albo inny zapis → na koniec."""
     m = re.fullmatch(r"[Pp](\d+)", priority.strip())
@@ -472,34 +495,10 @@ def priority_rank(priority: str) -> int:
 
 
 # Token w backtickach to ścieżka, gdy ma `/` albo jedno z tych rozszerzeń (`Board.cards` — nie)
-FILE_EXTENSIONS = {
-    "py",
-    "js",
-    "mjs",
-    "cjs",
-    "ts",
-    "tsx",
-    "jsx",
-    "json",
-    "md",
-    "toml",
-    "yml",
-    "yaml",
-    "html",
-    "css",
-    "sh",
-    "txt",
-    "sql",
-    "cfg",
-    "ini",
-    "lock",
-    "csv",
-    "xml",
-    "svg",
-    "png",
-    "po",
-    "env",
-}
+FILE_EXTENSIONS = set(
+    "py js mjs cjs ts tsx jsx json md toml yml yaml html css sh txt sql cfg ini lock csv xml svg "
+    "png po env".split()
+)
 
 
 def missing_files(root: Path, files_section: str) -> list[str]:
@@ -551,6 +550,27 @@ def dependency_cycle(cards: list[Card]) -> str | None:
     return None
 
 
+def card_summary(card: Card) -> dict[str, object]:
+    """Karta jako słownik dla `--json` (stabilne pola dla agentów)."""
+    meta = card.meta
+    return {
+        "id": card.id,
+        "title": meta.get("title", ""),
+        "status": card.status,
+        "model": meta.get("model", ""),
+        "size": meta.get("size", ""),
+        "priority": meta.get("priority", ""),
+        "depends": card.dependencies(),
+        "worker": meta.get("worker") or None,
+        "branch": meta.get("branch") or None,
+        "path": str(card.path),
+    }
+
+
+def print_json(data: object) -> None:
+    print(json.dumps(data, ensure_ascii=False, indent=2))
+
+
 def find_root(arg: str | None) -> Path:
     """--root > KANBAN_ROOT > katalog główny repo git z bieżącego katalogu > bieżący katalog."""
     if arg or os.getenv("KANBAN_ROOT"):
@@ -564,62 +584,151 @@ def find_root(arg: str | None) -> Path:
     return Path(res.stdout.strip()) if res.returncode == 0 else Path.cwd()
 
 
-def main(argv: list[str] | None = None) -> int:
+# Kody wyjścia (stałe dla agentów): 0 sukces, 1 bramka/walidacja, 2 błąd użycia, 3 brak karty
+EXIT_OK, EXIT_FAILED, EXIT_NOTHING = 0, 1, 3
+
+
+def print_errors(header: str, errors: list[str]) -> None:
+    print(header, file=sys.stderr)
+    for e in errors:
+        print(f"  - {e}", file=sys.stderr)
+
+
+def cmd_board(board: Board, args: argparse.Namespace) -> int:
+    if getattr(args, "json", False):
+        cards = board.cards()
+        columns = {col: [card_summary(c) for c in cards if c.status == col] for col in COLUMNS}
+        print_json({"columns": columns, "unreadable": board.load_errors})
+    else:
+        board.print_board()
+    return EXIT_OK
+
+
+def cmd_new(board: Board, args: argparse.Namespace) -> int:
+    card = board.create(args.title, args.model, args.size, args.priority)
+    print(tr("kanban.cli.created", path=card.path.relative_to(board.root)))
+    return EXIT_OK
+
+
+def cmd_move(board: Board, args: argparse.Namespace) -> int:
+    frm = board.card(args.id).status
+    errors = board.move(args.id, args.to)
+    if errors:
+        print_errors(tr("kanban.cli.cannot_move", card_id=args.id, frm=frm, to=args.to), errors)
+        return EXIT_FAILED
+    print(f"✓ {args.id}: {frm} → {args.to}")
+    return EXIT_OK
+
+
+def cmd_check(board: Board, args: argparse.Namespace) -> int:
+    result = board.check(args.id)
+    ok = not any(result.values())
+    if args.json:
+        print_json({"ok": ok, "cards": result})
+    else:
+        for card_id, errors in result.items():
+            print(f"{'✗' if errors else '✓'} {card_id}")
+            for e in errors:
+                print(f"  - {e}")
+    return EXIT_OK if ok else EXIT_FAILED
+
+
+def load_workflow():
+    """workflow.py z pakietu albo leżący obok kopii w projekcie."""
+    try:
+        from . import workflow
+    except ImportError:
+        import workflow  # type: ignore[no-redef]
+    return workflow
+
+
+def cmd_next(board: Board, args: argparse.Namespace) -> int:
+    if args.start:
+        result = load_workflow().start(board, args.model)
+    else:
+        result = {
+            "card": board.next_card(args.model),
+            "branch": None,
+            "base": None,
+            "resumed": False,
+            "errors": [],
+        }
+    card, errors = result["card"], result["errors"]
+    if args.json:
+        print_json({**result, "card": card_summary(card) if card else None})
+    elif card is None:
+        print(tr("kanban.cli.no_ready", model=args.model))
+    elif errors:
+        print_errors(tr("kanban.start.refused", card_id=card.id), errors)
+    elif args.start:
+        key = "kanban.start.resumed" if result["resumed"] else "kanban.start.started"
+        print(tr(key, card_id=card.id, branch=result["branch"], base=result["base"]))
+    else:
+        print(card.path.relative_to(board.root))
+    if card is None:
+        return EXIT_NOTHING
+    return EXIT_FAILED if errors else EXIT_OK
+
+
+def cmd_submit(board: Board, args: argparse.Namespace) -> int:
+    errors = load_workflow().submit(board, args.id)
+    if args.json:
+        print_json({"card": args.id, "status": board.card(args.id).status, "errors": errors})
+    elif errors:
+        print_errors(tr("kanban.submit.refused", card_id=args.id), errors)
+    else:
+        print(tr("kanban.submit.done", card_id=args.id))
+    return EXIT_FAILED if errors else EXIT_OK
+
+
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=tr("kanban.cli.description"))
     parser.add_argument("--root", help=tr("kanban.cli.root_help"))
     sub = parser.add_subparsers(dest="cmd")
-    sub.add_parser("board", help=tr("kanban.cli.board_help"))
-    p_new = sub.add_parser("new", help=tr("kanban.cli.new_help"))
-    p_new.add_argument("title")
-    p_new.add_argument("--model", default="claude")
-    p_new.add_argument("--size", default="M", choices=SIZE_ORDER)
-    p_new.add_argument("--priority", default="P2")
-    p_move = sub.add_parser("move", help=tr("kanban.cli.move_help"))
-    p_move.add_argument("id")
-    p_move.add_argument("to", choices=COLUMNS)
-    p_check = sub.add_parser("check", help=tr("kanban.cli.check_help"))
-    p_check.add_argument("id", nargs="?")
-    p_next = sub.add_parser("next", help=tr("kanban.cli.next_help"))
-    p_next.add_argument("model")
-    args = parser.parse_args(argv)
+    p = sub.add_parser("board", help=tr("kanban.cli.board_help"))
+    p.add_argument("--json", action="store_true", help=tr("kanban.cli.json_help"))
+    p = sub.add_parser("new", help=tr("kanban.cli.new_help"))
+    p.add_argument("title")
+    p.add_argument("--model", default="claude")
+    p.add_argument("--size", default="M", choices=SIZE_ORDER)
+    p.add_argument("--priority", default="P2")
+    p = sub.add_parser("move", help=tr("kanban.cli.move_help"))
+    p.add_argument("id")
+    p.add_argument("to", choices=COLUMNS)
+    p = sub.add_parser("check", help=tr("kanban.cli.check_help"))
+    p.add_argument("id", nargs="?")
+    p.add_argument("--json", action="store_true", help=tr("kanban.cli.json_help"))
+    p = sub.add_parser("next", help=tr("kanban.cli.next_help"))
+    p.add_argument("model")
+    p.add_argument("--start", action="store_true", help=tr("kanban.cli.start_help"))
+    p.add_argument("--json", action="store_true", help=tr("kanban.cli.json_help"))
+    p = sub.add_parser("submit", help=tr("kanban.cli.submit_help"))
+    p.add_argument("id")
+    p.add_argument("--json", action="store_true", help=tr("kanban.cli.json_help"))
+    return parser
 
+
+COMMANDS = {
+    None: cmd_board,
+    "board": cmd_board,
+    "new": cmd_new,
+    "move": cmd_move,
+    "check": cmd_check,
+    "next": cmd_next,
+    "submit": cmd_submit,
+}
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
     try:
-        board = Board(find_root(args.root))
-        if args.cmd in (None, "board"):
-            board.print_board()
-        elif args.cmd == "new":
-            card = board.create(args.title, args.model, args.size, args.priority)
-            print(tr("kanban.cli.created", path=card.path.relative_to(board.root)))
-        elif args.cmd == "move":
-            frm = board.card(args.id).status
-            errors = board.move(args.id, args.to)
-            if errors:
-                print(
-                    tr("kanban.cli.cannot_move", card_id=args.id, frm=frm, to=args.to),
-                    file=sys.stderr,
-                )
-                for e in errors:
-                    print(f"  - {e}", file=sys.stderr)
-                return 1
-            print(f"✓ {args.id}: {frm} → {args.to}")
-        elif args.cmd == "check":
-            result = board.check(args.id)
-            for card_id, errors in result.items():
-                print(f"{'✗' if errors else '✓'} {card_id}")
-                for e in errors:
-                    print(f"  - {e}")
-            return 1 if any(result.values()) else 0
-        elif args.cmd == "next":
-            card = board.next_card(args.model)
-            print(
-                card.path.relative_to(board.root)
-                if card
-                else tr("kanban.cli.no_ready", model=args.model)
-            )
+        return COMMANDS[args.cmd](Board(find_root(args.root)), args)
     except KanbanError as e:
-        print(f"✗ {e}", file=sys.stderr)
-        return 1
-    return 0
+        if getattr(args, "json", False):  # agent z --json dostaje JSON także przy błędzie
+            print_json({"errors": [str(e)]})
+        else:
+            print(f"✗ {e}", file=sys.stderr)
+        return EXIT_FAILED
 
 
 if __name__ == "__main__":

@@ -3,7 +3,10 @@ node_modules/
 web-ext-artifacts/
 *.md
 package-lock.json
+pnpm-lock.yaml
+pnpm-workspace.yaml
 eslint-suppressions.json
 kanban/
 docs/
 icons/
+.agents/
