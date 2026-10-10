@@ -2,8 +2,8 @@
  * Messenger Folders - Konfiguracja ESLint (flat config)
  *
  * Kod rozszerzenia to klasyczne skrypty (bez modułów ES) ładowane
- * przez manifest.json, testy działają w Node (CommonJS), a narzędzia w tools/
- * to moduły ES. Plugin no-unsanitized (Mozilla) oznacza każde przypisanie
+ * przez manifest.json, a testy działają w Node (CommonJS).
+ * Plugin no-unsanitized (Mozilla) oznacza każde przypisanie
  * do innerHTML/outerHTML i wywołanie insertAdjacentHTML z dynamiczną treścią.
  */
 
@@ -53,14 +53,6 @@ module.exports = [
     },
     rules: {
       'no-unused-vars': ['warn', { args: 'none', caughtErrors: 'none' }]
-    }
-  },
-  {
-    files: ['tools/**/*.mjs'],
-    languageOptions: {
-      ecmaVersion: 2022,
-      sourceType: 'module',
-      globals: { ...globals.node }
     }
   }
 ];

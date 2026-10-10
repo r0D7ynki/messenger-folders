@@ -7,9 +7,9 @@ Skrypt pilnuje bramek: DoR przy wejściu do `ready`, DoR + WIP + gotowych zależ
 `in-progress`, kryteriów akceptacji i sekcji Evidence przy `review`, DoD (ogólnego + modelowego)
 i polecenia bramki projektu (`gate` w kanban/config.json) przy `done`.
 
-Plik jest samowystarczalny (tylko biblioteka standardowa) — `swarmboard.py init` kopiuje go do
+Plik jest samowystarczalny (tylko biblioteka standardowa) — `sb init` kopiuje go do
 projektu (domyślnie scripts/kanban/kanban.py), żeby tablica działała bez swarmboard.
-Most z rojem agentów (swarm_kanban.py) importuje ten moduł i używa tych samych bramek.
+Most z rojem (bridge.py w pakiecie swarmboard) importuje ten moduł i używa tych samych bramek.
 
 Użycie (z katalogu projektu albo z --root ŚCIEŻKA / KANBAN_ROOT):
   kanban.py                               tablica
@@ -31,7 +31,12 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from i18n import tr
+try:  # w pakiecie swarmboard
+    from .i18n import tr
+except ImportError:  # kopia w projekcie (scripts/kanban/), bez pakietu
+    # i18n.py leży obok; dopisujemy katalog jawnie, bo `python3 -I` go pomija
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from i18n import tr  # type: ignore[no-redef]
 
 COLUMNS = ["backlog", "ready", "in-progress", "review", "done"]
 SIZE_ORDER = ["S", "M", "L"]
@@ -53,8 +58,11 @@ SECTION_ALIASES = {
     "Log": (),
 }
 
-# Znacznik nowego pliku w sekcji Files: `ścieżka (new)` albo `ścieżka (nowy)`
+# Znaczniki w sekcji Files: plik powstaje w zadaniu (`(new)`/`(nowy)`) albo znika — usunięty
+# lub przeniesiony (`(removed)`/`(usunięty)`); takiego pliku DoR nie wymaga na dysku
 NEW_FILE_MARKERS = ("(new)", "(nowy)")
+REMOVED_FILE_MARKERS = ("(removed)", "(usunięty)")
+PATH_MARKERS = NEW_FILE_MARKERS + REMOVED_FILE_MARKERS
 # Sekcje nowej karty; podpowiedzi w komentarzach HTML pochodzą ze słownika (kanban.template.*)
 TEMPLATE_SECTIONS = [
     ("Goal", "goal"),
@@ -496,21 +504,21 @@ FILE_EXTENSIONS = {
 
 def missing_files(root: Path, files_section: str) -> list[str]:
     """
-    Ścieżki z sekcji Files, których brak na dysku. Nowy plik oznacza znacznik `(new)`/`(nowy)`
-    w tej samej linii — w backtickach albo za nimi.
+    Ścieżki z sekcji Files, których brak na dysku. Nowy plik oznacza znacznik `(new)`/`(nowy)`,
+    usunięty albo przeniesiony — `(removed)`/`(usunięty)`; w tej samej linii, przy ścieżce.
     """
     missing = []
     for line in files_section.splitlines():
-        is_new = any(marker in line for marker in NEW_FILE_MARKERS)
+        may_be_absent = any(marker in line for marker in PATH_MARKERS)
         for ref in re.findall(r"`([^`]+)`", line):
             ref = ref.strip()
-            for marker in NEW_FILE_MARKERS:
+            for marker in PATH_MARKERS:
                 ref = ref.removesuffix(marker).strip()
             path = re.sub(r":\d+(-\d+)?$", "", ref)
             extension = path.rsplit(".", 1)[-1].lower() if "." in path else ""
             if " " in path or ("/" not in path and extension not in FILE_EXTENSIONS):
                 continue  # polecenie, nazwa funkcji, atrybut
-            if not is_new and not (root / path).exists():
+            if not may_be_absent and not (root / path).exists():
                 missing.append(path)
     return missing
 
@@ -547,7 +555,12 @@ def find_root(arg: str | None) -> Path:
     """--root > KANBAN_ROOT > katalog główny repo git z bieżącego katalogu > bieżący katalog."""
     if arg or os.getenv("KANBAN_ROOT"):
         return Path(arg or os.environ["KANBAN_ROOT"]).expanduser().resolve()
-    res = subprocess.run(["git", "rev-parse", "--show-toplevel"], text=True, capture_output=True)
+    try:
+        res = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"], text=True, capture_output=True
+        )
+    except FileNotFoundError:  # brak gita — tablica w bieżącym katalogu
+        return Path.cwd()
     return Path(res.stdout.strip()) if res.returncode == 0 else Path.cwd()
 
 
