@@ -4,8 +4,8 @@ Format: `D-NNN` · data · status (`proponowana` / `przyjęta` / `odrzucona` / `
 
 ## D-001 · 2026-10-10 · przyjęta — Plikowy Kanban z bramkami DoR/DoD
 
-**Decyzja:** zadania żyją jako `kanban/tasks/MF-XXX.md`, a bramki egzekwuje `tools/kanban.mjs`
-(czysty Node, bez zależności). `AGENTS.md` jest jedynym źródłem zasad dla wszystkich modeli.
+**Decyzja:** zadania żyją jako `kanban/tasks/MF-XXX.md`, a bramki egzekwuje `scripts/kanban/kanban.py`
+(ze swarmboard; pierwotnie `tools/kanban.mjs`, zmigrowane w D-007). `AGENTS.md` jest jedynym źródłem zasad dla wszystkich modeli.
 **Powód:** każdy agent (Claude Code, Antigravity, opencode/aider z DeepSeek) umie czytać i edytować
 pliki; zewnętrzna tablica (GitHub Projects, Linear) wymagałaby osobnej integracji dla każdego
 narzędzia. Historia kart jest w gicie.
@@ -41,7 +41,7 @@ Wraca do `verify`, jeśli zapadnie decyzja o wsparciu Firefoksa (MF-009).
 i ludzi według kart `kanban/tasks/`. Szczegóły: `WORKFLOW.md` → „GitHub Issues a karty Kanban”.
 
 ## D-006 · 2026-10-10 · przyjęta — Prettier i jednorazowe przeformatowanie
-
+ 
 **Decyzja:** Prettier (`printWidth` 120, `trailingComma` none, pojedyncze cudzysłowy) dla kodu;
 Markdown, karty i dokumentacja poza formatowaniem. Przeformatowanie w osobnym pull requeście
 i osobnym commicie wpisanym do `.git-blame-ignore-revs`.
@@ -50,3 +50,14 @@ stylu. Ustawienia dobrane pomiarem: najmniej zmienionych linii (~1390 z ~8800) p
 z dotychczasowym stylem.
 **Alternatywy:** Biome (szybszy, lint + format w jednym, ale bez odpowiednika `no-unsanitized`);
 `printWidth` 100 (~1715 zmienionych linii).
+
+## D-007 · 2026-10-10 · przyjęta — Migracja tablicy Kanban na swarmboard (scripts/kanban/kanban.py)
+
+**Decyzja:** zastąpienie prototypowego `tools/kanban.mjs` narzędziem `scripts/kanban/kanban.py`
+ze swarmboard v0.3.0 (`kanban.py`, `i18n.py`, słowniki `locales/`). Usunięcie `tools/kanban.mjs`
+oraz nieużywanych reguł dla `tools/` z `eslint.config.js`. Konfiguracja tablicy w `kanban/config.json`
+używa `"headings": "pl"`, `"tool_dir": "scripts/kanban"`, `"gate": ["npm run verify"]`
+i `"swarmboard_version": "0.3.0"`.
+**Powód:** ujednolicenie silnika tablicy z ekosystemem swarmboard (obsługa roju, niezależny reviewer,
+wielojęzyczność, lepsza diagnostyka przez `sb doctor`).
+
