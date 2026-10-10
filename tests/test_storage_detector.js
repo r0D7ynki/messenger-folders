@@ -256,6 +256,154 @@ async function runStorageTests() {
   assert.strictEqual(notified, true, 'Funkcja zwrotna onChange powinna zostać wywołana');
   unsubscribe();
   console.log('✓ storage.onChange() powiadamia o zmianach w magazynie danych');
+
+  // --- Testy MF-002: Walidacja folderów przy imporcie JSON i zapisie ---
+  console.log('\n--- Testy MF-002: Walidacja folderów (_normalizeFolder, saveFolder, importData) ---');
+
+  // 1. Testy metody pomocniczej _normalizeFolder
+  // Walidacja koloru:
+  assert.strictEqual(
+    storage._normalizeFolder({ id: 'f1', name: 'Test', color: 'red;background:url(x)' }).color,
+    '#0084FF',
+    'Złośliwy kolor CSS powinien zostać zastąpiony domyślnym #0084FF'
+  );
+  assert.strictEqual(
+    storage._normalizeFolder({ id: 'f1', name: 'Test', color: '#123' }).color,
+    '#0084FF',
+    'Niepoprawny kolor 3-znakowy powinien zostać zastąpiony #0084FF'
+  );
+  assert.strictEqual(
+    storage._normalizeFolder({ id: 'f1', name: 'Test', color: '#1122AA' }).color,
+    '#1122AA',
+    'Poprawny kolor 6-znakowy HEX powinien zostać zachowany'
+  );
+
+  // Walidacja ikony:
+  assert.strictEqual(
+    storage._normalizeFolder({ id: 'f1', name: 'Test', icon: '123456789' }).icon,
+    '📁',
+    'Ikona dłuższa niż 8 znaków powinna zostać zastąpiona 📁'
+  );
+  assert.strictEqual(
+    storage._normalizeFolder({ id: 'f1', name: 'Test', icon: '<script>' }).icon,
+    '📁',
+    'Ikona zawierająca znak < powinna zostać zastąpiona 📁'
+  );
+  assert.strictEqual(
+    storage._normalizeFolder({ id: 'f1', name: 'Test', icon: 'a>b' }).icon,
+    '📁',
+    'Ikona zawierająca znak > powinna zostać zastąpiona 📁'
+  );
+  assert.strictEqual(
+    storage._normalizeFolder({ id: 'f1', name: 'Test', icon: '🎯' }).icon,
+    '🎯',
+    'Prawidłowa krótka ikona/emoji powinna zostać zachowana'
+  );
+
+  // Walidacja nazwy:
+  const longName = 'A'.repeat(55);
+  assert.strictEqual(
+    storage._normalizeFolder({ id: 'f1', name: longName }).name,
+    'A'.repeat(40),
+    'Nazwa folderu powinna zostać przycięta do 40 znaków'
+  );
+  assert.strictEqual(
+    storage._normalizeFolder({ id: 'f1', name: '   ' }),
+    null,
+    'Folder z pustą nazwą powinien zwrócić null'
+  );
+
+  // Walidacja id:
+  assert.strictEqual(
+    storage._normalizeFolder({ id: 'invalid id with spaces', name: 'Test' }),
+    null,
+    'Folder z niedozwolonymi znakami w id powinien zwrócić null'
+  );
+  assert.strictEqual(
+    storage._normalizeFolder({ id: 'id/with/slashes', name: 'Test' }),
+    null,
+    'Folder z ukośnikiem w id powinien zwrócić null'
+  );
+  assert.strictEqual(
+    storage._normalizeFolder({ id: 'a'.repeat(65), name: 'Test' }),
+    null,
+    'Folder ze zbyt długim id (>64 znaków) powinien zwrócić null'
+  );
+  assert.strictEqual(storage._normalizeFolder(null), null, 'Nieobiektowy folder powinien zwrócić null');
+  console.log('✓ _normalizeFolder poprawnie weryfikuje i sanitizuje pola folderu');
+
+  // 2. Testy saveFolder z niebezpiecznymi/nieprawidłowymi wartościami
+  const sanitizedFolder = await storage.saveFolder({
+    name: 'B'.repeat(60),
+    icon: '<img onerror=alert(1)>',
+    color: 'red;background:url(x)'
+  });
+  assert.strictEqual(sanitizedFolder.name, 'B'.repeat(40), 'saveFolder przycina nazwę do 40 znaków');
+  assert.strictEqual(sanitizedFolder.icon, '📁', 'saveFolder zamienia niebezpieczną ikonę na 📁');
+  assert.strictEqual(sanitizedFolder.color, '#0084FF', 'saveFolder zamienia złośliwy kolor na #0084FF');
+
+  await assert.rejects(async () => {
+    await storage.saveFolder({ id: 'invalid id!', name: 'Poprawna nazwa' });
+  }, /Niepoprawne dane folderu\./);
+  console.log('✓ saveFolder stosuje reguły normalizacji i odrzuca nieprawidłowe identyfikatory');
+
+  // 3. Testy importData z pomijaniem nieprawidłowych folderów i nieobiektowych przypisań wątków
+  const maliciousBackup = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    folders: [
+      { id: 'valid_1', name: 'X'.repeat(50), icon: 'icon_too_long_123', color: 'red;background:url(x)' },
+      { id: 'bad id space', name: 'Zły ID ze spacją', icon: '📁', color: '#112233' },
+      { id: 'bad/slash', name: 'Zły ID z ukośnikiem', icon: '📁', color: '#112233' },
+      { id: 'bad_empty_name', name: '   ', icon: '📁', color: '#112233' },
+      { id: 'valid_1', name: 'Duplikat ID', icon: '📁', color: '#112233' }
+    ],
+    threads: {
+      t1: { folderId: 'valid_1', name: 'Poprawny wątek' },
+      t2: 'niepoprawny string zamiast obiektu',
+      t3: 12345,
+      t4: null,
+      t5: ['tablica', 'zamiast', 'obiektu']
+    },
+    activeFolder: 'valid_1'
+  };
+
+  await storage.importData(maliciousBackup);
+  const importedList = await storage.getFolders();
+  const validFolder = importedList.find((f) => f.id === 'valid_1');
+  assert.ok(validFolder, 'Poprawny folder powinien zostać zaimportowany');
+  assert.strictEqual(validFolder.name, 'X'.repeat(40), 'Zaimportowana nazwa powinna być przycięta do 40 znaków');
+  assert.strictEqual(validFolder.icon, '📁', 'Zaimportowana zbyt długa ikona powinna być zastąpiona 📁');
+  assert.strictEqual(validFolder.color, '#0084FF', 'Złośliwy kolor powinien być zastąpiony #0084FF');
+
+  assert.strictEqual(
+    importedList.some((f) => f.id === 'bad id space'),
+    false,
+    'Folder ze spacją w id powinien zostać pominięty'
+  );
+  assert.strictEqual(
+    importedList.some((f) => f.id === 'bad/slash'),
+    false,
+    'Folder z ukośnikiem w id powinien zostać pominięty'
+  );
+  assert.strictEqual(
+    importedList.some((f) => f.id === 'bad_empty_name'),
+    false,
+    'Folder z pustą nazwą powinien zostać pominięty'
+  );
+  assert.strictEqual(
+    importedList.filter((f) => f.id === 'valid_1').length,
+    1,
+    'Zduplikowany folder powinien zostać zaimportowany tylko raz'
+  );
+
+  const threadsMap = await storage.getAllThreads();
+  assert.ok(threadsMap.t1, 'Prawidłowe przypisanie wątku t1 powinno zostać zachowane');
+  assert.strictEqual(threadsMap.t2, undefined, 'Nieobiektowe przypisanie string powinno zostać odrzucone');
+  assert.strictEqual(threadsMap.t3, undefined, 'Nieobiektowe przypisanie number powinno zostać odrzucone');
+  assert.strictEqual(threadsMap.t4, undefined, 'Nieobiektowe przypisanie null powinno zostać odrzucone');
+  assert.strictEqual(threadsMap.t5, undefined, 'Nieobiektowe przypisanie array powinno zostać odrzucone');
+  console.log('✓ importData pomija foldery z niepoprawnym id oraz nieobiektowe przypisania wątków');
 }
 
 // 3. Testy MessengerDOMDetector
