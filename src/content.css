@@ -10,7 +10,7 @@
 
 :root {
   /* Krój pisma platformy */
-  --mf-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mf-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 
   /* Zmienne motywu z bezpiecznymi wartościami domyślnymi (motyw jasny) */
   --mf-bg-surface: var(--surface-background, #ffffff);
@@ -77,7 +77,7 @@
 
 /* Obsługa klas i atrybutów ciemnego motywu Messengera / Facebooka */
 .__fb-dark-mode,
-[data-theme="dark"],
+[data-theme='dark'],
 .dark-mode {
   --mf-bg-surface: var(--surface-background, #242526);
   --mf-bg-wash: var(--web-wash, #18191a);
@@ -117,14 +117,13 @@
   box-sizing: border-box !important;
 }
 
-
 /* ==========================================================================
    2. PASEK FOLDERÓW (#mf-folder-bar, .mf-folder-bar)
    ========================================================================== */
 
 #mf-folder-bar,
 .mf-folder-bar,
-[data-mf-folder-bar="true"] {
+[data-mf-folder-bar='true'] {
   display: flex !important;
   flex-direction: column !important;
   align-items: stretch !important;
@@ -151,7 +150,9 @@
   isolation: isolate !important;
   contain: layout style !important;
   clear: both !important;
-  transition: background var(--mf-transition-normal), border-color var(--mf-transition-normal);
+  transition:
+    background var(--mf-transition-normal),
+    border-color var(--mf-transition-normal);
 }
 
 /* Górny wiersz paska: wyszukiwarka folderów i przycisk ustawień */
@@ -181,7 +182,9 @@
   border-radius: 14px !important;
   padding: 0 8px !important;
   box-sizing: border-box !important;
-  transition: border-color var(--mf-transition-fast), box-shadow var(--mf-transition-fast) !important;
+  transition:
+    border-color var(--mf-transition-fast),
+    box-shadow var(--mf-transition-fast) !important;
 }
 
 .mf-folder-search-box:focus-within {
@@ -244,7 +247,9 @@
   padding: 0 !important;
   margin-left: 4px !important;
   flex-shrink: 0 !important;
-  transition: color var(--mf-transition-fast), background var(--mf-transition-fast) !important;
+  transition:
+    color var(--mf-transition-fast),
+    background var(--mf-transition-fast) !important;
 }
 
 .mf-folder-search-clear:hover {
@@ -311,7 +316,7 @@
 /* Reset stylów natywnych przycisków wewnątrz paska dla przeglądarki Brave */
 #mf-folder-bar button,
 .mf-folder-bar button,
-[data-mf-folder-bar="true"] button {
+[data-mf-folder-bar='true'] button {
   appearance: none !important;
   -webkit-appearance: none !important;
   border: none;
@@ -328,7 +333,7 @@
 
 /* Kontener przewijany w poziomie z blokadą rozszerzania Flexbox */
 .mf-folder-scroll-container,
-[data-mf-scroll-container="true"] {
+[data-mf-scroll-container='true'] {
   display: flex !important;
   flex-direction: row !important;
   align-items: center !important;
@@ -345,12 +350,12 @@
   padding: 2px 4px !important;
   height: 100% !important;
   -ms-overflow-style: none !important; /* IE i Edge */
-  scrollbar-width: none !important;    /* Firefox */
+  scrollbar-width: none !important; /* Firefox */
 }
 
 .mf-folder-scroll-container::-webkit-scrollbar,
-[data-mf-scroll-container="true"]::-webkit-scrollbar {
-  display: none !important;            /* Chrome, Brave, Safari, Opera */
+[data-mf-scroll-container='true']::-webkit-scrollbar {
+  display: none !important; /* Chrome, Brave, Safari, Opera */
   width: 0 !important;
   height: 0 !important;
 }
@@ -385,7 +390,12 @@
   flex-shrink: 0 !important;
   line-height: 0 !important;
   overflow: hidden !important;
-  transition: opacity var(--mf-transition-fast), background var(--mf-transition-fast), transform var(--mf-transition-fast), color var(--mf-transition-fast), box-shadow var(--mf-transition-fast) !important;
+  transition:
+    opacity var(--mf-transition-fast),
+    background var(--mf-transition-fast),
+    transform var(--mf-transition-fast),
+    color var(--mf-transition-fast),
+    box-shadow var(--mf-transition-fast) !important;
 }
 
 .mf-scroll-btn.mf-visible {
@@ -431,7 +441,7 @@
 /* Pojedyncza pigułka folderu o stałej szerokości */
 .mf-folder-pill,
 .mf-folder-tab,
-[data-mf-pill="true"] {
+[data-mf-pill='true'] {
   display: inline-flex !important;
   flex-direction: row !important;
   align-items: center !important;
@@ -460,17 +470,18 @@
   line-height: normal !important;
   position: relative;
   overflow: hidden !important;
-  transition: transform var(--mf-transition-fast),
-              background var(--mf-transition-fast),
-              color var(--mf-transition-fast),
-              box-shadow var(--mf-transition-fast),
-              border-color var(--mf-transition-fast);
+  transition:
+    transform var(--mf-transition-fast),
+    background var(--mf-transition-fast),
+    color var(--mf-transition-fast),
+    box-shadow var(--mf-transition-fast),
+    border-color var(--mf-transition-fast);
 }
 
 /* Ukrycie pigułki przy filtrowaniu wyszukiwarką */
 .mf-folder-pill.mf-pill-hidden,
 .mf-folder-tab.mf-pill-hidden,
-[data-mf-pill="true"].mf-pill-hidden {
+[data-mf-pill='true'].mf-pill-hidden {
   display: none !important;
   visibility: hidden !important;
   width: 0 !important;
@@ -495,7 +506,9 @@
 
 .mf-folder-pill:focus-visible,
 .mf-folder-tab:focus-visible {
-  box-shadow: 0 0 0 2px var(--mf-bg-surface), 0 0 0 4px var(--mf-primary);
+  box-shadow:
+    0 0 0 2px var(--mf-bg-surface),
+    0 0 0 4px var(--mf-primary);
 }
 
 /* Stan aktywny pigułki */
@@ -551,11 +564,13 @@
   font-weight: 600;
   line-height: 1;
   flex-shrink: 0;
-  transition: background var(--mf-transition-fast), color var(--mf-transition-fast);
+  transition:
+    background var(--mf-transition-fast),
+    color var(--mf-transition-fast);
 }
 
 .__fb-dark-mode .mf-folder-count,
-[data-theme="dark"] .mf-folder-count {
+[data-theme='dark'] .mf-folder-count {
   background: rgba(255, 255, 255, 0.12);
 }
 
@@ -642,7 +657,7 @@
 
 /* Ukrywanie wątków niepasujących do aktywnego folderu */
 .mf-thread-hidden,
-[data-mf-thread-hidden="true"] {
+[data-mf-thread-hidden='true'] {
   display: none !important;
   visibility: hidden !important;
   height: 0 !important;
@@ -655,14 +670,13 @@
   pointer-events: none !important;
 }
 
-
 /* ==========================================================================
    3. PLAKIETKA I PRZYCISK NA WIERSZU ROZMOWY (.mf-thread-badge, .mf-folder-btn)
    ========================================================================== */
 
 /* Plakietka folderu przy czacie - usunięta zgodnie z życzeniem użytkownika */
 .mf-thread-badge,
-[data-mf-badge="true"] {
+[data-mf-badge='true'] {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
@@ -694,7 +708,6 @@
   height: 0 !important;
   opacity: 0 !important;
 }
-
 
 /* ==========================================================================
    4. PIGUŁKA W NAGŁÓWKU CZATU (.mf-header-pill)
@@ -755,7 +768,6 @@
   height: 10px;
   fill: currentColor;
 }
-
 
 /* ==========================================================================
    5. MENU ROZWIJANE WYBORU FOLDERU (.mf-dropdown-menu)
@@ -831,7 +843,9 @@
   color: var(--mf-text-primary);
   font-size: 12px;
   outline: none;
-  transition: border-color var(--mf-transition-fast), background var(--mf-transition-fast);
+  transition:
+    border-color var(--mf-transition-fast),
+    background var(--mf-transition-fast);
 }
 
 .mf-dropdown-search:focus {
@@ -963,13 +977,12 @@
   fill: currentColor;
 }
 
-
 /* ==========================================================================
    6. OKNO MODALNE TWORZENIA/EDYCJI FOLDERU (.mf-modal-overlay, .mf-modal)
    ========================================================================== */
 
 .mf-modal-overlay,
-[data-mf-modal-overlay="true"] {
+[data-mf-modal-overlay='true'] {
   position: fixed !important;
   inset: 0 !important;
   background: rgba(0, 0, 0, 0.55) !important;
@@ -985,12 +998,16 @@
 }
 
 @keyframes mfFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .mf-modal,
-[data-mf-modal="true"] {
+[data-mf-modal='true'] {
   width: 100% !important;
   max-width: 440px !important;
   background: var(--mf-bg-surface) !important;
@@ -1076,7 +1093,9 @@
   color: var(--mf-text-secondary);
   border: none;
   cursor: pointer;
-  transition: background var(--mf-transition-fast), color var(--mf-transition-fast);
+  transition:
+    background var(--mf-transition-fast),
+    color var(--mf-transition-fast);
 }
 
 .mf-modal-close-btn:hover {
@@ -1127,7 +1146,9 @@
   color: var(--mf-text-primary);
   font-size: 14px;
   outline: none;
-  transition: border-color var(--mf-transition-fast), background var(--mf-transition-fast);
+  transition:
+    border-color var(--mf-transition-fast),
+    background var(--mf-transition-fast);
 }
 
 .mf-modal-input:focus {
@@ -1156,7 +1177,9 @@
   font-size: 18px;
   border: 2px solid transparent;
   cursor: pointer;
-  transition: transform var(--mf-transition-fast), background var(--mf-transition-fast);
+  transition:
+    transform var(--mf-transition-fast),
+    background var(--mf-transition-fast);
 }
 
 .mf-emoji-option:hover {
@@ -1183,7 +1206,9 @@
   border: 2px solid transparent;
   cursor: pointer;
   position: relative;
-  transition: transform var(--mf-transition-fast), box-shadow var(--mf-transition-fast);
+  transition:
+    transform var(--mf-transition-fast),
+    box-shadow var(--mf-transition-fast);
 }
 
 .mf-color-option:hover {
@@ -1191,7 +1216,9 @@
 }
 
 .mf-color-option.mf-selected {
-  box-shadow: 0 0 0 2px var(--mf-bg-surface), 0 0 0 4px var(--mf-primary);
+  box-shadow:
+    0 0 0 2px var(--mf-bg-surface),
+    0 0 0 4px var(--mf-primary);
   transform: scale(1.1);
 }
 
@@ -1438,7 +1465,7 @@
 }
 
 .__fb-dark-mode .mf-settings-system-tag,
-[data-theme="dark"] .mf-settings-system-tag {
+[data-theme='dark'] .mf-settings-system-tag {
   background: rgba(255, 255, 255, 0.1);
 }
 
@@ -1695,7 +1722,6 @@
   line-height: 1.4;
 }
 
-
 /* ==========================================================================
    7. POWIADOMIENIA TOAST (.mf-toast)
    ========================================================================== */
@@ -1715,7 +1741,9 @@
   z-index: var(--mf-z-modal);
   opacity: 0;
   pointer-events: none;
-  transition: transform var(--mf-transition-normal), opacity var(--mf-transition-normal);
+  transition:
+    transform var(--mf-transition-normal),
+    opacity var(--mf-transition-normal);
 }
 
 .mf-toast.mf-show {
@@ -1723,13 +1751,14 @@
   transform: translateX(-50%) translateY(0);
 }
 
-
 /* ==========================================================================
    8. DOSTĘPNOŚĆ (PREFERS-REDUCED-MOTION)
    ========================================================================== */
 
 @media (prefers-reduced-motion: reduce) {
-  *, ::before, ::after {
+  *,
+  ::before,
+  ::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

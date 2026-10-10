@@ -3,13 +3,8 @@
   "name": "Messenger Folders",
   "version": "1.0.0",
   "description": "Organizuj konwersacje w Messengerze za pomocą folderów i kategorii.",
-  "permissions": [
-    "storage"
-  ],
-  "host_permissions": [
-    "*://*.messenger.com/*",
-    "*://*.facebook.com/messages/*"
-  ],
+  "permissions": ["storage"],
+  "host_permissions": ["*://*.messenger.com/*", "*://*.facebook.com/messages/*"],
   "background": {
     "service_worker": "background/background.js"
   },
@@ -31,19 +26,9 @@
   },
   "content_scripts": [
     {
-      "matches": [
-        "*://*.messenger.com/*",
-        "*://*.facebook.com/messages/*"
-      ],
-      "js": [
-        "src/storage.js",
-        "src/detector.js",
-        "src/ui.js",
-        "src/content.js"
-      ],
-      "css": [
-        "src/content.css"
-      ],
+      "matches": ["*://*.messenger.com/*", "*://*.facebook.com/messages/*"],
+      "js": ["src/storage.js", "src/detector.js", "src/ui.js", "src/content.js"],
+      "css": ["src/content.css"],
       "run_at": "document_idle"
     }
   ]

@@ -14,15 +14,31 @@ const manifest = JSON.parse(manifestRaw);
 
 assert.strictEqual(manifest.manifest_version, 3, 'Wersja manifestu powinna wynosić 3');
 assert.ok(manifest.permissions.includes('storage'), 'Uprawnienia powinny zawierać "storage"');
-assert.ok(manifest.host_permissions.includes('*://*.messenger.com/*'), 'host_permissions powinno obejmować messenger.com');
-assert.ok(manifest.host_permissions.includes('*://*.facebook.com/messages/*'), 'host_permissions powinno obejmować facebook.com/messages');
-assert.strictEqual(manifest.background.service_worker, 'background/background.js', 'Service worker powinien wskazywać na background/background.js');
+assert.ok(
+  manifest.host_permissions.includes('*://*.messenger.com/*'),
+  'host_permissions powinno obejmować messenger.com'
+);
+assert.ok(
+  manifest.host_permissions.includes('*://*.facebook.com/messages/*'),
+  'host_permissions powinno obejmować facebook.com/messages'
+);
+assert.strictEqual(
+  manifest.background.service_worker,
+  'background/background.js',
+  'Service worker powinien wskazywać na background/background.js'
+);
 assert.ok(manifest.content_scripts.length > 0, 'Powinny istnieć reguły content_scripts');
 assert.ok(manifest.content_scripts[0].js.includes('src/storage.js'), 'content_scripts powinno ładować src/storage.js');
-assert.ok(manifest.content_scripts[0].js.includes('src/detector.js'), 'content_scripts powinno ładować src/detector.js');
+assert.ok(
+  manifest.content_scripts[0].js.includes('src/detector.js'),
+  'content_scripts powinno ładować src/detector.js'
+);
 assert.ok(manifest.content_scripts[0].js.includes('src/ui.js'), 'content_scripts powinno ładować src/ui.js');
 assert.ok(manifest.content_scripts[0].js.includes('src/content.js'), 'content_scripts powinno ładować src/content.js');
-assert.ok(manifest.content_scripts[0].css.includes('src/content.css'), 'content_scripts powinno ładować src/content.css');
+assert.ok(
+  manifest.content_scripts[0].css.includes('src/content.css'),
+  'content_scripts powinno ładować src/content.css'
+);
 console.log('✓ manifest.json jest poprawny');
 
 // 2. Testy MessengerFoldersStorage
@@ -68,9 +84,9 @@ global.chrome = {
     onChanged: {
       addListener(fn) {
         mockListeners.push(fn);
-      },
-    },
-  },
+      }
+    }
+  }
 };
 
 const { MessengerFoldersStorage } = require('../src/storage.js');
@@ -110,7 +126,12 @@ async function runStorageTests() {
   console.log('✓ storage.saveFolder() tworzy nowy folder użytkownika');
 
   // Test saveFolder() - aktualizacja istniejącego folderu
-  const editedFolder = await storage.saveFolder({ id: newFolder.id, name: 'Projekty 2026', icon: '🎯', color: '#00cc88' });
+  const editedFolder = await storage.saveFolder({
+    id: newFolder.id,
+    name: 'Projekty 2026',
+    icon: '🎯',
+    color: '#00cc88'
+  });
   assert.strictEqual(editedFolder.name, 'Projekty 2026');
   assert.strictEqual(editedFolder.icon, '🎯');
   console.log('✓ storage.saveFolder() aktualizuje istniejący folder');
@@ -124,7 +145,7 @@ async function runStorageTests() {
   // Test assignThread()
   const assigned = await storage.assignThread('100012345', newFolder.id, {
     name: 'Jan Kowalski',
-    avatar: 'https://example.com/avatar.jpg',
+    avatar: 'https://example.com/avatar.jpg'
   });
   assert.strictEqual(assigned.threadId, '100012345');
   assert.strictEqual(assigned.folderId, newFolder.id);
@@ -197,17 +218,20 @@ async function runStorageTests() {
     folders: [
       { id: 'all', name: 'Wszystkie', icon: '💬', color: '#0084FF', isSystem: true },
       { id: 'custom1', name: 'Zlecenia', icon: '💼', color: '#112233', isSystem: false },
-      { id: 'uncategorized', name: 'Inne', icon: '📁', color: '#6B7280', isSystem: true },
+      { id: 'uncategorized', name: 'Inne', icon: '📁', color: '#6B7280', isSystem: true }
     ],
     threads: {
-      '999888': { folderId: 'custom1', name: 'Klient ABC' },
+      999888: { folderId: 'custom1', name: 'Klient ABC' }
     },
-    activeFolder: 'custom1',
+    activeFolder: 'custom1'
   };
 
   await storage.importData(JSON.stringify(customBackup));
   const foldersAfterImport = await storage.getFolders();
-  assert.ok(foldersAfterImport.some((f) => f.id === 'custom1'), 'Zaimportowany folder powinien istnieć');
+  assert.ok(
+    foldersAfterImport.some((f) => f.id === 'custom1'),
+    'Zaimportowany folder powinien istnieć'
+  );
   const activeAfterImport = await storage.getActiveFolder();
   assert.strictEqual(activeAfterImport, 'custom1', 'Aktywny folder powinien zostać zaktualizowany');
   const threadAfterImport = await storage.getThreadFolder('999888');
@@ -224,7 +248,7 @@ async function runStorageTests() {
   for (const listener of mockListeners) {
     listener(
       {
-        mf_active_folder: { oldValue: 'custom1', newValue: 'all' },
+        mf_active_folder: { oldValue: 'custom1', newValue: 'all' }
       },
       'local'
     );

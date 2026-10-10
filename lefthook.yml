@@ -4,12 +4,12 @@ pre-commit:
   parallel: true
   jobs:
     - name: eslint
-      glob: "*.{js,mjs}"
+      glob: '*.{js,mjs}'
       run: npx eslint {staged_files}
     - name: składnia i manifest
       run: npm run check --silent
     - name: karty kanban
-      glob: "kanban/**"
+      glob: 'kanban/**'
       run: node tools/kanban.mjs check
 
 pre-push:

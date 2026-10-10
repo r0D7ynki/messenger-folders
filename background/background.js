@@ -21,7 +21,7 @@ const FALLBACK_DEFAULT_FOLDERS = [
   { id: 'work', name: 'Praca', icon: '💼', color: '#10B981', isSystem: false },
   { id: 'friends', name: 'Znajomi', icon: '👥', color: '#8B5CF6', isSystem: false },
   { id: 'groups', name: 'Grupy', icon: '📢', color: '#EC4899', isSystem: false },
-  { id: 'uncategorized', name: 'Inne', icon: '📁', color: '#6B7280', isSystem: true },
+  { id: 'uncategorized', name: 'Inne', icon: '📁', color: '#6B7280', isSystem: true }
 ];
 
 /**

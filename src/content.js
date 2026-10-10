@@ -89,7 +89,7 @@
         return injected;
       };
 
-      if (!await tryInjectBar()) {
+      if (!(await tryInjectBar())) {
         // Ponawianie próby, dopóki strona nie załaduje struktury DOM
         const retryTimer = setInterval(async () => {
           if (await tryInjectBar()) {
@@ -101,12 +101,15 @@
       }
 
       // Podpięcie obserwatora dynamicznego ładowania listy czatów (virtual scrolling)
-      detector.setupObserver(async () => {
-        tryInjectBar();
-        const currentActive = await storage.getActiveFolder();
-        const currentThreads = await storage.getAllThreads();
-        ui.filterChatRows(currentActive, currentThreads);
-      }, { throttleMs: 250 });
+      detector.setupObserver(
+        async () => {
+          tryInjectBar();
+          const currentActive = await storage.getActiveFolder();
+          const currentThreads = await storage.getAllThreads();
+          ui.filterChatRows(currentActive, currentThreads);
+        },
+        { throttleMs: 250 }
+      );
 
       // Nasłuchiwanie zmian adresu URL (przełączanie czatów w aplikacji Single Page App)
       let lastUrl = window.location.href;

@@ -26,14 +26,14 @@ body:
     attributes:
       label: Pliki
       description: Które pliki wolno zmieniać — granica zakresu.
-      placeholder: "- `src/storage.js` — `importData`"
+      placeholder: '- `src/storage.js` — `importData`'
     validations:
       required: true
   - type: textarea
     id: kryteria
     attributes:
       label: Kryteria akceptacji
-      value: "- [ ] "
+      value: '- [ ] '
     validations:
       required: true
   - type: textarea

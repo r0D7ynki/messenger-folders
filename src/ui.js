@@ -28,9 +28,30 @@
 
   // Domyślny zestaw emotikonów do wyboru
   const DEFAULT_EMOJIS = [
-    '📁', '💼', '👥', '⭐', '💡', '🏷️', '🛒', '📌',
-    '🎯', '🔒', '💬', '🚀', '❤️', '🔔', '🎮', '🏠',
-    '📚', '🎨', '🛠️', '✈️', '🎵', '🔥', '💻', '🤝'
+    '📁',
+    '💼',
+    '👥',
+    '⭐',
+    '💡',
+    '🏷️',
+    '🛒',
+    '📌',
+    '🎯',
+    '🔒',
+    '💬',
+    '🚀',
+    '❤️',
+    '🔔',
+    '🎮',
+    '🏠',
+    '📚',
+    '🎨',
+    '🛠️',
+    '✈️',
+    '🎵',
+    '🔥',
+    '💻',
+    '🤝'
   ];
 
   // Domyślna paleta kolorów
@@ -44,7 +65,7 @@
     '#5856D6', // Indygo
     '#FF2D55', // Malinowy
     '#FF9500', // Pomarańczowy
-    '#64748B'  // Grafitowy
+    '#64748B' // Grafitowy
   ];
 
   class MessengerUI {
@@ -86,10 +107,11 @@
       // Obsługa kliknięcia poza elementem (Click Outside)
       document.addEventListener('click', (event) => {
         if (this.activeDropdown) {
-          const isInside = this.activeDropdown.contains(event.target) ||
-                           event.target.closest('.mf-folder-btn') ||
-                           event.target.closest('.mf-thread-badge') ||
-                           event.target.closest('.mf-header-pill');
+          const isInside =
+            this.activeDropdown.contains(event.target) ||
+            event.target.closest('.mf-folder-btn') ||
+            event.target.closest('.mf-thread-badge') ||
+            event.target.closest('.mf-header-pill');
           if (!isInside) {
             this.closeDropdown();
           }
@@ -130,51 +152,67 @@
      * @param {Function} [onOpenSettings] - Callback po kliknięciu ustawień folderów
      * @returns {HTMLElement} Główny element paska #mf-folder-bar
      */
-    renderFolderBar(folders = [], activeFolderId = 'all', counts = {}, onSelectFolder, onAddFolder, onEditFolder, onOpenSettings) {
+    renderFolderBar(
+      folders = [],
+      activeFolderId = 'all',
+      counts = {},
+      onSelectFolder,
+      onAddFolder,
+      onEditFolder,
+      onOpenSettings
+    ) {
       if (typeof document === 'undefined') return null;
 
       // Obsługa domyślnych callbacków przy integracji ze storage
-      const selectHandler = onSelectFolder || (async (folderId) => {
-        if (this.storage) {
-          await this.storage.setActiveFolder(folderId);
-        }
-      });
-
-      const addHandler = onAddFolder || (() => {
-        this.showFolderModal({
-          onSave: async (newFolder) => {
-            if (this.storage) {
-              await this.storage.saveFolder(newFolder);
-            }
+      const selectHandler =
+        onSelectFolder ||
+        (async (folderId) => {
+          if (this.storage) {
+            await this.storage.setActiveFolder(folderId);
           }
         });
-      });
 
-      const editHandler = onEditFolder || ((folder) => {
-        this.showFolderModal({
-          folder,
-          onSave: async (updated) => {
-            if (this.storage) {
-              await this.storage.saveFolder(updated);
+      const addHandler =
+        onAddFolder ||
+        (() => {
+          this.showFolderModal({
+            onSave: async (newFolder) => {
+              if (this.storage) {
+                await this.storage.saveFolder(newFolder);
+              }
             }
-          },
-          onDelete: async (folderId) => {
-            if (this.storage) {
-              await this.storage.deleteFolder(folderId);
-            }
-          }
+          });
         });
-      });
 
-      const settingsHandler = onOpenSettings || (() => {
-        this.showSettingsModal();
-      });
+      const editHandler =
+        onEditFolder ||
+        ((folder) => {
+          this.showFolderModal({
+            folder,
+            onSave: async (updated) => {
+              if (this.storage) {
+                await this.storage.saveFolder(updated);
+              }
+            },
+            onDelete: async (folderId) => {
+              if (this.storage) {
+                await this.storage.deleteFolder(folderId);
+              }
+            }
+          });
+        });
+
+      const settingsHandler =
+        onOpenSettings ||
+        (() => {
+          this.showSettingsModal();
+        });
 
       // Jeśli w parametrze `counts` przekazano obiekt mapy wątków z folderId (np. allThreads)
       let resolvedCounts = {};
       if (counts && typeof counts === 'object') {
         const firstVal = Object.values(counts)[0];
-        if (firstVal && typeof firstVal === 'object' && ('folderId' in firstVal)) {
+        if (firstVal && typeof firstVal === 'object' && 'folderId' in firstVal) {
           // Oblicz liczbę wątków dla każdego folderu
           for (const thread of Object.values(counts)) {
             const fId = thread.folderId || 'uncategorized';
@@ -186,11 +224,10 @@
       }
 
       // Sprawdzenie obecności folderu 'all'
-      const hasAll = folders.some(f => f.id === 'all');
-      const folderList = hasAll ? [...folders] : [
-        { id: 'all', name: 'Wszystkie', icon: '💬', color: '#0084FF', isSystem: true },
-        ...folders
-      ];
+      const hasAll = folders.some((f) => f.id === 'all');
+      const folderList = hasAll
+        ? [...folders]
+        : [{ id: 'all', name: 'Wszystkie', icon: '💬', color: '#0084FF', isSystem: true }, ...folders];
 
       let bar = document.getElementById('mf-folder-bar');
       if (bar) {
@@ -198,9 +235,10 @@
         const topBar = bar.querySelector('.mf-folder-top-bar');
         const pillsRow = bar.querySelector('.mf-folder-pills-row');
         const existingPills = bar.querySelectorAll('.mf-folder-pill');
-        const existingIds = Array.from(existingPills).map(p => p.dataset.folderId);
-        const newIds = folderList.map(f => f.id);
-        const isSameStructure = Boolean(topBar && pillsRow) &&
+        const existingIds = Array.from(existingPills).map((p) => p.dataset.folderId);
+        const newIds = folderList.map((f) => f.id);
+        const isSameStructure =
+          Boolean(topBar && pillsRow) &&
           existingIds.length > 0 &&
           existingIds.length === newIds.length &&
           existingIds.every((id, idx) => id === newIds[idx]);
@@ -223,9 +261,9 @@
           }
 
           // Zaktualizuj stan, nazwy, ikony, kolory i liczniki w istniejących elementach
-          existingPills.forEach(pill => {
+          existingPills.forEach((pill) => {
             const fId = pill.dataset.folderId;
-            const folderObj = folderList.find(f => f.id === fId);
+            const folderObj = folderList.find((f) => f.id === fId);
             const isActive = fId === activeFolderId;
             pill.classList.toggle('mf-active', isActive);
             pill.setAttribute('aria-selected', isActive ? 'true' : 'false');
@@ -267,7 +305,7 @@
           const activeSearch = bar.querySelector('.mf-folder-search-input');
           if (activeSearch && activeSearch.value) {
             const query = activeSearch.value.trim().toLowerCase();
-            existingPills.forEach(pill => {
+            existingPills.forEach((pill) => {
               const nameEl = pill.querySelector('.mf-folder-name');
               const iconEl = pill.querySelector('.mf-folder-icon');
               const name = nameEl ? (nameEl.textContent || '').trim().toLowerCase() : '';
@@ -377,7 +415,7 @@
         const query = (searchInput.value || '').trim().toLowerCase();
         clearBtn.style.display = query ? 'flex' : 'none';
         const allPills = container.querySelectorAll('.mf-folder-pill');
-        allPills.forEach(pill => {
+        allPills.forEach((pill) => {
           const nameEl = pill.querySelector('.mf-folder-name');
           const iconEl = pill.querySelector('.mf-folder-icon');
           const name = nameEl ? (nameEl.textContent || '').trim().toLowerCase() : '';
@@ -413,8 +451,9 @@
           applyFolderFilter();
         } else if (event.key === 'Enter') {
           event.preventDefault();
-          const firstVisiblePill = Array.from(container.querySelectorAll('.mf-folder-pill'))
-            .find(p => !p.classList.contains('mf-pill-hidden') && p.style.display !== 'none');
+          const firstVisiblePill = Array.from(container.querySelectorAll('.mf-folder-pill')).find(
+            (p) => !p.classList.contains('mf-pill-hidden') && p.style.display !== 'none'
+          );
           if (firstVisiblePill) {
             if (typeof firstVisiblePill.click === 'function') {
               firstVisiblePill.click();
@@ -471,7 +510,7 @@
 
         // Wybór folderu z natychmiastową reakcją wizualną i filtrowaniem
         pill.addEventListener('click', () => {
-          container.querySelectorAll('.mf-folder-pill').forEach(p => {
+          container.querySelectorAll('.mf-folder-pill').forEach((p) => {
             const isMatch = p === pill;
             p.classList.toggle('mf-active', isMatch);
             p.setAttribute('aria-selected', isMatch ? 'true' : 'false');
@@ -516,13 +555,17 @@
       });
 
       // Płynne przewijanie kółkiem myszy w poziomie
-      container.addEventListener('wheel', (event) => {
-        if (event.deltaY !== 0) {
-          event.preventDefault();
-          container.scrollLeft += event.deltaY * 0.8;
-          updateScrollButtons();
-        }
-      }, { passive: false });
+      container.addEventListener(
+        'wheel',
+        (event) => {
+          if (event.deltaY !== 0) {
+            event.preventDefault();
+            container.scrollLeft += event.deltaY * 0.8;
+            updateScrollButtons();
+          }
+        },
+        { passive: false }
+      );
 
       container.addEventListener('scroll', updateScrollButtons, { passive: true });
 
@@ -542,7 +585,7 @@
           if (pill) {
             const fId = pill.dataset.folderId;
             if (fId) {
-              bar.querySelectorAll('.mf-folder-pill').forEach(p => {
+              bar.querySelectorAll('.mf-folder-pill').forEach((p) => {
                 const isMatch = p === pill;
                 p.classList.toggle('mf-active', isMatch);
                 p.setAttribute('aria-selected', isMatch ? 'true' : 'false');
@@ -620,9 +663,8 @@
       if (!headerElement) return null;
 
       let pill = headerElement.querySelector('.mf-header-pill');
-      const targetFolderId = currentFolder && currentFolder.id !== 'all' && currentFolder.id !== 'uncategorized'
-        ? currentFolder.id
-        : 'none';
+      const targetFolderId =
+        currentFolder && currentFolder.id !== 'all' && currentFolder.id !== 'uncategorized' ? currentFolder.id : 'none';
 
       // Jeśli pigułka już istnieje i wyświetla właściwy folder, pomijamy mutacje DOM
       if (pill && pill.dataset.folderId === targetFolderId) {
@@ -778,7 +820,7 @@
         item.textContent = emoji;
         item.addEventListener('click', () => {
           selectedIcon = emoji;
-          emojiContainer.querySelectorAll('.mf-emoji-option').forEach(el => el.classList.remove('mf-selected'));
+          emojiContainer.querySelectorAll('.mf-emoji-option').forEach((el) => el.classList.remove('mf-selected'));
           item.classList.add('mf-selected');
           updatePreview();
         });
@@ -802,7 +844,7 @@
         item.setAttribute('aria-label', `Wybierz kolor ${hex}`);
         item.addEventListener('click', () => {
           selectedColor = hex;
-          colorContainer.querySelectorAll('.mf-color-option').forEach(el => el.classList.remove('mf-selected'));
+          colorContainer.querySelectorAll('.mf-color-option').forEach((el) => el.classList.remove('mf-selected'));
           item.classList.add('mf-selected');
           updatePreview();
         });
@@ -820,7 +862,7 @@
       const customColorInput = customColorWrapper.querySelector('.mf-color-custom-input');
       customColorInput.addEventListener('input', (event) => {
         selectedColor = event.target.value;
-        colorContainer.querySelectorAll('.mf-color-option').forEach(el => el.classList.remove('mf-selected'));
+        colorContainer.querySelectorAll('.mf-color-option').forEach((el) => el.classList.remove('mf-selected'));
         updatePreview();
       });
       colorContainer.appendChild(customColorWrapper);
@@ -857,7 +899,7 @@
       body.appendChild(groupPreview);
 
       // Sekcja wyboru i wyszukiwania rozmów do tego folderu
-      const savedThreads = this.storage ? (this.storage._threads || {}) : {};
+      const savedThreads = this.storage ? this.storage._threads || {} : {};
       const detected = this.detector ? this.detector.scanChatList() : [];
 
       const threadsMap = new Map();
@@ -869,7 +911,7 @@
           folderId: tData.folderId || 'uncategorized'
         });
       }
-      detected.forEach(item => {
+      detected.forEach((item) => {
         if (!threadsMap.has(item.threadId)) {
           threadsMap.set(item.threadId, {
             id: item.threadId,
@@ -929,7 +971,7 @@
         threadsListEl.innerHTML = '';
         const query = (filterQuery || '').toLowerCase().trim();
 
-        const filtered = threadList.filter(t => t.name.toLowerCase().includes(query));
+        const filtered = threadList.filter((t) => t.name.toLowerCase().includes(query));
         filtered.sort((a, b) => {
           const aAssigned = assignedThreadIds.has(a.id) ? 1 : 0;
           const bAssigned = assignedThreadIds.has(b.id) ? 1 : 0;
@@ -940,14 +982,15 @@
         if (filtered.length === 0) {
           const emptyEl = document.createElement('div');
           emptyEl.className = 'mf-picker-empty';
-          emptyEl.textContent = threadList.length === 0
-            ? 'Przewiń listę czatów na Messengerze, aby rozszerzenie odczytało kontakty.'
-            : 'Nie znaleziono takich osób.';
+          emptyEl.textContent =
+            threadList.length === 0
+              ? 'Przewiń listę czatów na Messengerze, aby rozszerzenie odczytało kontakty.'
+              : 'Nie znaleziono takich osób.';
           threadsListEl.appendChild(emptyEl);
           return;
         }
 
-        filtered.forEach(thread => {
+        filtered.forEach((thread) => {
           const isAssigned = assignedThreadIds.has(thread.id);
           const item = document.createElement('div');
           item.className = `mf-picker-item ${isAssigned ? 'mf-picker-item-assigned' : ''}`;
@@ -1209,7 +1252,7 @@
         contentContainer.innerHTML = '';
 
         const folders = this.storage ? this.storage.getFoldersSync() : [];
-        const threads = this.storage ? (this.storage._threads || {}) : {};
+        const threads = this.storage ? this.storage._threads || {} : {};
 
         const counts = {};
         for (const t of Object.values(threads)) {
@@ -1240,7 +1283,7 @@
         const list = document.createElement('div');
         list.className = 'mf-settings-folder-list';
 
-        folders.forEach(folder => {
+        folders.forEach((folder) => {
           const count = counts[folder.id] || 0;
           const item = document.createElement('div');
           item.className = 'mf-settings-folder-item';
@@ -1325,7 +1368,8 @@
             deleteBtn.title = 'Usuń';
             deleteBtn.innerHTML = ICONS.trash;
             deleteBtn.onclick = async () => {
-              const confirmMsg = typeof confirm !== 'undefined' ? confirm(`Czy na pewno chcesz usunąć folder „${folder.name}”?`) : true;
+              const confirmMsg =
+                typeof confirm !== 'undefined' ? confirm(`Czy na pewno chcesz usunąć folder „${folder.name}”?`) : true;
               if (confirmMsg) {
                 if (this.storage) await this.storage.deleteFolder(folder.id);
                 this.showToast(`Usunięto folder „${folder.name}”.`);
@@ -1350,7 +1394,8 @@
 
         const desc = document.createElement('p');
         desc.className = 'mf-settings-backup-desc';
-        desc.textContent = 'Możesz zapisać wszystkie foldery oraz przypisania czatów do pliku JSON lub przywrócić je z pliku.';
+        desc.textContent =
+          'Możesz zapisać wszystkie foldery oraz przypisania czatów do pliku JSON lub przywrócić je z pliku.';
 
         const actions = document.createElement('div');
         actions.className = 'mf-settings-backup-actions';
@@ -1420,7 +1465,7 @@
         contentContainer.innerHTML = '';
 
         const folders = this.storage ? this.storage.getFoldersSync() : [];
-        const savedThreads = this.storage ? (this.storage._threads || {}) : {};
+        const savedThreads = this.storage ? this.storage._threads || {} : {};
         const detected = this.detector ? this.detector.scanChatList() : [];
 
         // Łączymy wątki wykryte w bieżącej sesji oraz wątki zapisane w pamięci
@@ -1437,7 +1482,7 @@
         }
 
         // 2. Dodaj wątki aktualnie widoczne na stronie
-        detected.forEach(item => {
+        detected.forEach((item) => {
           if (!threadsMap.has(item.threadId)) {
             threadsMap.set(item.threadId, {
               id: item.threadId,
@@ -1474,19 +1519,20 @@
         const renderThreadItems = (filterText = '') => {
           listContainer.innerHTML = '';
           const filterLower = filterText.toLowerCase().trim();
-          const filtered = threadList.filter(t => t.name.toLowerCase().includes(filterLower));
+          const filtered = threadList.filter((t) => t.name.toLowerCase().includes(filterLower));
 
           if (filtered.length === 0) {
             const emptyEl = document.createElement('div');
             emptyEl.className = 'mf-settings-empty';
-            emptyEl.textContent = threadList.length === 0
-              ? 'Nie wykryto jeszcze żadnych rozmów. Przewiń listę czatów na Messengerze, aby rozszerzenie mogło je odczytać.'
-              : 'Brak rozmów pasujących do wyszukiwania.';
+            emptyEl.textContent =
+              threadList.length === 0
+                ? 'Nie wykryto jeszcze żadnych rozmów. Przewiń listę czatów na Messengerze, aby rozszerzenie mogło je odczytać.'
+                : 'Brak rozmów pasujących do wyszukiwania.';
             listContainer.appendChild(emptyEl);
             return;
           }
 
-          filtered.forEach(thread => {
+          filtered.forEach((thread) => {
             const row = document.createElement('div');
             row.className = 'mf-settings-thread-item';
 
@@ -1523,15 +1569,17 @@
             }
             select.appendChild(optNone);
 
-            folders.filter(f => f.id !== 'all' && f.id !== 'uncategorized').forEach(f => {
-              const opt = document.createElement('option');
-              opt.value = f.id;
-              opt.textContent = `${f.icon || '📁'} ${f.name}`;
-              if (f.id === thread.folderId) {
-                opt.selected = true;
-              }
-              select.appendChild(opt);
-            });
+            folders
+              .filter((f) => f.id !== 'all' && f.id !== 'uncategorized')
+              .forEach((f) => {
+                const opt = document.createElement('option');
+                opt.value = f.id;
+                opt.textContent = `${f.icon || '📁'} ${f.name}`;
+                if (f.id === thread.folderId) {
+                  opt.selected = true;
+                }
+                select.appendChild(opt);
+              });
 
             select.onchange = async () => {
               const newFId = select.value === 'uncategorized' ? null : select.value;
@@ -1551,8 +1599,10 @@
                 const currentFolders = await this.storage.getFolders();
                 this.renderFolderBar(currentFolders, currentActive, currentThreads);
               }
-              const targetFolder = folders.find(f => f.id === select.value);
-              this.showToast(targetFolder ? `Przypisano do folderu "${targetFolder.name}"` : 'Usunięto przypisanie do folderu');
+              const targetFolder = folders.find((f) => f.id === select.value);
+              this.showToast(
+                targetFolder ? `Przypisano do folderu "${targetFolder.name}"` : 'Usunięto przypisanie do folderu'
+              );
             };
 
             row.appendChild(left);
@@ -1568,9 +1618,9 @@
         setTimeout(() => searchInput.focus(), 50);
       };
 
-      nav.querySelectorAll('.mf-settings-nav-btn').forEach(btn => {
+      nav.querySelectorAll('.mf-settings-nav-btn').forEach((btn) => {
         btn.onclick = () => {
-          nav.querySelectorAll('.mf-settings-nav-btn').forEach(b => b.classList.remove('mf-active'));
+          nav.querySelectorAll('.mf-settings-nav-btn').forEach((b) => b.classList.remove('mf-active'));
           btn.classList.add('mf-active');
           if (btn.dataset.tab === 'folders') {
             renderFoldersTab();
@@ -1661,7 +1711,7 @@
 
         // Opcja usunięcia z folderu (brak folderu)
         const unassignItem = document.createElement('div');
-        unassignItem.className = `mf-dropdown-item mf-dropdown-unassign ${(!currentFolderId || currentFolderId === 'uncategorized') ? 'mf-selected' : ''}`;
+        unassignItem.className = `mf-dropdown-item mf-dropdown-unassign ${!currentFolderId || currentFolderId === 'uncategorized' ? 'mf-selected' : ''}`;
         unassignItem.innerHTML = `
           <div class="mf-dropdown-item-left">
             <span class="mf-dropdown-item-icon">${ICONS.unassign}</span>
@@ -1677,8 +1727,8 @@
         list.appendChild(unassignItem);
 
         // Filtrowanie folderów (pomijając 'all')
-        const selectableFolders = folders.filter(f => f.id !== 'all');
-        const filtered = selectableFolders.filter(f => f.name.toLowerCase().includes(searchLower));
+        const selectableFolders = folders.filter((f) => f.id !== 'all');
+        const filtered = selectableFolders.filter((f) => f.name.toLowerCase().includes(searchLower));
 
         filtered.forEach((folder) => {
           const isSelected = folder.id === currentFolderId;
@@ -1820,8 +1870,8 @@
       detected.forEach((item) => {
         const { threadId, rowElement } = item;
         const threadData = allThreads[threadId];
-        const folderId = (threadData && threadData.folderId) ? threadData.folderId : 'uncategorized';
-        const currentFolder = folders.find(f => f.id === folderId);
+        const folderId = threadData && threadData.folderId ? threadData.folderId : 'uncategorized';
+        const currentFolder = folders.find((f) => f.id === folderId);
 
         // Wstrzyknięcie lub aktualizacja plakietki w wierszu
         this.injectFolderBadge(rowElement, threadId, currentFolder, (targetEl, thId) => {
@@ -1845,7 +1895,7 @@
         });
 
         // Widoczność wiersza według aktywnego filtra (oraz gdy trwa natywne wyszukiwanie w Messengerze)
-        const shouldBeVisible = isNativeSearchActive || (activeFolderId === 'all') || (folderId === activeFolderId);
+        const shouldBeVisible = isNativeSearchActive || activeFolderId === 'all' || folderId === activeFolderId;
         if (rowElement.classList) {
           rowElement.classList.toggle('mf-thread-hidden', !shouldBeVisible);
         }
@@ -1938,5 +1988,4 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = MessengerUI;
   }
-
 })(typeof globalThis !== 'undefined' ? globalThis : this);

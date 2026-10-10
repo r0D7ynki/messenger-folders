@@ -40,13 +40,16 @@ function parseTask(file) {
 }
 
 function writeTask(task) {
-  const head = Object.entries(task.meta).map(([k, v]) => `${k}: ${v}`).join('\n');
+  const head = Object.entries(task.meta)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join('\n');
   fs.writeFileSync(task.file, `---\n${head}\n---\n${task.body}`);
 }
 
 function loadTasks() {
   if (!fs.existsSync(TASKS_DIR)) return [];
-  return fs.readdirSync(TASKS_DIR)
+  return fs
+    .readdirSync(TASKS_DIR)
     .filter((f) => f.endsWith('.md'))
     .sort()
     .map((f) => parseTask(path.join(TASKS_DIR, f)));
@@ -73,7 +76,11 @@ function checkboxes(text) {
 }
 
 function listDeps(meta) {
-  return (meta.depends || '').replace(/[[\]]/g, '').split(',').map((s) => s.trim()).filter(Boolean);
+  return (meta.depends || '')
+    .replace(/[[\]]/g, '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 // --- Bramki ---
@@ -148,7 +155,12 @@ function checkDoD(task, { runTests }) {
       try {
         execSync(cmd, { cwd: ROOT, stdio: 'pipe' });
       } catch (e) {
-        errors.push(`\`${cmd}\` nie przechodzi:\n${String(e.stdout || '').split('\n').slice(-8).join('\n')}`);
+        errors.push(
+          `\`${cmd}\` nie przechodzi:\n${String(e.stdout || '')
+            .split('\n')
+            .slice(-8)
+            .join('\n')}`
+        );
       }
     }
   }
@@ -159,7 +171,13 @@ const GATES = {
   ready: (t, all) => checkDoR(t, all),
   'in-progress': (t, all) => [...checkDoR(t, all), ...checkWip(t, all)],
   review: (t, all) => checkReview(t, all),
-  done: (t, all) => [...checkReview(t, all.filter((x) => x !== t)), ...checkDoD(t, { runTests: true })]
+  done: (t, all) => [
+    ...checkReview(
+      t,
+      all.filter((x) => x !== t)
+    ),
+    ...checkDoD(t, { runTests: true })
+  ]
 };
 
 // --- Komendy ---
@@ -176,7 +194,9 @@ function board() {
     console.log(`\n■ ${col.toUpperCase()} (${items.length})`);
     for (const t of items) {
       const deps = listDeps(t.meta);
-      console.log(`  ${t.meta.id}  [${t.meta.size}] ${t.meta.priority || ''} ${t.meta.model.padEnd(8)} ${t.meta.title}${deps.length ? `  ⇠ ${deps.join(',')}` : ''}`);
+      console.log(
+        `  ${t.meta.id}  [${t.meta.size}] ${t.meta.priority || ''} ${t.meta.model.padEnd(8)} ${t.meta.title}${deps.length ? `  ⇠ ${deps.join(',')}` : ''}`
+      );
     }
   }
   console.log('');
@@ -196,8 +216,15 @@ function newTask(title, opts) {
   const task = {
     file: path.join(TASKS_DIR, `${id}.md`),
     meta: {
-      id, title, status: 'backlog', model, reviewer: '', size: opts.size || 'M',
-      priority: opts.priority || 'P2', depends: '[]', created: new Date().toISOString().slice(0, 10)
+      id,
+      title,
+      status: 'backlog',
+      model,
+      reviewer: '',
+      size: opts.size || 'M',
+      priority: opts.priority || 'P2',
+      depends: '[]',
+      created: new Date().toISOString().slice(0, 10)
     },
     body: `
 ## Cel
@@ -305,10 +332,21 @@ for (let i = 0; i < rest.length; i++) {
 
 switch (cmd) {
   case undefined:
-  case 'board': board(); break;
-  case 'new': newTask(args[0], opts); break;
-  case 'move': move(args[0], args[1]); break;
-  case 'check': check(args[0]); break;
-  case 'next': next(args[0]); break;
-  default: fail(`Nieznana komenda ${cmd}. Dostępne: board, new, move, check, next`);
+  case 'board':
+    board();
+    break;
+  case 'new':
+    newTask(args[0], opts);
+    break;
+  case 'move':
+    move(args[0], args[1]);
+    break;
+  case 'check':
+    check(args[0]);
+    break;
+  case 'next':
+    next(args[0]);
+    break;
+  default:
+    fail(`Nieznana komenda ${cmd}. Dostępne: board, new, move, check, next`);
 }
