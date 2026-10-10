@@ -565,7 +565,7 @@
         try {
           parsed = JSON.parse(jsonData);
         } catch (err) {
-          throw new Error('Niepoprawny format JSON w danych importu.');
+          throw new Error('Niepoprawny format JSON w danych importu.', { cause: err });
         }
       } else if (jsonData && typeof jsonData === 'object') {
         parsed = jsonData;

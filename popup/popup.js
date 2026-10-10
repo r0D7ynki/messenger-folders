@@ -203,7 +203,9 @@
       if (raw) {
         try {
           state.settings = { ...INITIAL_SETTINGS, ...JSON.parse(raw) };
-        } catch (_) {}
+        } catch (_) {
+          // Ignoruj błąd parsowania uszkodzonych danych w localStorage
+        }
       }
     }
   }
@@ -279,32 +281,27 @@
       const card = document.createElement('div');
       card.className = 'mf-folder-card';
 
-      const color = folder.color || '#0084FF';
+      const safeColor = escapeHtml(folder.color || '#0084FF');
+      const safeId = escapeHtml(folder.id);
+      const safeIcon = escapeHtml(folder.icon || '📁');
+      const safeName = escapeHtml(folder.name);
+      const safeCount = escapeHtml(formatChatCount(count));
       const isSystem = Boolean(folder.isSystem);
 
       card.innerHTML = `
         <div class="mf-card-info">
-          <div class="mf-card-icon-badge" style="background-color: ${color}20; color: ${color};">
-            ${escapeHtml(folder.icon || '📁')}
+          <div class="mf-card-icon-badge" style="background-color: ${safeColor}20; color: ${safeColor};">
+            ${safeIcon}
           </div>
           <div class="mf-card-meta">
-            <span class="mf-card-name" title="${escapeHtml(folder.name)}">${escapeHtml(folder.name)}</span>
-            <span class="mf-card-count">${formatChatCount(count)}</span>
+            <span class="mf-card-name" title="${safeName}">${safeName}</span>
+            <span class="mf-card-count">${safeCount}</span>
           </div>
         </div>
         <div class="mf-card-actions">
-          <button type="button" class="mf-card-btn mf-btn-edit" title="Edytuj folder" data-id="${folder.id}">
+          <button type="button" class="mf-card-btn mf-btn-edit" title="Edytuj folder" data-id="${safeId}">
             <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
           </button>
-          ${
-            !isSystem
-              ? `
-          <button type="button" class="mf-card-btn mf-btn-del" title="Usuń folder" data-id="${folder.id}">
-            <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-          </button>
-          `
-              : ''
-          }
         </div>
       `;
 
@@ -312,8 +309,14 @@
         openDialog(folder);
       });
 
-      const delBtn = card.querySelector('.mf-btn-del');
-      if (delBtn) {
+      if (!isSystem) {
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'mf-card-btn mf-btn-del';
+        delBtn.title = 'Usuń folder';
+        delBtn.setAttribute('data-id', folder.id);
+        delBtn.innerHTML =
+          '<svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>';
         delBtn.addEventListener('click', async () => {
           if (confirm(`Czy na pewno chcesz usunąć folder "${folder.name}"? Przypisane czaty nie zostaną usunięte.`)) {
             if (storage) {
@@ -328,6 +331,7 @@
             showToast(`Usunięto folder "${folder.name}"`);
           }
         });
+        card.querySelector('.mf-card-actions').appendChild(delBtn);
       }
 
       dom.folderList.appendChild(card);

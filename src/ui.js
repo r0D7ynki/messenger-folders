@@ -247,14 +247,14 @@
           // Zaktualizuj ikony i pozycję przycisków przewijania
           const btnL = pillsRow.querySelector('.mf-scroll-btn-left');
           if (btnL) {
-            btnL.innerHTML = ICONS.chevronLeft;
+            this._setIcon(btnL, 'chevronLeft');
             btnL.style.top = '3px';
             btnL.style.transform = 'none';
             btnL.style.left = '-8px';
           }
           const btnR = pillsRow.querySelector('.mf-scroll-btn-right');
           if (btnR) {
-            btnR.innerHTML = ICONS.chevronRight;
+            this._setIcon(btnR, 'chevronRight');
             btnR.style.top = '3px';
             btnR.style.transform = 'none';
             btnR.style.right = '-8px';
@@ -339,7 +339,7 @@
 
       const searchIcon = document.createElement('span');
       searchIcon.className = 'mf-folder-search-icon';
-      searchIcon.innerHTML = ICONS.search;
+      this._setIcon(searchIcon, 'search');
       searchBox.appendChild(searchIcon);
 
       const searchInput = document.createElement('input');
@@ -356,7 +356,7 @@
       clearBtn.className = 'mf-folder-search-clear';
       clearBtn.title = 'Wyczyść szukanie';
       clearBtn.setAttribute('aria-label', 'Wyczyść szukanie');
-      clearBtn.innerHTML = ICONS.close;
+      this._setIcon(clearBtn, 'close');
       searchBox.appendChild(clearBtn);
 
       topBar.appendChild(searchBox);
@@ -368,7 +368,7 @@
         settingsBtn.className = 'mf-folder-settings-btn';
         settingsBtn.title = 'Ustawienia folderów i kopia zapasowa';
         settingsBtn.setAttribute('aria-label', 'Ustawienia folderów');
-        settingsBtn.innerHTML = ICONS.settings;
+        this._setIcon(settingsBtn, 'settings');
         settingsBtn.addEventListener('click', () => settingsHandler());
         topBar.appendChild(settingsBtn);
       }
@@ -382,7 +382,7 @@
       btnLeft.type = 'button';
       btnLeft.className = 'mf-scroll-btn mf-scroll-btn-left';
       btnLeft.setAttribute('aria-label', 'Przewiń foldery w lewo');
-      btnLeft.innerHTML = ICONS.chevronLeft;
+      this._setIcon(btnLeft, 'chevronLeft');
       btnLeft.style.top = '3px';
       btnLeft.style.transform = 'none';
       btnLeft.style.left = '-8px';
@@ -397,7 +397,7 @@
       btnRight.type = 'button';
       btnRight.className = 'mf-scroll-btn mf-scroll-btn-right';
       btnRight.setAttribute('aria-label', 'Przewiń foldery w prawo');
-      btnRight.innerHTML = ICONS.chevronRight;
+      this._setIcon(btnRight, 'chevronRight');
       btnRight.style.top = '3px';
       btnRight.style.transform = 'none';
       btnRight.style.right = '-8px';
@@ -540,7 +540,7 @@
         addBtn.className = 'mf-folder-add-btn';
         addBtn.title = 'Dodaj nowy folder';
         addBtn.setAttribute('aria-label', 'Dodaj nowy folder');
-        addBtn.innerHTML = ICONS.plus;
+        this._setIcon(addBtn, 'plus');
         addBtn.addEventListener('click', () => addHandler());
         container.appendChild(addBtn);
       }
@@ -689,8 +689,9 @@
         pill.innerHTML = `
           <span class="mf-header-pill-icon">${this._escapeHtml(currentFolder.icon || '📁')}</span>
           <span class="mf-header-pill-title">${this._escapeHtml(currentFolder.name)}</span>
-          <span class="mf-header-pill-chevron">${ICONS.chevronDown}</span>
+          <span class="mf-header-pill-chevron"></span>
         `;
+        this._setIcon(pill.querySelector('.mf-header-pill-chevron'), 'chevronDown');
       } else {
         pill.className = 'mf-header-pill';
         pill.style.removeProperty('--mf-folder-color');
@@ -754,7 +755,7 @@
         backBtn.className = 'mf-modal-back-btn';
         backBtn.title = 'Wróć do wszystkich folderów';
         backBtn.setAttribute('aria-label', 'Wróć do wszystkich folderów');
-        backBtn.innerHTML = ICONS.arrowBack;
+        this._setIcon(backBtn, 'arrowBack');
         backBtn.onclick = (e) => {
           e.stopPropagation();
           this.closeModal();
@@ -772,7 +773,7 @@
       closeBtn.type = 'button';
       closeBtn.className = 'mf-modal-close-btn';
       closeBtn.setAttribute('aria-label', 'Zamknij okno');
-      closeBtn.innerHTML = ICONS.close;
+      this._setIcon(closeBtn, 'close');
       closeBtn.onclick = () => this.closeModal();
 
       header.appendChild(headerLeft);
@@ -855,10 +856,12 @@
       const customColorWrapper = document.createElement('div');
       customColorWrapper.className = 'mf-color-custom-wrapper';
       customColorWrapper.title = 'Wybierz własny kolor z palety';
+      const safeSelectedColor = this._escapeHtml(selectedColor);
       customColorWrapper.innerHTML = `
-        <span class="mf-color-custom-icon">${ICONS.palette}</span>
-        <input type="color" class="mf-color-custom-input" value="${selectedColor}" />
+        <span class="mf-color-custom-icon"></span>
+        <input type="color" class="mf-color-custom-input" value="${safeSelectedColor}" />
       `;
+      this._setIcon(customColorWrapper.querySelector('.mf-color-custom-icon'), 'palette');
       const customColorInput = customColorWrapper.querySelector('.mf-color-custom-input');
       customColorInput.addEventListener('input', (event) => {
         selectedColor = event.target.value;
@@ -1020,9 +1023,7 @@
           const toggleBtn = document.createElement('button');
           toggleBtn.type = 'button';
           toggleBtn.className = `mf-picker-toggle-btn ${isAssigned ? 'mf-btn-in-folder' : 'mf-btn-add-folder'}`;
-          toggleBtn.innerHTML = isAssigned
-            ? `${ICONS.check} <span>W folderze</span>`
-            : `${ICONS.plus} <span>Dodaj</span>`;
+          this._setButtonContent(toggleBtn, isAssigned ? 'check' : 'plus', isAssigned ? 'W folderze' : 'Dodaj');
 
           const toggleAction = () => {
             if (assignedThreadIds.has(thread.id)) {
@@ -1067,7 +1068,7 @@
         const deleteBtn = document.createElement('button');
         deleteBtn.type = 'button';
         deleteBtn.className = 'mf-btn mf-btn-danger';
-        deleteBtn.innerHTML = `${ICONS.trash} <span>Usuń</span>`;
+        this._setButtonContent(deleteBtn, 'trash', 'Usuń');
         deleteBtn.title = 'Usuń ten folder';
         deleteBtn.addEventListener('click', () => {
           if (confirm(`Czy na pewno chcesz usunąć folder "${folder.name}"? Przypisane czaty nie zostaną usunięte.`)) {
@@ -1223,10 +1224,9 @@
       header.className = 'mf-modal-header';
       header.innerHTML = `
         <h2 class="mf-modal-title">Zarządzanie folderami i ustawienia</h2>
-        <button type="button" class="mf-modal-close-btn" aria-label="Zamknij okno">
-          ${ICONS.close}
-        </button>
+        <button type="button" class="mf-modal-close-btn" aria-label="Zamknij okno"></button>
       `;
+      this._setIcon(header.querySelector('.mf-modal-close-btn'), 'close');
 
       const nav = document.createElement('div');
       nav.className = 'mf-settings-nav';
@@ -1265,7 +1265,7 @@
         const addBtn = document.createElement('button');
         addBtn.type = 'button';
         addBtn.className = 'mf-btn mf-btn-primary';
-        addBtn.innerHTML = `${ICONS.plus}<span>Nowy folder</span>`;
+        this._setButtonContent(addBtn, 'plus', 'Nowy folder');
         addBtn.onclick = () => {
           this.showFolderModal({
             onSave: async (newFolder) => {
@@ -1343,7 +1343,7 @@
             peopleBtn.type = 'button';
             peopleBtn.className = 'mf-settings-action-btn';
             peopleBtn.title = 'Dodaj lub usuń osoby z tego folderu';
-            peopleBtn.innerHTML = ICONS.users;
+            this._setIcon(peopleBtn, 'users');
             peopleBtn.onclick = openEditModal;
             actions.appendChild(peopleBtn);
           }
@@ -1358,7 +1358,7 @@
             editBtn.type = 'button';
             editBtn.className = 'mf-settings-action-btn';
             editBtn.title = 'Edytuj folder';
-            editBtn.innerHTML = ICONS.edit;
+            this._setIcon(editBtn, 'edit');
             editBtn.onclick = openEditModal;
             actions.appendChild(editBtn);
 
@@ -1366,7 +1366,7 @@
             deleteBtn.type = 'button';
             deleteBtn.className = 'mf-settings-action-btn mf-btn-delete';
             deleteBtn.title = 'Usuń';
-            deleteBtn.innerHTML = ICONS.trash;
+            this._setIcon(deleteBtn, 'trash');
             deleteBtn.onclick = async () => {
               const confirmMsg =
                 typeof confirm !== 'undefined' ? confirm(`Czy na pewno chcesz usunąć folder „${folder.name}”?`) : true;
@@ -1691,7 +1691,7 @@
       searchWrapper.className = 'mf-dropdown-search-wrapper';
       const searchIcon = document.createElement('span');
       searchIcon.className = 'mf-dropdown-search-icon';
-      searchIcon.innerHTML = ICONS.search;
+      this._setIcon(searchIcon, 'search');
       const searchInput = document.createElement('input');
       searchInput.type = 'text';
       searchInput.className = 'mf-dropdown-search';
@@ -1714,11 +1714,13 @@
         unassignItem.className = `mf-dropdown-item mf-dropdown-unassign ${!currentFolderId || currentFolderId === 'uncategorized' ? 'mf-selected' : ''}`;
         unassignItem.innerHTML = `
           <div class="mf-dropdown-item-left">
-            <span class="mf-dropdown-item-icon">${ICONS.unassign}</span>
+            <span class="mf-dropdown-item-icon"></span>
             <span class="mf-dropdown-item-name">Brak folderu (usuń przypisanie)</span>
           </div>
-          <span class="mf-dropdown-item-check">${ICONS.check}</span>
+          <span class="mf-dropdown-item-check"></span>
         `;
+        this._setIcon(unassignItem.querySelector('.mf-dropdown-item-icon'), 'unassign');
+        this._setIcon(unassignItem.querySelector('.mf-dropdown-item-check'), 'check');
         unassignItem.addEventListener('click', () => {
           if (onAssign) onAssign(threadId, null);
           this.closeDropdown();
@@ -1735,14 +1737,16 @@
           const item = document.createElement('div');
           item.className = `mf-dropdown-item ${isSelected ? 'mf-selected' : ''}`;
 
+          const safeColor = this._escapeHtml(folder.color || '#0084FF');
           item.innerHTML = `
             <div class="mf-dropdown-item-left">
-              <span class="mf-dropdown-item-dot" style="background-color: ${folder.color || '#0084FF'}"></span>
+              <span class="mf-dropdown-item-dot" style="background-color: ${safeColor}"></span>
               <span class="mf-dropdown-item-icon">${this._escapeHtml(folder.icon || '📁')}</span>
               <span class="mf-dropdown-item-name">${this._escapeHtml(folder.name)}</span>
             </div>
-            <span class="mf-dropdown-item-check">${ICONS.check}</span>
+            <span class="mf-dropdown-item-check"></span>
           `;
+          this._setIcon(item.querySelector('.mf-dropdown-item-check'), 'check');
 
           item.addEventListener('click', () => {
             if (onAssign) onAssign(threadId, folder.id);
@@ -1770,7 +1774,7 @@
       const newFolderBtn = document.createElement('button');
       newFolderBtn.type = 'button';
       newFolderBtn.className = 'mf-dropdown-new-folder-btn';
-      newFolderBtn.innerHTML = `${ICONS.plus} <span>Utwórz nowy folder</span>`;
+      this._setButtonContent(newFolderBtn, 'plus', 'Utwórz nowy folder');
       newFolderBtn.addEventListener('click', () => {
         this.closeDropdown();
         if (onNewFolder) {
@@ -1976,6 +1980,58 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+    }
+
+    /**
+     * Bezpiecznie tworzy element SVG dla wskazanej ikony z ICONS.
+     * @private
+     * @param {string} iconName
+     * @returns {Element}
+     */
+    _createIcon(iconName) {
+      const svgString = ICONS[iconName];
+      if (!svgString) {
+        return document.createElement('span');
+      }
+      if (typeof DOMParser !== 'undefined') {
+        const doc = new DOMParser().parseFromString(svgString, 'image/svg+xml');
+        if (doc && doc.documentElement) {
+          return doc.documentElement;
+        }
+      }
+      return document.createElement('span');
+    }
+
+    /**
+     * Bezpiecznie wstawia ikonę SVG do elementu bez użycia innerHTML ze zmienną.
+     * @private
+     * @param {Element} el
+     * @param {string} iconName
+     */
+    _setIcon(el, iconName) {
+      if (!el) return;
+      el.innerHTML = '';
+      el.appendChild(this._createIcon(iconName));
+    }
+
+    /**
+     * Ustawia treść przycisku składającą się z opcjonalnej ikony i etykiety tekstowej.
+     * @private
+     * @param {Element} btn
+     * @param {string} [iconName]
+     * @param {string} [labelText]
+     */
+    _setButtonContent(btn, iconName, labelText) {
+      if (!btn) return;
+      btn.innerHTML = '';
+      if (iconName) {
+        btn.appendChild(this._createIcon(iconName));
+      }
+      if (labelText) {
+        const span = document.createElement('span');
+        span.textContent = labelText;
+        btn.appendChild(span);
+      }
     }
   }
 

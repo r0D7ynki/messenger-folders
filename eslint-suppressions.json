@@ -1,25 +1,2 @@
 {
-  "popup/popup.js": {
-    "no-empty": {
-      "count": 1
-    },
-    "no-unsanitized/property": {
-      "count": 1
-    }
-  },
-  "src/storage.js": {
-    "preserve-caught-error": {
-      "count": 1
-    }
-  },
-  "src/ui.js": {
-    "no-unsanitized/property": {
-      "count": 23
-    }
-  },
-  "tests/test_ui.js": {
-    "no-useless-escape": {
-      "count": 1
-    }
-  }
 }

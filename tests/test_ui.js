@@ -159,7 +159,7 @@ class MockElement {
     if (selector.startsWith('#')) return node.id === selector.slice(1);
     if (selector.startsWith('.')) return node.classList.contains(selector.slice(1));
     if (selector.startsWith('[')) {
-      const attr = selector.replace(/[\[\]"]/g, '').split('=')[0];
+      const attr = selector.replace(/[\]["]/g, '').split('=')[0];
       return node.hasAttribute(attr);
     }
     return node.tagName.toLowerCase() === selector.toLowerCase();
@@ -224,6 +224,13 @@ global.window = {
   addEventListener() {}
 };
 global.requestAnimationFrame = (fn) => fn();
+global.DOMParser = class MockDOMParser {
+  parseFromString(markup) {
+    const root = new MockElement('div');
+    root.innerHTML = markup;
+    return { documentElement: root.children[0] || root };
+  }
+};
 
 const MessengerUI = require('../src/ui.js');
 
