@@ -20,6 +20,7 @@ Szanuje Twoją prywatność i chroni historię rozmów.
 - [Podręcznik użytkowania krok po kroku](#podręcznik-użytkowania-krok-po-kroku)
 - [Prywatność i bezpieczeństwo](#prywatność-i-bezpieczeństwo)
 - [Architektura techniczna](#architektura-techniczna)
+- [Rozwój i współpraca](#rozwój-i-współpraca)
 - [Prawa autorskie i licencja](#prawa-autorskie-i-licencja)
 
 ---
@@ -206,6 +207,14 @@ messenger-folders/
 ```
 
 Szczegółowy opis architektury, przepływu danych i mechanizmu odporności na zmiany CSS znajdziesz w dokumencie [docs/ARCHITECTURE.md](file:///home/grz3chu/messenger-folders/docs/ARCHITECTURE.md).
+
+---
+
+## Rozwój i współpraca
+
+Chcesz pomóc? Zacznij od [CONTRIBUTING.md](CONTRIBUTING.md): przygotowanie środowiska (`npm install`,
+`npm run verify`), zgłaszanie błędów i zasady pull requestów.
+Repozytorium jest przygotowane do pracy z agentami AI — zasady dla nich opisuje [AGENTS.md](AGENTS.md).
 
 ---
 

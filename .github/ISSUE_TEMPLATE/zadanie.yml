@@ -1,0 +1,61 @@
+name: Zadanie (Definition of Ready)
+description: Zadanie gotowe do podjęcia przez człowieka lub agenta AI — pola odpowiadają DoR
+labels: [zadanie]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Pola odpowiadają **Definition of Ready** z `docs/agents/WORKFLOW.md`.
+        Opiekun przenosi zgłoszenie na kartę `kanban/tasks/MF-XXX.md` (`npm run kanban -- new "..."`).
+  - type: input
+    id: cel
+    attributes:
+      label: Cel
+      description: Jedno zdanie — co ma się zmienić.
+    validations:
+      required: true
+  - type: textarea
+    id: kontekst
+    attributes:
+      label: Kontekst
+      description: Dlaczego? Odnośniki do linii kodu (`src/ui.js:653`), zgłoszeń, zrzutów.
+    validations:
+      required: true
+  - type: textarea
+    id: pliki
+    attributes:
+      label: Pliki
+      description: Które pliki wolno zmieniać — granica zakresu.
+      placeholder: "- `src/storage.js` — `importData`"
+    validations:
+      required: true
+  - type: textarea
+    id: kryteria
+    attributes:
+      label: Kryteria akceptacji
+      value: "- [ ] "
+    validations:
+      required: true
+  - type: textarea
+    id: weryfikacja
+    attributes:
+      label: Weryfikacja
+      description: Komendy i kroki ręczne.
+      placeholder: npm run verify
+    validations:
+      required: true
+  - type: dropdown
+    id: rozmiar
+    attributes:
+      label: Rozmiar
+      options:
+        - S — 1 plik, do ~50 linii
+        - M — do 3 plików, jeden moduł + testy
+        - L — wiele modułów lub zmiana kontraktu
+    validations:
+      required: true
+  - type: dropdown
+    id: model
+    attributes:
+      label: Proponowany wykonawca
+      options: [dowolny, claude, gemini (Antigravity), deepseek (max M), człowiek]
