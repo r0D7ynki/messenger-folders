@@ -3,6 +3,7 @@
   "agents.model_paused": "⏸ Dispatch for model {model} paused until {until}: {reason}",
   "agents.reason.message": "{worker}: limit message — {message}",
   "agents.reason.provider": "remaining provider limit {remaining} tokens < card estimate {estimate}",
+  "agents.reset_unconfirmed": "⚠️ {worker}: after the reset `{command}` the agent did not return to idle (≤ 10 s) — no card dispatched, retry in the next cycle. Check by hand in the pane that the tool knows this command (an unknown command may be passed to the model as text — the watcher cannot tell)",
   "api.bad_deps": "depends_on must be a list of IDs",
   "api.bad_direction": "direction: up or down",
   "api.bad_host": "Host header not allowed",

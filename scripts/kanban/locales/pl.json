@@ -3,6 +3,7 @@
   "agents.model_paused": "⏸ Przydział dla modelu {model} wstrzymany do {until}: {reason}",
   "agents.reason.message": "{worker}: komunikat o limicie — {message}",
   "agents.reason.provider": "pozostały limit u dostawcy {remaining} tokenów < estymacja karty {estimate}",
+  "agents.reset_unconfirmed": "⚠️ {worker}: po resecie `{command}` agent nie wrócił do idle (≤ 10 s) — karta nie została przydzielona, ponowna próba w następnym obiegu. Sprawdź ręcznie w panelu, czy narzędzie zna to polecenie (nieznane polecenie bywa przekazane modelowi jako tekst — tego watcher nie odróżni)",
   "api.bad_deps": "depends_on musi być listą ID",
   "api.bad_direction": "direction: up albo down",
   "api.bad_host": "Niedozwolony nagłówek Host",
