@@ -611,11 +611,12 @@ function runDetectorTests() {
 }
 
 /**
- * Ładuje src/content.js w osobnym kontekście vm z atrapami modułów i zwraca calculateUnreadCounts.
- * document.readyState === 'loading', więc start() nie rusza — testujemy tylko czystą funkcję.
- * @returns {Function} calculateUnreadCounts z content.js.
+ * Ładuje src/content.js w osobnym kontekście vm z atrapami modułów.
+ * document.readyState === 'loading', więc start() nie rusza — testujemy funkcje i callbacki modułu.
+ * @param {Object} [overrides] Dodatkowe lub podmienione obiekty globalne piaskownicy.
+ * @returns {Object} Kontekst piaskownicy po wykonaniu content.js.
  */
-function loadCalculateUnreadCounts() {
+function loadContentScript(overrides = {}) {
   const vm = require('vm');
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'content.js'), 'utf8');
   const sandbox = {
@@ -624,10 +625,20 @@ function loadCalculateUnreadCounts() {
     MessengerDOMDetector: class {},
     MessengerFoldersUI: class {},
     window: { location: { href: 'https://www.messenger.com/' } },
-    document: { readyState: 'loading', addEventListener() {} }
+    document: { readyState: 'loading', addEventListener() {} },
+    ...overrides
   };
   vm.createContext(sandbox);
   vm.runInContext(source, sandbox);
+  return sandbox;
+}
+
+/**
+ * Zwraca calculateUnreadCounts z content.js załadowanego w piaskownicy.
+ * @returns {Function} calculateUnreadCounts z content.js.
+ */
+function loadCalculateUnreadCounts() {
+  const sandbox = loadContentScript();
   assert.strictEqual(typeof sandbox.calculateUnreadCounts, 'function', 'content.js eksportuje calculateUnreadCounts');
   return sandbox.calculateUnreadCounts;
 }
@@ -665,8 +676,110 @@ function runUnreadCountsTests() {
   console.log("✓ calculateUnreadCounts(): suma dla 'all', nieprzypisane → uncategorized, duplikaty liczone raz");
 }
 
+/**
+ * Testy MF-021: wsadowe auto-przypisania przez publiczne API storage.
+ */
+async function runAutoAssignmentTests() {
+  console.log('\n--- Test 5: Auto-przypisania reguł (MF-021) ---');
+
+  // 1. applyAutoAssignments aktualizuje pamięć podręczną synchronicznie, jeszcze przed zapisem
+  const autoStorage = new MessengerFoldersStorage(new MockStorageArea());
+  await autoStorage.init();
+  await autoStorage.assignThread('t_manual', 'friends');
+
+  const pending = autoStorage.applyAutoAssignments([
+    { threadId: 't_new', folderId: 'work', expectedFolderId: null, metadata: { name: 'Projekt A' } },
+    // Wątek zmienił folder od ewaluacji (oczekiwano braku folderu) — przypisanie pominięte
+    { threadId: 't_manual', folderId: 'work', expectedFolderId: null, metadata: { name: 'Projekt B' } }
+  ]);
+  const syncThreads = autoStorage.getAllThreadsSync();
+  assert.strictEqual(syncThreads.t_new.folderId, 'work', 'Auto-przypisanie widoczne od razu w getAllThreadsSync()');
+  assert.strictEqual(syncThreads.t_new.autoAssigned, true, 'Auto-przypisanie oznaczone autoAssigned');
+  assert.strictEqual(syncThreads.t_manual.folderId, 'friends', 'Ręczne przypisanie nie zostaje nadpisane');
+
+  const applied = await pending;
+  assert.deepStrictEqual(applied, ['t_new'], 'Zwraca tylko faktycznie przypisane wątki');
+  assert.strictEqual(autoStorage._storage.store.mf_threads.t_new.folderId, 'work', 'Przypisanie trafia do pamięci');
+  assert.strictEqual(autoStorage._storage.store.mf_threads.t_manual.folderId, 'friends');
+  assert.deepStrictEqual(await autoStorage.applyAutoAssignments([]), [], 'Pusta lista → brak zapisu');
+
+  // Ręczne assignThread tuż po zapisie wsadowym nie gubi auto-przypisań (świeża pamięć podręczna)
+  await autoStorage.assignThread('t_other', 'groups');
+  assert.strictEqual(autoStorage._storage.store.mf_threads.t_new.folderId, 'work');
+  console.log('✓ storage.applyAutoAssignments() aktualizuje pamięć podręczną przed zapisem i pomija zmienione wątki');
+
+  // 2. content.js: ręczne przypisanie między porcjami ewaluacji nie jest nadpisane regułą
+  const { MessengerRulesEngine } = require('../src/rules.js');
+  const realEngine = new MessengerRulesEngine({ storageArea: {} });
+  const rules = [
+    {
+      id: 'r1',
+      name: 'Projekty',
+      enabled: true,
+      priority: 10,
+      folderId: 'work',
+      matchMode: 'all',
+      overwriteManual: false,
+      conditions: [{ field: 'name', operator: 'contains', value: 'Projekt' }]
+    }
+  ];
+
+  const evalStorage = new MessengerFoldersStorage(new MockStorageArea());
+  await evalStorage.init();
+  const detected = Array.from({ length: 25 }, (_, i) => ({ threadId: `t${i}`, name: `Projekt ${i}` }));
+
+  let yields = 0;
+  const uiStub = { filterChatRows() {}, updateFolderCounts() {} };
+  loadContentScript({
+    MessengerFoldersStorage: function () {
+      return evalStorage;
+    },
+    MessengerDOMDetector: function () {
+      return { scanChatList: () => detected };
+    },
+    MessengerFoldersUI: function () {
+      return uiStub;
+    },
+    MessengerRulesEngine: function () {
+      return {
+        getRules: async () => rules,
+        evaluateThread: (thread, r, folders) => realEngine.evaluateThread(thread, r, folders)
+      };
+    },
+    // Użytkownik przypisuje ręcznie wątek już ocenione (t3) i jeszcze nieocenione (t22) między porcjami
+    requestIdleCallback: (resolve) => {
+      yields++;
+      evalStorage
+        .assignThread('t3', 'friends')
+        .then(() => evalStorage.assignThread('t22', 'groups'))
+        .then(resolve);
+    }
+  });
+
+  // content.js podpina onRulesChanged do obiektu UI — wywołanie uruchamia ewaluację reguł
+  assert.strictEqual(typeof uiStub.onRulesChanged, 'function', 'content.js podpina ui.onRulesChanged');
+  await uiStub.onRulesChanged();
+
+  const stored = evalStorage._storage.store.mf_threads;
+  assert.strictEqual(stored.t3.folderId, 'friends', 'Zapisane ręczne przypisanie t3 nie jest nadpisane regułą');
+  assert.strictEqual(stored.t22.folderId, 'groups', 'Zapisane ręczne przypisanie t22 nie jest nadpisane regułą');
+
+  const after = evalStorage.getAllThreadsSync();
+  assert.ok(yields >= 1, 'Ewaluacja 25 wątków oddaje sterowanie między porcjami');
+  assert.strictEqual(after.t3.folderId, 'friends', 'Wątek oceniony przed ręcznym przypisaniem nie jest nadpisany');
+  assert.strictEqual(after.t3.autoAssigned, undefined, 'Ręczne przypisanie t3 nie jest oznaczone jako automatyczne');
+  assert.strictEqual(after.t22.folderId, 'groups', 'Wątek oceniany po ręcznym przypisaniu nie jest nadpisany');
+  assert.strictEqual(after.t0.folderId, 'work', 'Pozostałe wątki przypisane regułą');
+  assert.strictEqual(after.t24.folderId, 'work');
+  assert.strictEqual(after.t0.autoAssigned, true);
+  console.log(
+    '✓ content.js: ręczne przypisanie między porcjami ewaluacji nie jest nadpisane regułą bez overwriteManual'
+  );
+}
+
 (async () => {
   await runStorageTests();
+  await runAutoAssignmentTests();
   runDetectorTests();
   runUnreadCountsTests();
   console.log('\n=============================================');

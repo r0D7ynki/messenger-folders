@@ -133,7 +133,6 @@
 
       const folders = storage.getFoldersSync();
       const existingThreads = storage.getAllThreadsSync();
-      const now = Date.now();
       const rulesVersion = rules.map((r) => `${r.id}_${r.priority}_${r.enabled}`).join('|');
 
       // Wyselekcjonuj kandydatów wymagających ewaluacji
@@ -166,12 +165,14 @@
       // Przetwarzanie w porcjach z oddawaniem sterowania do pętli zdarzeń (60 FPS)
       for (let i = 0; i < candidates.length; i += CHUNK_SIZE) {
         const chunk = candidates.slice(i, i + CHUNK_SIZE);
+        // Świeży stan po każdym oddaniu sterowania — użytkownik mógł w tym czasie przypisać wątek ręcznie
+        const threadsNow = i === 0 ? existingThreads : storage.getAllThreadsSync();
 
         for (const thread of chunk) {
           const cacheKey = `${thread.threadId}:${thread.name || ''}:${rulesVersion}`;
           addToEvaluatedCache(cacheKey);
 
-          const existing = existingThreads[thread.threadId];
+          const existing = threadsNow[thread.threadId];
           const isManuallyAssigned =
             existing && existing.folderId && existing.folderId !== 'uncategorized' && !existing.autoAssigned;
 
@@ -187,6 +188,7 @@
               newAssignments.push({
                 threadId: thread.threadId,
                 folderId: matchedFolderId,
+                expectedFolderId: existing?.folderId || null,
                 metadata: {
                   name: thread.name || '',
                   avatar: thread.avatar || ''
@@ -208,26 +210,11 @@
         }
       }
 
-      // Pojedynczy zapis wsadowy (Single-Batch Write) do chrome.storage.local
-      if (newAssignments.length > 0) {
-        console.log(`Messenger Folders: Automatycznie przypisano ${newAssignments.length} wątków.`);
-
-        const updatedThreads = { ...storage.getAllThreadsSync() };
-        for (const item of newAssignments) {
-          const cleanId = String(item.threadId).trim();
-          const existing = updatedThreads[cleanId] || {};
-          updatedThreads[cleanId] = {
-            ...existing,
-            folderId: item.folderId,
-            name: item.metadata.name || existing.name || '',
-            avatar: item.metadata.avatar || existing.avatar || '',
-            assignedAt: existing.assignedAt || now,
-            updatedAt: now,
-            autoAssigned: true
-          };
-        }
-
-        await storage._set({ mf_threads: updatedThreads });
+      // Pojedynczy zapis wsadowy (Single-Batch Write) przez publiczne API storage;
+      // wątki, których folder zmienił się w trakcie ewaluacji, są pomijane
+      const applied = await storage.applyAutoAssignments(newAssignments);
+      if (applied.length > 0) {
+        console.log(`Messenger Folders: Automatycznie przypisano ${applied.length} wątków.`);
 
         // Natychmiastowe odświeżenie interfejsu i aktywnego filtra z pamięci podręcznej
         currentActiveFolder = storage.getActiveFolderSync();

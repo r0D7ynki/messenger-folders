@@ -466,6 +466,62 @@
     }
 
     /**
+     * Zapisuje wsadowo automatyczne przypisania z reguł (oznaczone `autoAssigned: true`).
+     * Pamięć podręczna jest aktualizowana synchronicznie przed zapisem, więc
+     * getAllThreadsSync() od razu zwraca nowe przypisania. Przypisanie jest pomijane,
+     * gdy folder wątku zmienił się od chwili ewaluacji (`expectedFolderId`) — np.
+     * użytkownik przypisał wątek ręcznie, zanim reguły skończyły pracę.
+     * @param {Array<Object>} assignments Lista { threadId, folderId, expectedFolderId, metadata }.
+     * @returns {Promise<Array<string>>} Identyfikatory faktycznie przypisanych wątków.
+     */
+    async applyAutoAssignments(assignments) {
+      if (!this._isInitialized) {
+        await this.init();
+      }
+
+      if (!Array.isArray(assignments) || assignments.length === 0) {
+        return [];
+      }
+
+      const now = Date.now();
+      const updatedThreads = { ...this._threads };
+      const applied = [];
+
+      for (const item of assignments) {
+        if (!item || !item.threadId || !item.folderId || typeof item.folderId !== 'string') {
+          continue;
+        }
+
+        const cleanThreadId = String(item.threadId).trim();
+        const existing = updatedThreads[cleanThreadId] || {};
+        const currentFolderId = existing.folderId || null;
+        if (currentFolderId !== (item.expectedFolderId || null)) {
+          continue;
+        }
+
+        const metadata = item.metadata || {};
+        updatedThreads[cleanThreadId] = {
+          ...existing,
+          folderId: item.folderId,
+          name: metadata.name || existing.name || '',
+          avatar: metadata.avatar || existing.avatar || '',
+          assignedAt: existing.assignedAt || now,
+          updatedAt: now,
+          autoAssigned: true
+        };
+        applied.push(cleanThreadId);
+      }
+
+      if (applied.length === 0) {
+        return applied;
+      }
+
+      this._threads = updatedThreads;
+      await this._set({ [STORAGE_KEYS.THREADS]: updatedThreads });
+      return applied;
+    }
+
+    /**
      * Usuwa przypisanie wątku do folderu (przypisuje do 'uncategorized').
      * @param {string} threadId Identyfikator wątku.
      * @returns {Promise<boolean>}
