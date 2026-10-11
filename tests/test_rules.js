@@ -123,15 +123,42 @@ async function runRulesTests() {
     'Wzorzec przekraczający limit 250 znaków powinien zostać odrzucony'
   );
 
-  // MF-020: kwantyfikowane alternatywy (wykładniczy nawrót) — odrzucone szybko, bez zawieszenia
+  // MF-020: ochrona przed ReDoS — pomiar czasu matchCondition w milisekundach
+  const timeMatch = (text, pattern) => {
+    const t0 = process.hrtime.bigint();
+    const result = engine.matchCondition(text, { operator: 'regex', value: pattern });
+    return { result, ms: Number(process.hrtime.bigint() - t0) / 1e6 };
+  };
+
+  // Kwantyfikowane alternatywy (wykładniczy nawrót) — odrzucone szybko, bez zawieszenia
   const redosText = 'a'.repeat(27) + '!';
   assert.strictEqual(redosText.length, 28);
   for (const pattern of ['(a|a)*$', '(a|aa)*$', '(a|ab)*c']) {
-    const t0 = process.hrtime.bigint();
-    const result = engine.matchCondition(redosText, { operator: 'regex', value: pattern });
-    const elapsedMs = Number(process.hrtime.bigint() - t0) / 1e6;
+    const { result, ms } = timeMatch(redosText, pattern);
     assert.strictEqual(result, false, `Wzorzec ReDoS ${pattern} powinien zostać odrzucony`);
-    assert.ok(elapsedMs < 50, `matchCondition dla ${pattern} trwał ${elapsedMs.toFixed(1)} ms (limit 50 ms)`);
+    assert.ok(ms < 50, `matchCondition dla ${pattern} trwał ${ms.toFixed(1)} ms (limit 50 ms)`);
+  }
+
+  // Poprawka 1: łańcuchy punktów wyboru bez kwantyfikowanej grupy — odrzucone przy zapisie i szybkie
+  const longA = 'a'.repeat(100);
+  for (const pattern of ['a?'.repeat(40) + 'b', '(a|aa)'.repeat(41) + 'b']) {
+    assert.match(
+      MessengerRulesEngine.validateRegexPattern(pattern),
+      /zbyt wiele możliwości/,
+      `Wzorzec ${pattern.slice(0, 12)}… powinien zostać odrzucony przy zapisie`
+    );
+    const { result, ms } = timeMatch(longA, pattern);
+    assert.strictEqual(result, false);
+    assert.ok(ms < 50, `matchCondition dla ${pattern.slice(0, 12)}… trwał ${ms.toFixed(1)} ms (limit 50 ms)`);
+  }
+
+  // Ochrona nie jest listą znanych wzorców: każda długość łańcucha jest odrzucona albo szybka
+  for (let k = 1; k <= 45; k++) {
+    for (const pattern of ['a?'.repeat(k) + 'b', '(a|aa)'.repeat(k) + 'b', 'a?'.repeat(k) + '\\w*!']) {
+      if (MessengerRulesEngine.validateRegexPattern(pattern) !== null) continue;
+      const { ms } = timeMatch(longA, pattern);
+      assert.ok(ms < 200, `Przyjęty wzorzec ${pattern.slice(0, 16)}… (k=${k}) trwał ${ms.toFixed(1)} ms`);
+    }
   }
 
   // validateRegexPattern: komunikat błędu dla niebezpiecznych i błędnych wzorców, null dla poprawnych
@@ -144,7 +171,10 @@ async function runRulesTests() {
     '((a*)b)*',
     '^(a+)+$',
     'a++',
+    'a???',
     '\\w*\\w*\\w*\\w*!',
+    '.*foo.*bar.*', // 3 nieograniczone powtórzenia; równoważne „foo.*bar” jest przyjmowane
+    '\\w{0,99}\\w{0,99}\\w{0,99}!',
     '[a-z(',
     'a'.repeat(251)
   ];
@@ -158,13 +188,18 @@ async function runRulesTests() {
   }
   const acceptedPatterns = [
     '^ticket-\\d+$',
+    'ticket-\\d+$',
     '^Jan.*',
+    'foo.*bar',
     '(Praca|Dom)',
-    '.*foo.*bar.*',
+    '^(Praca|Dom|Szkoła|Rodzina)',
     '(\\d{3}-)+',
+    '(\\d{1,3}\\.){3}\\d{1,3}',
     '[(|)*]+',
     '\\(a|b\\)*',
     'a*?b',
+    'a??',
+    'a??b',
     '^\\d+-\\d+-\\d+$'
   ];
   for (const pattern of acceptedPatterns) {
@@ -172,12 +207,27 @@ async function runRulesTests() {
   }
   assert.strictEqual(engine.matchCondition('Praca zdalna', { operator: 'regex', value: '^(Praca|Dom)' }), true);
   assert.strictEqual(engine.matchCondition('PRJ-123-456', { operator: 'regex', value: '^prj-\\d+-\\d+$' }), true);
+  assert.strictEqual(engine.matchCondition('ab', { operator: 'regex', value: '^a??b$' }), true);
+  assert.strictEqual(
+    engine.matchCondition('Serwer 192.168.1.10', { operator: 'regex', value: '(\\d{1,3}\\.){3}\\d{1,3}' }),
+    true
+  );
 
-  // Nawrót wielomianowy: najwyżej 3 powtórzenia i tekst przycięty do 100 znaków
-  const t0Poly = process.hrtime.bigint();
-  engine.matchCondition('a'.repeat(5000), { operator: 'regex', value: '\\w{0,99}\\w{0,99}\\w{0,99}!' });
-  const polyMs = Number(process.hrtime.bigint() - t0Poly) / 1e6;
-  assert.ok(polyMs < 500, `Długi tekst przy 3 powtórzeniach trwał ${polyMs.toFixed(1)} ms`);
+  // Poprawka 1: tekst nie jest obcinany — dopasowanie za 100. znakiem nadal działa
+  const longName = 'x'.repeat(95) + ' ticket-42';
+  assert.strictEqual(longName.length, 105);
+  assert.strictEqual(
+    engine.matchCondition(longName, { operator: 'regex', value: 'ticket-\\d+$' }),
+    true,
+    'ticket-\\d+$ powinien pasować do nazwy 105-znakowej'
+  );
+
+  // Bardzo długi tekst przy wzorcu wielomianowym: koszt ponad budżet → brak dopasowania, bez zawieszenia
+  for (const pattern of ['\\w*\\w*!', '\\w*!', 'a?a?a?a?a?a?a?a?\\w*!']) {
+    const { result, ms } = timeMatch('a'.repeat(5000), pattern);
+    assert.strictEqual(result, false);
+    assert.ok(ms < 50, `Wzorzec ${pattern} na 5000 znakach trwał ${ms.toFixed(1)} ms`);
+  }
 
   // Zapis reguły z niebezpiecznym wzorcem jest odrzucany, a reguła nie trafia do magazynu
   const rulesBeforeRedos = (await engine.getRules()).length;
@@ -191,6 +241,53 @@ async function runRulesTests() {
     'saveRule powinien odrzucić wzorzec (a|a)*$'
   );
   assert.strictEqual((await engine.getRules()).length, rulesBeforeRedos, 'Odrzucona reguła nie została zapisana');
+
+  // Poprawka 1: saveRules() waliduje wzorce tak jak saveRule()
+  const redosRule = { id: 'r_redos', name: 'ReDoS', folderId: 'work', conditions: [] };
+  for (const value of ['a?'.repeat(40) + 'b', '(a|aa)*$']) {
+    await assert.rejects(
+      engine.saveRules([{ ...redosRule, conditions: [{ field: 'name', operator: 'regex', value }] }]),
+      /zbyt wiele możliwości|alternatyw/,
+      `saveRules powinien odrzucić wzorzec ${value.slice(0, 12)}…`
+    );
+  }
+  assert.strictEqual((await engine.getRules()).length, rulesBeforeRedos, 'saveRules nie zapisał odrzuconej reguły');
+
+  // Wzorzec zapisany przed MF-020 nie blokuje przełączania ani usuwania innych reguł
+  const legacyStorage = new MockStorageArea();
+  legacyStorage.store[STORAGE_KEYS.RULES] = [
+    {
+      id: 'r_legacy',
+      name: 'Stara',
+      folderId: 'work',
+      conditions: [{ field: 'name', operator: 'regex', value: '(foo|bar)+' }]
+    },
+    { id: 'r_ok', name: 'Dobra', folderId: 'work', conditions: [{ field: 'name', operator: 'contains', value: 'x' }] }
+  ];
+  const legacyEngine = new MessengerRulesEngine({ storageArea: legacyStorage });
+  await legacyEngine.getRules();
+  await legacyEngine.toggleRule('r_ok', false);
+  await legacyEngine.deleteRule('r_ok');
+  assert.deepStrictEqual(
+    (await legacyEngine.getRules()).map((r) => r.id),
+    ['r_legacy'],
+    'Stara reguła zostaje, operacje na innych regułach działają'
+  );
+  assert.strictEqual(
+    legacyEngine.matchCondition('foobar', { operator: 'regex', value: '(foo|bar)+' }),
+    false,
+    'Stary niebezpieczny wzorzec nie jest wykonywany'
+  );
+  await assert.rejects(
+    legacyEngine.saveRule({
+      id: 'r_legacy',
+      name: 'Stara',
+      folderId: 'work',
+      conditions: [{ field: 'name', operator: 'regex', value: '(foo|bar)+' }]
+    }),
+    /alternatyw/,
+    'Edycja starej reguły w edytorze wymaga poprawienia wzorca'
+  );
 
   // Puste i nieprawidłowe wartości
   assert.strictEqual(engine.matchCondition(null, { operator: 'contains', value: 'test' }), false);

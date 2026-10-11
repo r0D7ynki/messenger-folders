@@ -878,6 +878,7 @@
           fieldSel.onchange = updateDryRun;
           opSel.onchange = () => {
             clearConditionError(row);
+            valInp.style.borderColor = '';
             updateDryRun();
           };
           valInp.oninput = () => {
