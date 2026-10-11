@@ -183,17 +183,34 @@ class MockElement {
     return { top: 100, bottom: 130, left: 50, right: 150, width: 100, height: 30 };
   }
 
+  closest(selector) {
+    let node = this;
+    while (node) {
+      if (node._matchesSelector && node._matchesSelector(node, selector)) return node;
+      node = node.parentElement;
+    }
+    return null;
+  }
+
   click() {
     this.dispatchEvent({ type: 'click' });
   }
 
-  focus() {}
+  focus() {
+    global.document.activeElement = this;
+    this.dispatchEvent({ type: 'focus' });
+  }
+
+  scrollIntoView(options) {
+    this.lastScrollIntoView = options || null;
+  }
 }
 
 // Konfiguracja globalnego mocka document i window
 const mockBody = new MockElement('body');
 global.document = {
   body: mockBody,
+  activeElement: null,
   createElement(tag) {
     return new MockElement(tag);
   },
@@ -694,6 +711,151 @@ const pillBadgesBody = folderBarSource.slice(
 assert.ok(pillBadgesBody.includes('unreadBadge.textContent = unreadText'), 'Odznaka ustawiana przez textContent');
 assert.ok(!pillBadgesBody.includes('innerHTML'), '_updatePillBadges nie używa innerHTML');
 console.log('✓ Odznaka: brak przy 0, liczba 1–99, 99+ przy 100, usunięcie po spadku do 0, treść przez textContent.');
+
+// 14. Dostępność klawiaturowa paska folderów: tablist, roving tabindex, strzałki (MF-013)
+console.log('Test 14: pasek folderów jako tablist (roving tabindex, strzałki, Home/End)...');
+
+// Czysty pasek w mockowanym dokumencie (poprzednie testy zostawiły własny)
+const a11yPreviousBar = global.document.getElementById('mf-folder-bar');
+if (a11yPreviousBar) a11yPreviousBar.remove();
+
+const a11yComp = new FolderBarComp(ui);
+const a11yBar = a11yComp.render(sampleFolders, 'work', { work: 4 });
+mockBody.appendChild(a11yBar);
+
+// Kontener pigułek = tablist (WAI-ARIA Tabs)
+const tablistOf = () => a11yBar.querySelector('.mf-folder-scroll-container');
+const pillsOf = () => tablistOf().querySelectorAll('.mf-folder-pill');
+const idsOf = (list) => Array.from(list).map((p) => p.dataset.folderId);
+const tabbablePills = () => Array.from(pillsOf()).filter((p) => p.getAttribute('tabindex') === '0');
+const visibleIdsOf = () => idsOf(Array.from(pillsOf()).filter((p) => !p.classList.contains('mf-pill-hidden')));
+const focusedId = () => (global.document.activeElement ? global.document.activeElement.dataset.folderId : null);
+
+assert.strictEqual(tablistOf().getAttribute('role'), 'tablist', 'Kontener pigułek musi mieć role="tablist"');
+assert.strictEqual(
+  tablistOf().getAttribute('aria-label'),
+  'Foldery rozmów',
+  'Tablist musi mieć aria-label="Foldery rozmów"'
+);
+assert.strictEqual(
+  tablistOf().getAttribute('aria-orientation'),
+  'horizontal',
+  'Tablist musi mieć aria-orientation="horizontal"'
+);
+assert.deepStrictEqual(idsOf(pillsOf()), ['all', 'work', 'friends'], 'Pigułki w kolejności folderów');
+Array.from(pillsOf()).forEach((pill) => {
+  assert.strictEqual(pill.getAttribute('role'), 'tab', 'Każda pigułka musi mieć role="tab"');
+});
+assert.strictEqual(tabbablePills().length, 1, 'Dokładnie jedna pigułka jest przystankiem Tab');
+assert.strictEqual(tabbablePills()[0].dataset.folderId, 'work', 'Przystankiem Tab jest pigułka aktywna');
+assert.deepStrictEqual(
+  idsOf(Array.from(pillsOf()).filter((p) => p.getAttribute('tabindex') === '-1')),
+  ['all', 'friends'],
+  'Pozostałe pigułki mają tabindex="-1"'
+);
+
+// Symulacja klawisza na tabliście (w przeglądarce zdarzenie bąbelkuje z pigułki z fokusem)
+const pressKey = (key, target) => {
+  let prevented = false;
+  tablistOf().dispatchEvent({
+    type: 'keydown',
+    key,
+    target: target || null,
+    preventDefault() {
+      prevented = true;
+    },
+    stopPropagation() {}
+  });
+  return prevented;
+};
+
+// ArrowRight: następna pigułka, bez zmiany aktywnego folderu
+assert.strictEqual(pressKey('ArrowRight', pillsOf()[1]), true, 'ArrowRight jest przechwytywana przez tablist');
+assert.strictEqual(focusedId(), 'friends', 'ArrowRight przenosi fokus na następną pigułkę');
+assert.strictEqual(tabbablePills()[0].dataset.folderId, 'friends', 'Roving tabindex podąża za fokusem');
+assert.ok(!pillsOf()[2].classList.contains('mf-active'), 'Sam ruch fokusu nie aktywuje folderu');
+assert.ok(pillsOf()[1].classList.contains('mf-active'), 'Aktywny folder pozostaje bez zmian');
+
+// Zawijanie w obie strony
+assert.strictEqual(pressKey('ArrowRight'), true, 'ArrowRight jest obsługiwana');
+assert.strictEqual(focusedId(), 'all', 'ArrowRight z ostatniej pigułki zawija do pierwszej');
+assert.strictEqual(pressKey('ArrowLeft'), true, 'ArrowLeft jest obsługiwana');
+assert.strictEqual(focusedId(), 'friends', 'ArrowLeft z pierwszej pigułki zawija do ostatniej');
+
+// Home i End
+assert.strictEqual(pressKey('End'), true, 'End jest obsługiwana');
+assert.strictEqual(focusedId(), 'friends', 'End przenosi fokus na ostatnią pigułkę');
+assert.strictEqual(pressKey('Home'), true, 'Home jest obsługiwana');
+assert.strictEqual(focusedId(), 'all', 'Home przenosi fokus na pierwszą pigułkę');
+
+// Pigułka z fokusem jest przewijana do widoku
+pillsOf()[2].lastScrollIntoView = null;
+pressKey('Home');
+assert.deepStrictEqual(
+  pillsOf()[0].lastScrollIntoView,
+  { inline: 'nearest', block: 'nearest' },
+  'Pigułka z fokusem jest przewijana do widoku'
+);
+
+// Klawisze spoza wzorca nie zmieniają fokusu
+global.document.activeElement = null;
+assert.strictEqual(pressKey('a', pillsOf()[0]), false, 'Zwykły klawisz nie jest przechwytywany');
+assert.strictEqual(focusedId(), null, 'Zwykły klawisz nie przenosi fokusu');
+
+// Pigułki ukryte filtrem wyszukiwania są pomijane
+const a11ySearch = a11yBar.querySelector('.mf-folder-search-input');
+a11ySearch.value = 'a';
+a11ySearch.dispatchEvent({ type: 'input' });
+assert.deepStrictEqual(visibleIdsOf(), ['work', 'friends'], 'Filtr "a" ukrywa folder "Wszystkie"');
+assert.strictEqual(tabbablePills().length, 1, 'Nadal dokładnie jedna pigułka na przystanku Tab');
+assert.strictEqual(tabbablePills()[0].dataset.folderId, 'work', 'Ukryta pigułka nie zostaje przystankiem Tab');
+
+global.document.activeElement = null;
+assert.strictEqual(pressKey('ArrowRight', pillsOf()[1]), true, 'ArrowRight działa przy aktywnym filtrze');
+assert.strictEqual(focusedId(), 'friends', 'Fokus przechodzi na następną widoczną pigułkę');
+assert.strictEqual(pressKey('ArrowRight'), true, 'ArrowRight działa przy aktywnym filtrze');
+assert.strictEqual(focusedId(), 'work', 'Zawijanie pomija pigułki ukryte filtrem');
+assert.strictEqual(pressKey('End'), true, 'End działa przy aktywnym filtrze');
+assert.strictEqual(focusedId(), 'friends', 'End trafia na ostatnią widoczną pigułkę');
+assert.strictEqual(pressKey('Home'), true, 'Home działa przy aktywnym filtrze');
+assert.strictEqual(focusedId(), 'work', 'Home trafia na pierwszą widoczną pigułkę');
+
+a11ySearch.value = '';
+a11ySearch.dispatchEvent({ type: 'input' });
+assert.deepStrictEqual(visibleIdsOf(), ['all', 'work', 'friends'], 'Wyczyszczenie filtra pokazuje wszystkie pigułki');
+
+// Fokus nadany z zewnątrz (np. kliknięcie myszą) też przenosi przystanek Tab
+pillsOf()[0].focus();
+assert.strictEqual(tabbablePills().length, 1, 'Nadal dokładnie jedna pigułka na przystanku Tab');
+assert.strictEqual(tabbablePills()[0].dataset.folderId, 'all', 'Fokus z zewnątrz przenosi przystanek Tab');
+
+// Niezmiennik po updateFolderCounts()
+a11yComp.updateFolderCounts({ work: 4 }, { work: 5 });
+assert.strictEqual(tabbablePills().length, 1, 'Po updateFolderCounts() nadal dokładnie jeden przystanek Tab');
+assert.strictEqual(
+  tabbablePills()[0].dataset.folderId,
+  'work',
+  'Po updateFolderCounts() przystanek Tab wraca na pigułkę aktywną'
+);
+
+// Niezmiennik po ponownym renderze bez zmiany struktury (aktualizacja w miejscu)
+a11yComp.render(sampleFolders, 'friends', { work: 4 });
+assert.strictEqual(pillsOf().length, 3, 'Ponowny render nie duplikuje pigułek');
+assert.strictEqual(tabbablePills().length, 1, 'Po ponownym renderze nadal dokładnie jeden przystanek Tab');
+assert.strictEqual(tabbablePills()[0].dataset.folderId, 'friends', 'Przystanek Tab podąża za nową aktywną pigułką');
+
+// Niezmiennik po pełnym renderze (zmiana struktury folderów)
+a11yComp.render([...sampleFolders, { id: 'family', name: 'Rodzina', icon: '🏠' }], 'work', { work: 4 });
+assert.strictEqual(pillsOf().length, 4, 'Pełny render buduje pigułkę nowego folderu');
+assert.strictEqual(tablistOf().getAttribute('role'), 'tablist', 'Pełny render zachowuje role="tablist" na kontenerze');
+assert.strictEqual(tabbablePills().length, 1, 'Po pełnym renderze dokładnie jedna pigułka na przystanku Tab');
+assert.strictEqual(
+  tabbablePills()[0].dataset.folderId,
+  'work',
+  'Po pełnym renderze przystanek Tab na aktywnej pigułce'
+);
+
+console.log('✓ Pasek folderów: tablist, roving tabindex, strzałki/Home/End z zawijaniem, pomijanie ukrytych.');
 
 console.log('\n=============================================');
 console.log('WSZYSTKIE TESTY INTERFEJSU ZAKOŃCZONE SUKCESEM! ✓');

@@ -11,6 +11,44 @@
     (typeof global !== 'undefined' && global.MessengerUICore) ||
     (typeof require === 'function' ? require('./core.js') : null);
 
+  /**
+   * Zwraca widoczne pigułki folderów — pomija te ukryte filtrem wyszukiwania.
+   * @param {HTMLElement} container - Kontener pigułek (role="tablist")
+   * @returns {Array<HTMLElement>} Pigułki dostępne dla nawigacji klawiaturą
+   */
+  function visibleFolderPills(container) {
+    return Array.from(container.querySelectorAll('.mf-folder-pill')).filter(
+      (pill) => !pill.classList.contains('mf-pill-hidden') && pill.style.display !== 'none'
+    );
+  }
+
+  /**
+   * Ustawia roving tabindex (wzorzec WAI-ARIA Tabs): dokładnie jedna pigułka ma
+   * tabindex="0", pozostałe "-1". Punktem odniesienia jest pigułka preferowana (np. z fokusem),
+   * w razie jej braku — pigułka aktywna, a gdy żadna nie jest aktywna — pierwsza widoczna.
+   * @param {HTMLElement} container - Kontener pigułek (role="tablist")
+   * @param {HTMLElement} [preferredPill] - Pigułka, która ma przejąć przystanek Tab
+   * @returns {HTMLElement|null} Pigułka z tabindex="0"
+   */
+  function applyRovingTabindex(container, preferredPill) {
+    if (!container || typeof container.querySelectorAll !== 'function') return null;
+
+    const allPills = Array.from(container.querySelectorAll('.mf-folder-pill'));
+    if (!allPills.length) return null;
+
+    const visiblePills = visibleFolderPills(container);
+    const pool = visiblePills.length ? visiblePills : allPills;
+
+    let target = preferredPill && pool.indexOf(preferredPill) !== -1 ? preferredPill : null;
+    if (!target) target = pool.find((pill) => pill.classList.contains('mf-active')) || null;
+    if (!target) target = pool[0];
+
+    allPills.forEach((pill) => {
+      pill.setAttribute('tabindex', pill === target ? '0' : '-1');
+    });
+    return target;
+  }
+
   class FolderBarComponent {
     /**
      * @param {Object} [ui] Instancja fasady MessengerUI
@@ -130,6 +168,9 @@
               : `${folderName} (${countVal} rozmów)`;
         }
       });
+
+      // Roving tabindex: po aktualizacji liczników nadal dokładnie jedna pigułka ma tabindex="0"
+      applyRovingTabindex(bar.querySelector('.mf-folder-scroll-container'));
 
       return bar;
     }
@@ -307,6 +348,15 @@
             });
           }
 
+          // Roving tabindex po aktualizacji w miejscu: kontener to tablist, jedna pigułka na Tab
+          const scrollContainer = pillsRow.querySelector('.mf-folder-scroll-container');
+          if (scrollContainer) {
+            scrollContainer.setAttribute('role', 'tablist');
+            scrollContainer.setAttribute('aria-label', 'Foldery rozmów');
+            scrollContainer.setAttribute('aria-orientation', 'horizontal');
+            applyRovingTabindex(scrollContainer);
+          }
+
           return bar; // Gotowe, zero resetu DOM!
         }
       } else {
@@ -374,10 +424,13 @@
       btnLeft.style.transform = 'none';
       btnLeft.style.left = '-8px';
 
-      // Kontener przewijalny z pigułkami
+      // Kontener przewijalny z pigułkami — wzorzec WAI-ARIA Tabs (role="tablist")
       const container = document.createElement('div');
       container.className = 'mf-folder-scroll-container';
       container.setAttribute('data-mf-scroll-container', 'true');
+      container.setAttribute('role', 'tablist');
+      container.setAttribute('aria-label', 'Foldery rozmów');
+      container.setAttribute('aria-orientation', 'horizontal');
 
       // Przycisk przewijania w prawo
       const btnRight = document.createElement('button');
@@ -397,6 +450,57 @@
         btnRight.classList.toggle('mf-visible', maxScroll > 6 && container.scrollLeft < maxScroll - 6);
       };
 
+      // Bieżący przystanek Tab w pasku (roving tabindex) — pigułka z tabindex="0"
+      let rovingPill = null;
+
+      // Ustawia przystanek Tab (bez przenoszenia fokusu) na pigułce preferowanej lub
+      // na aktywnej, gdy preferowana jest nieobecna albo ukryta filtrem wyszukiwania.
+      const applyRoving = (preferredPill) => {
+        rovingPill = applyRovingTabindex(container, preferredPill || rovingPill);
+        return rovingPill;
+      };
+
+      // Przenosi fokus i przystanek Tab na pigułkę — bez zmiany aktywnego folderu
+      // (manualna aktywacja: folder zmienia dopiero Enter/Spacja/kliknięcie).
+      const focusPill = (pill) => {
+        if (!pill) return;
+        applyRoving(pill);
+        if (typeof pill.focus === 'function') pill.focus();
+        if (typeof pill.scrollIntoView === 'function') {
+          pill.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+        }
+      };
+
+      // Strzałki, Home i End przenoszą fokus między widocznymi pigułkami, z zawijaniem
+      container.addEventListener('keydown', (event) => {
+        if (event.altKey || event.ctrlKey || event.metaKey) return;
+
+        const pills = visibleFolderPills(container);
+        if (!pills.length) return;
+
+        const targetPill =
+          event.target && event.target.classList && event.target.classList.contains('mf-folder-pill')
+            ? event.target
+            : rovingPill;
+        const currentIdx = pills.indexOf(targetPill);
+
+        let nextIdx = null;
+        if (event.key === 'ArrowRight') {
+          nextIdx = currentIdx === -1 ? 0 : (currentIdx + 1) % pills.length;
+        } else if (event.key === 'ArrowLeft') {
+          nextIdx = currentIdx === -1 ? pills.length - 1 : (currentIdx - 1 + pills.length) % pills.length;
+        } else if (event.key === 'Home') {
+          nextIdx = 0;
+        } else if (event.key === 'End') {
+          nextIdx = pills.length - 1;
+        }
+        if (nextIdx === null) return;
+
+        event.preventDefault();
+        if (typeof event.stopPropagation === 'function') event.stopPropagation();
+        focusPill(pills[nextIdx]);
+      });
+
       // Dynamiczne filtrowanie pigułek w czasie rzeczywistym
       const applyFolderFilter = () => {
         const query = (searchInput.value || '').trim().toLowerCase();
@@ -415,6 +519,8 @@
             pill.style.removeProperty('display');
           }
         });
+        // Przystanek Tab nie może zostać na pigułce ukrytej filtrem
+        applyRoving();
         updateScrollButtons();
       };
 
@@ -463,6 +569,8 @@
         pill.setAttribute('data-mf-pill', 'true');
         pill.setAttribute('role', 'tab');
         pill.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        // Roving tabindex: tylko pigułka aktywna jest przystankiem Tab (applyRoving na końcu)
+        pill.setAttribute('tabindex', isActive ? '0' : '-1');
         const unreadVal = Number(resolvedUnreadCounts[folder.id]) || 0;
         pill.title =
           unreadVal > 0
@@ -494,6 +602,11 @@
         // Aktualizacja/dodanie odznak (.mf-folder-unread-badge i .mf-folder-count)
         this._updatePillBadges(pill, folder.id, resolvedCounts, resolvedUnreadCounts);
 
+        // Fokus z klawiatury lub myszy przenosi przystanek Tab na tę pigułkę
+        pill.addEventListener('focus', () => {
+          applyRoving(pill);
+        });
+
         // Wybór folderu z natychmiastową reakcją wizualną i filtrowaniem
         pill.addEventListener('click', () => {
           container.querySelectorAll('.mf-folder-pill').forEach((p) => {
@@ -501,6 +614,7 @@
             p.classList.toggle('mf-active', isMatch);
             p.setAttribute('aria-selected', isMatch ? 'true' : 'false');
           });
+          applyRoving(pill);
 
           if (this.ui && this.ui.storage) {
             const currentThreads = this.ui.storage._threads || {};
@@ -516,6 +630,9 @@
 
         container.appendChild(pill);
       });
+
+      // Dokładnie jedna pigułka (aktywna) jest przystankiem Tab
+      applyRoving();
 
       if (searchInput.value) {
         applyFolderFilter();
@@ -578,6 +695,8 @@
                 p.classList.toggle('mf-active', isMatch);
                 p.setAttribute('aria-selected', isMatch ? 'true' : 'false');
               });
+              // Przystanek Tab podąża za klikniętą (aktywną) pigułką
+              applyRovingTabindex(bar.querySelector('.mf-folder-scroll-container'), pill);
               if (this.ui && this.ui.storage) {
                 const currentThreads = this.ui.storage._threads || {};
                 if (typeof this.ui.filterChatRows === 'function') {
