@@ -27,7 +27,18 @@
   "content_scripts": [
     {
       "matches": ["*://*.messenger.com/*", "*://*.facebook.com/messages/*"],
-      "js": ["src/storage.js", "src/detector.js", "src/ui.js", "src/content.js"],
+      "js": [
+        "src/storage.js",
+        "src/detector.js",
+        "src/rules.js",
+        "src/ui/core.js",
+        "src/ui/folder-bar.js",
+        "src/ui/folder-modal.js",
+        "src/ui/thread-menu.js",
+        "src/ui/settings-modal.js",
+        "src/ui.js",
+        "src/content.js"
+      ],
       "css": ["src/content.css"],
       "run_at": "document_idle"
     }

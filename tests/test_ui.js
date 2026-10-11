@@ -268,6 +268,7 @@ const bar = ui.renderFolderBar(
 );
 
 assert.strictEqual(bar.id, 'mf-folder-bar', 'Element paska powinien mieć ID #mf-folder-bar');
+assert.strictEqual(editedFolder, null, 'editedFolder jest domyślnie null');
 const pills = bar.querySelectorAll('.mf-folder-pill');
 assert.strictEqual(pills.length, 3, 'Powinny powstać 3 pigułki folderów');
 
@@ -554,6 +555,102 @@ assert.ok(
   'Anna NIE może być ukryta podczas wyszukiwania na Messengerze'
 );
 console.log('✓ filterChatRows() nie ukrywa wątków podczas natywnego wyszukiwania Messengera.');
+
+// 12. Weryfikacja architektury modułowej (src/ui/*.js)
+console.log('Test 12: Weryfikacja architektury modułowej (src/ui/*.js)...');
+
+// a) MessengerUICore
+const Core = require('../src/ui/core.js');
+assert.strictEqual(typeof Core, 'object', 'MessengerUICore powinien być obiektem');
+assert.strictEqual(Object.keys(Core.ICONS).length, 15, 'ICONS powinno zawierać 15 ikon');
+assert.ok(Object.isFrozen(Core.ICONS), 'ICONS powinno być zamrożone');
+assert.strictEqual(Core.DEFAULT_EMOJIS.length, 24, 'DEFAULT_EMOJIS powinno zawierać 24 emotikony');
+assert.ok(Object.isFrozen(Core.DEFAULT_EMOJIS), 'DEFAULT_EMOJIS powinno być zamrożone');
+assert.strictEqual(Core.DEFAULT_COLORS.length, 10, 'DEFAULT_COLORS powinno zawierać 10 kolorów');
+assert.ok(Object.isFrozen(Core.DEFAULT_COLORS), 'DEFAULT_COLORS powinno być zamrożone');
+
+// Test generateId
+const id1 = Core.generateId();
+const id2 = Core.generateId();
+assert.ok(id1.startsWith('f_'), 'ID powinno zaczynać się od f_');
+assert.notStrictEqual(id1, id2, 'generateId musi generować unikalne ID');
+
+// Test escapeHtml
+assert.strictEqual(Core.escapeHtml(null), '');
+assert.strictEqual(Core.escapeHtml(undefined), '');
+assert.strictEqual(Core.escapeHtml(42), '42');
+assert.strictEqual(
+  Core.escapeHtml('<script>alert("xss") & \'test\'</script>'),
+  '&lt;script&gt;alert(&quot;xss&quot;) &amp; &#039;test&#039;&lt;/script&gt;'
+);
+
+// Test createIcon & setIcon
+const iconDiv = new MockElement('div');
+Core.setIcon(iconDiv, 'folder');
+assert.strictEqual(iconDiv.children.length, 1, 'setIcon powinno dodać element ikony');
+
+// Test setButtonContent
+const btnEl = new MockElement('button');
+Core.setButtonContent(btnEl, 'plus', 'Dodaj');
+assert.strictEqual(btnEl.children.length, 2, 'setButtonContent powinno dodać ikonę oraz tekst');
+assert.strictEqual(btnEl.children[1].textContent, 'Dodaj');
+
+// Test createElement
+const createdEl = Core.createElement('div', {
+  className: 'custom-class',
+  id: 'custom-id',
+  textContent: 'Tekst',
+  dataset: { folder: '123' },
+  attributes: { 'aria-label': 'Etykieta' }
+});
+assert.strictEqual(createdEl.className, 'custom-class');
+assert.strictEqual(createdEl.id, 'custom-id');
+assert.strictEqual(createdEl.textContent, 'Tekst');
+assert.strictEqual(createdEl.dataset.folder, '123');
+assert.strictEqual(createdEl.getAttribute('aria-label'), 'Etykieta');
+
+// Test showToast
+Core.showToast('Test wiadomości');
+const toastNode = mockBody.querySelector('.mf-toast');
+assert.ok(toastNode, 'Element .mf-toast powinien istnieć');
+assert.strictEqual(toastNode.textContent, 'Test wiadomości');
+
+// b) FolderBarComponent
+const FolderBarComp = require('../src/ui/folder-bar.js');
+assert.strictEqual(typeof FolderBarComp, 'function', 'FolderBarComponent powinna być klasą');
+const barInstance = new FolderBarComp(ui);
+assert.strictEqual(typeof barInstance.render, 'function', 'FolderBarComponent powinien posiadać metodę render');
+
+// c) FolderModalComponent
+const FolderModalComp = require('../src/ui/folder-modal.js');
+assert.strictEqual(typeof FolderModalComp, 'function', 'FolderModalComponent powinna być klasą');
+const folderModalInstance = new FolderModalComp(ui);
+assert.strictEqual(typeof folderModalInstance.show, 'function', 'FolderModalComponent powinien posiadać metodę show');
+assert.strictEqual(typeof folderModalInstance.close, 'function', 'FolderModalComponent powinien posiadać metodę close');
+
+// d) ThreadMenuComponent
+const ThreadMenuComp = require('../src/ui/thread-menu.js');
+assert.strictEqual(typeof ThreadMenuComp, 'function', 'ThreadMenuComponent powinna być klasą');
+const threadMenuInstance = new ThreadMenuComp(ui);
+assert.strictEqual(typeof threadMenuInstance.injectFolderBadge, 'function');
+assert.strictEqual(typeof threadMenuInstance.renderHeaderPill, 'function');
+assert.strictEqual(typeof threadMenuInstance.showAssignDropdown, 'function');
+
+// e) SettingsModalComponent
+const SettingsModalComp = require('../src/ui/settings-modal.js');
+assert.strictEqual(typeof SettingsModalComp, 'function', 'SettingsModalComponent powinna być klasą');
+const settingsModalInstance = new SettingsModalComp(ui);
+assert.strictEqual(typeof settingsModalInstance.show, 'function');
+assert.strictEqual(typeof settingsModalInstance.close, 'function');
+
+// f) MessengerUI Facade integracja
+assert.ok(ui.core, 'ui.core powinno być zdefiniowane');
+assert.ok(ui.folderBar, 'ui.folderBar powinno być instancją FolderBarComponent');
+assert.ok(ui.folderModal, 'ui.folderModal powinno być instancją FolderModalComponent');
+assert.ok(ui.threadMenu, 'ui.threadMenu powinno być instancją ThreadMenuComponent');
+assert.ok(ui.settingsModal, 'ui.settingsModal powinno być instancją SettingsModalComponent');
+
+console.log('✓ Architektura modułowa zweryfikowana pomyślnie.');
 
 console.log('\n=============================================');
 console.log('WSZYSTKIE TESTY INTERFEJSU ZAKOŃCZONE SUKCESEM! ✓');
