@@ -263,8 +263,8 @@ mnoży swoje punkty. Druga wartość to liczba nieograniczonych powtórzeń `*`,
 `estimateRegexCostLog2()` szacuje koszt jako
 `2^punkty × C(n + u, u + 1)` (≈ n^(u+1) / (u+1)!) dla tekstu długości n i u powtórzeń.
 Kotwica `^` bez `|` na najwyższym poziomie zdejmuje jeden czynnik n, bo dopasowanie ma jedną
-pozycję startu. Koszt nie może przekroczyć `MAX_REGEX_COST_LOG2` (2·10⁶ kroków; w V8 to najwyżej
-ok. 50 ms w najgorszym przypadku). Przykłady:
+pozycję startu. Koszt nie może przekroczyć `MAX_REGEX_COST_LOG2` (2·10⁶ kroków; w V8 to rząd
+kilkudziesięciu ms — typowo poniżej 50 ms na rozgrzanym silniku, a przy zimnym starcie do ok. 60 ms). Przykłady:
 - `a?`×40+`b` i `(a|aa)`×41+`b` są odrzucane,
 - `.*foo.*bar.*` jest odrzucany (3 powtórzenia), a równoważne przy `test()` `foo.*bar` jest przyjmowane,
 - `^\d+-\d+-\d+$` (zakotwiczony) jest przyjmowany.
