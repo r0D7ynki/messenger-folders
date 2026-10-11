@@ -18,6 +18,7 @@ Wyjaśnia sposób integracji z interfejsem Messengera, strukturę danych oraz ob
 - [Warstwa interfejsu użytkownika (UI)](#warstwa-interfejsu-użytkownika-ui)
 - [Diagram przepływu danych](#diagram-przepływu-danych)
 - [Testy jednostkowe](#testy-jednostkowe)
+- [Testy E2E (Playwright)](#testy-e2e-playwright)
 
 ---
 
@@ -320,3 +321,26 @@ node tests/test_storage_detector.js
 ```
 
 Wynik testów potwierdza pełną sprawność logiki biznesowej rozszerzenia.
+
+## Testy E2E (Playwright)
+
+Testy E2E ładują rozpakowane rozszerzenie do bezgłowego Chromium (`playwright.config.js`) i
+uruchamiają je na statycznej, zanonimizowanej kopii DOM Messengera
+([tests/fixtures/messenger.html](../tests/fixtures/messenger.html)). Moduł
+[tests/e2e/helpers.js](../tests/e2e/helpers.js) przechwytuje adresy `https://www.messenger.com/**`
+i blokuje każde inne żądanie, więc testy działają w 100% offline. Wyniki Playwright trafiają do
+`node_modules/.cache/playwright-results`.
+
+| Scenariusze | Zakres |
+|---|---|
+| E2E-01…03 | wstrzyknięcie paska, modal tworzenia folderu, przełączanie aktywnego folderu |
+| E2E-04…05 | przypisanie wątku z menu kontekstowego, filtrowanie listy czatów |
+| E2E-06…08 | trwałość stanu po przeładowaniu, współpraca z wyszukiwarką Messengera, usuwanie folderu |
+| E2E-09 | zero żądań sieciowych |
+| E2E-10…14 | reguły automatycznego przypisywania: tworzenie, start z regułami, priorytety, ręczne przypisania, niepoprawne i ReDoS-owe wyrażenia regularne |
+
+```bash
+npm run test:e2e
+```
+
+Testy E2E nie są częścią `npm run verify` (wymagają przeglądarki Playwright).
