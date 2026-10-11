@@ -12,3 +12,6 @@ __pycache__/
 .agents/
 pnpm-lock.yaml
 pnpm-workspace.yaml
+test-results/
+playwright-report/
+blob-report/
