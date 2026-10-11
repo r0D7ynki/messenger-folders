@@ -123,6 +123,75 @@ async function runRulesTests() {
     'Wzorzec przekraczający limit 250 znaków powinien zostać odrzucony'
   );
 
+  // MF-020: kwantyfikowane alternatywy (wykładniczy nawrót) — odrzucone szybko, bez zawieszenia
+  const redosText = 'a'.repeat(27) + '!';
+  assert.strictEqual(redosText.length, 28);
+  for (const pattern of ['(a|a)*$', '(a|aa)*$', '(a|ab)*c']) {
+    const t0 = process.hrtime.bigint();
+    const result = engine.matchCondition(redosText, { operator: 'regex', value: pattern });
+    const elapsedMs = Number(process.hrtime.bigint() - t0) / 1e6;
+    assert.strictEqual(result, false, `Wzorzec ReDoS ${pattern} powinien zostać odrzucony`);
+    assert.ok(elapsedMs < 50, `matchCondition dla ${pattern} trwał ${elapsedMs.toFixed(1)} ms (limit 50 ms)`);
+  }
+
+  // validateRegexPattern: komunikat błędu dla niebezpiecznych i błędnych wzorców, null dla poprawnych
+  const rejectedPatterns = [
+    '(a|a)*$',
+    '(a|aa)*$',
+    '(a|ab)*c',
+    '(?:a|b)+',
+    '(a|a){30}',
+    '((a*)b)*',
+    '^(a+)+$',
+    'a++',
+    '\\w*\\w*\\w*\\w*!',
+    '[a-z(',
+    'a'.repeat(251)
+  ];
+  for (const pattern of rejectedPatterns) {
+    const error = MessengerRulesEngine.validateRegexPattern(pattern);
+    assert.ok(
+      typeof error === 'string' && error.length > 0,
+      `Wzorzec ${pattern.slice(0, 30)} powinien zostać odrzucony`
+    );
+    assert.strictEqual(engine.validateRegexPattern(pattern), error, 'Metoda instancji zwraca ten sam komunikat');
+  }
+  const acceptedPatterns = [
+    '^ticket-\\d+$',
+    '^Jan.*',
+    '(Praca|Dom)',
+    '.*foo.*bar.*',
+    '(\\d{3}-)+',
+    '[(|)*]+',
+    '\\(a|b\\)*',
+    'a*?b',
+    '^\\d+-\\d+-\\d+$'
+  ];
+  for (const pattern of acceptedPatterns) {
+    assert.strictEqual(MessengerRulesEngine.validateRegexPattern(pattern), null, `Wzorzec ${pattern} jest bezpieczny`);
+  }
+  assert.strictEqual(engine.matchCondition('Praca zdalna', { operator: 'regex', value: '^(Praca|Dom)' }), true);
+  assert.strictEqual(engine.matchCondition('PRJ-123-456', { operator: 'regex', value: '^prj-\\d+-\\d+$' }), true);
+
+  // Nawrót wielomianowy: najwyżej 3 powtórzenia i tekst przycięty do 100 znaków
+  const t0Poly = process.hrtime.bigint();
+  engine.matchCondition('a'.repeat(5000), { operator: 'regex', value: '\\w{0,99}\\w{0,99}\\w{0,99}!' });
+  const polyMs = Number(process.hrtime.bigint() - t0Poly) / 1e6;
+  assert.ok(polyMs < 500, `Długi tekst przy 3 powtórzeniach trwał ${polyMs.toFixed(1)} ms`);
+
+  // Zapis reguły z niebezpiecznym wzorcem jest odrzucany, a reguła nie trafia do magazynu
+  const rulesBeforeRedos = (await engine.getRules()).length;
+  await assert.rejects(
+    engine.saveRule({
+      name: 'ReDoS',
+      folderId: 'work',
+      conditions: [{ field: 'name', operator: 'regex', value: '(a|a)*$' }]
+    }),
+    /alternatyw/,
+    'saveRule powinien odrzucić wzorzec (a|a)*$'
+  );
+  assert.strictEqual((await engine.getRules()).length, rulesBeforeRedos, 'Odrzucona reguła nie została zapisana');
+
   // Puste i nieprawidłowe wartości
   assert.strictEqual(engine.matchCondition(null, { operator: 'contains', value: 'test' }), false);
   assert.strictEqual(engine.matchCondition('test', null), false);
