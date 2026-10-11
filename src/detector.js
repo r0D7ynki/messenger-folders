@@ -207,15 +207,60 @@
     }
 
     /**
+     * Sprawdza, czy element jest akcją (przycisk, pozycja menu, „Oznacz … jako nieprzeczytane”),
+     * a nie wskaźnikiem stanu wątku.
+     * @param {Element} element Badany element.
+     * @returns {boolean} Czy element należy pominąć jako akcję.
+     */
+    _isActionElement(element) {
+      if (element.matches?.('button, [role="button"], [role="menuitem"]')) {
+        return true;
+      }
+      const label = `${element.getAttribute?.('aria-label') || ''} ${element.getAttribute?.('data-testid') || ''}`;
+      return /oznacz|mark[\s_-]*as/i.test(label);
+    }
+
+    /**
+     * Sprawdza, czy element ze stylem w kolorze Messengera to awatar (obrazek albo jego ramka),
+     * a nie kropka nieprzeczytania.
+     * @param {Element} element Badany element.
+     * @returns {boolean} Czy element jest awatarem.
+     */
+    _isAvatarElement(element) {
+      const tag = (element.tagName || '').toUpperCase();
+      return tag === 'IMG' || tag === 'IMAGE' || Boolean(element.querySelector?.('img, image'));
+    }
+
+    /**
+     * Szuka wśród potomków wiersza pierwszego elementu pasującego do selektora, który nie jest akcją
+     * i spełnia dodatkowy warunek.
+     * @param {Element} rowElement Element wiersza czatu.
+     * @param {string} selector Selektor atrybutów.
+     * @param {(element: Element) => boolean} [accept] Dodatkowy warunek akceptacji.
+     * @returns {boolean} Czy znaleziono wskaźnik.
+     */
+    _hasIndicator(rowElement, selector, accept = () => true) {
+      const candidates = rowElement.querySelectorAll?.(selector) || [];
+      for (const element of candidates) {
+        if (!this._isActionElement(element) && accept(element)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    /**
      * Sprawdza, czy dany wątek posiada nieprzeczytane wiadomości.
      * Stosuje kaskadę selektorów heurystycznych bez wywoływania getComputedStyle,
      * aby uniknąć wymuszonego przeliczania układu (layout thrashing / reflow).
+     * Nie opiera się na klasach CSS Messengera i pomija akcje „Oznacz jako nieprzeczytane”
+     * (przyciski, pozycje menu, etykiety z „oznacz”/„mark as”).
      *
      * Kaskada sprawdzania:
-     * 1. .chat-unread-badge, [class*="unread" i], [data-testid*="unread" i]
+     * 1. [data-testid*="unread" i] na wierszu lub elemencie potomnym
      * 2. [aria-label*="nieprzeczytan" i], [aria-label*="unread" i] (element potomny)
      * 3. Atrybut aria-label na linkElement oraz rowElement
-     * 4. Wizualny wskaźnik kropki: [style*="rgb(0, 132, 255)"], [style*="#0084ff" i]
+     * 4. Wizualny wskaźnik kropki: [style*="rgb(0, 132, 255)"], [style*="#0084ff" i] (poza awatarami)
      * 5. Atrybut stanu: [data-unread="true"]
      *
      * @param {Element} rowElement Element wiersza czatu.
@@ -227,21 +272,18 @@
         return false;
       }
 
-      // 1. Dedykowana odznaka, klasa lub atrybut testowy nieprzeczytania
+      // 1. Atrybut testowy nieprzeczytania (bez klas CSS — zasada 4 AGENTS.md)
+      const testIdSelector = '[data-testid*="unread" i]';
       if (
-        rowElement.matches?.('.chat-unread-badge, [class*="unread" i], [data-testid*="unread" i]') ||
-        rowElement.querySelector?.('.chat-unread-badge, [class*="unread" i], [data-testid*="unread" i]')
+        (rowElement.matches?.(testIdSelector) && !this._isActionElement(rowElement)) ||
+        this._hasIndicator(rowElement, testIdSelector)
       ) {
         return true;
       }
 
       // 2. Element potomny z atrybutem aria-label wskazującym na nieprzeczytane wiadomości
-      const ariaChild = rowElement.querySelector?.('[aria-label*="nieprzeczytan" i], [aria-label*="unread" i]');
-      if (ariaChild) {
-        const childLabel = (ariaChild.getAttribute?.('aria-label') || '').toLowerCase();
-        if (!childLabel.includes('oznacz jako') && !childLabel.includes('mark as')) {
-          return true;
-        }
+      if (this._hasIndicator(rowElement, '[aria-label*="nieprzeczytan" i], [aria-label*="unread" i]')) {
+        return true;
       }
 
       // 3. Sprawdzenie atrybutu aria-label na samym linku lub wierszu
@@ -249,21 +291,20 @@
       const linkLabel = (linkElement?.getAttribute?.('aria-label') || '').toLowerCase();
       const combinedLabel = `${rowLabel} ${linkLabel}`;
       if (combinedLabel.includes('nieprzeczytan') || combinedLabel.includes('unread')) {
-        if (!combinedLabel.includes('oznacz jako') && !combinedLabel.includes('mark as')) {
+        if (!/oznacz|mark[\s_-]*as/.test(combinedLabel)) {
           return true;
         }
       }
 
-      // 4. Wizualny wskaźnik kropki (blue dot indicator: rgb(0, 132, 255) lub #0084ff)
-      const blueDot = rowElement.querySelector?.('[style*="rgb(0, 132, 255)"], [style*="#0084ff" i]');
-      if (blueDot) {
-        const isAvatar =
-          blueDot.tagName === 'IMG' ||
-          blueDot.classList?.contains('chat-avatar') ||
-          Boolean(blueDot.closest?.('.chat-avatar'));
-        if (!isAvatar) {
-          return true;
-        }
+      // 4. Wizualny wskaźnik kropki (blue dot indicator: rgb(0, 132, 255) lub #0084ff), z pominięciem awatarów
+      if (
+        this._hasIndicator(
+          rowElement,
+          '[style*="rgb(0, 132, 255)"], [style*="#0084ff" i]',
+          (element) => !this._isAvatarElement(element)
+        )
+      ) {
+        return true;
       }
 
       // 5. Atrybut danych data-unread="true" na wierszu lub elemencie potomnym
