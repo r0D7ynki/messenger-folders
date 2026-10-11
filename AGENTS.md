@@ -86,4 +86,8 @@ nagłówku karty — każde przejście ma wpis w Logu.
    z odwołaniem do starej. Kart `done` nie usuwaj z tablicy.
 8. Niejasność → pytanie w Logu karty, karta zostaje, koniec przebiegu.
 
+**Limit subskrypcji** (szczegóły: `docs/agents/WORKFLOW.md`, „Oszczędzanie limitu”): jedna karta =
+jeden wykonawca + jeden niezależny przegląd; bez cronów i heartbeatów; wyczerpana kwota → wpis w Logu
+karty i stop; nowa sesja agenta na każdą kartę; eksploracja repo tylko dla kart `L`.
+
 Identyfikatory modeli w kartach: `claude`, `gemini` (Antigravity), `deepseek`, `human`.
