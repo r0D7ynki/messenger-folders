@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Messenger</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        height: 100vh;
+        overflow: hidden;
+        display: flex;
+        background: #ffffff;
+        color: #050505;
+      }
+      .app-root {
+        display: flex;
+        width: 100%;
+        height: 100%;
+      }
+      .sidebar-panel {
+        width: 360px;
+        min-width: 360px;
+        border-right: 1px solid #e4e6eb;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: #ffffff;
+      }
+      .sidebar-header {
+        padding: 12px 16px 8px 16px;
+      }
+      .sidebar-header h1 {
+        margin: 0;
+        font-size: 24px;
+        font-weight: 700;
+      }
+      .search-section {
+        padding: 8px 16px;
+      }
+      .search-section label {
+        display: block;
+        width: 100%;
+      }
+      .search-section input {
+        width: 100%;
+        height: 36px;
+        border-radius: 18px;
+        border: 1px solid #ced0d4;
+        background: #f0f2f5;
+        padding: 0 16px;
+        font-size: 14px;
+        outline: none;
+      }
+      .chat-grid {
+        flex: 1;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        padding: 4px 8px;
+      }
+      .chat-row-item {
+        display: flex;
+        align-items: center;
+        border-radius: 8px;
+        margin-bottom: 2px;
+        transition: background 0.15s;
+      }
+      .chat-row-item:hover {
+        background: #f2f2f2;
+      }
+      .chat-row-link {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        padding: 8px;
+        text-decoration: none;
+        color: inherit;
+      }
+      .chat-avatar {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        margin-right: 12px;
+        flex-shrink: 0;
+      }
+      .chat-content {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        flex: 1;
+      }
+      .chat-name {
+        font-weight: 600;
+        font-size: 15px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .chat-preview {
+        font-size: 13px;
+        color: #65676b;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .chat-meta {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        margin-left: 8px;
+        flex-shrink: 0;
+      }
+      .chat-time {
+        font-size: 12px;
+        color: #65676b;
+        margin-bottom: 4px;
+      }
+      .chat-unread-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        border-radius: 9px;
+        background: #0084ff;
+        color: #ffffff;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .main-panel {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: #ffffff;
+      }
+      .conversation-header {
+        height: 64px;
+        border-bottom: 1px solid #e4e6eb;
+        display: flex;
+        align-items: center;
+        padding: 0 16px;
+        gap: 12px;
+      }
+      .conversation-header img {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+      }
+      .conversation-header h2 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .messages-area {
+        flex: 1;
+        background: #ffffff;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-root">
+      <!-- Panel boczny konwersacji (rola grid zapewnia dopasowanie getSidebarContainer) -->
+      <div role="grid" aria-label="Czaty" class="sidebar-panel">
+        <div class="sidebar-header">
+          <h1 aria-level="1" role="heading">Czaty</h1>
+        </div>
+        <div class="search-section" role="search">
+          <label>
+            <input
+              type="search"
+              placeholder="Szukaj w Messengerze"
+              aria-label="Szukaj w Messengerze"
+              autocomplete="off"
+            />
+          </label>
+        </div>
+        <!-- Punkt wstrzyknięcia paska folderów (#mf-folder-bar) trafia po .search-section a przed .chat-grid -->
+        <div class="chat-grid" role="rowgroup" aria-label="Lista rozmów">
+          <!-- Wątek 1: Jan Testowy -->
+          <div role="row" class="chat-row-item" aria-label="Jan Testowy, Ostatnia wiadomość: Cześć, jak leci?">
+            <a role="link" href="/t/100000000001" class="chat-row-link" aria-label="Jan Testowy">
+              <img
+                class="chat-avatar"
+                src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='44' viewBox='0 0 44 44'><circle cx='22' cy='22' r='22' fill='%230084ff'/><text x='22' y='27' font-size='16' text-anchor='middle' fill='white' font-family='sans-serif'>JT</text></svg>"
+                width="44"
+                height="44"
+                alt="Jan Testowy"
+              />
+              <div class="chat-content">
+                <span dir="auto" class="chat-name">Jan Testowy</span>
+                <span class="chat-preview">Cześć, jak leci? · 12 min</span>
+              </div>
+              <div class="chat-meta">
+                <span class="chat-time">12 min</span>
+                <span class="chat-unread-badge" aria-label="1 nieprzeczytana wiadomość">1</span>
+              </div>
+            </a>
+          </div>
+          <!-- Wątek 2: Anna Projektowa -->
+          <div
+            role="row"
+            class="chat-row-item"
+            aria-label="Anna Projektowa, Ostatnia wiadomość: Spotkanie zaplanowane na jutro"
+          >
+            <a role="link" href="/t/100000000002" class="chat-row-link" aria-label="Anna Projektowa">
+              <img
+                class="chat-avatar"
+                src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='44' viewBox='0 0 44 44'><circle cx='22' cy='22' r='22' fill='%2310b981'/><text x='22' y='27' font-size='16' text-anchor='middle' fill='white' font-family='sans-serif'>AP</text></svg>"
+                width="44"
+                height="44"
+                alt="Anna Projektowa"
+              />
+              <div class="chat-content">
+                <span dir="auto" class="chat-name">Anna Projektowa</span>
+                <span class="chat-preview">Spotkanie zaplanowane na jutro · 1 godz.</span>
+              </div>
+              <div class="chat-meta">
+                <span class="chat-time">1 godz.</span>
+              </div>
+            </a>
+          </div>
+          <!-- Wątek 3: Michał Programista -->
+          <div
+            role="row"
+            class="chat-row-item"
+            aria-label="Michał Programista, Ostatnia wiadomość: Kod gotowy do testów E2E"
+          >
+            <a role="link" href="/t/100000000003" class="chat-row-link" aria-label="Michał Programista">
+              <img
+                class="chat-avatar"
+                src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='44' viewBox='0 0 44 44'><circle cx='22' cy='22' r='22' fill='%238b5cf6'/><text x='22' y='27' font-size='16' text-anchor='middle' fill='white' font-family='sans-serif'>MP</text></svg>"
+                width="44"
+                height="44"
+                alt="Michał Programista"
+              />
+              <div class="chat-content">
+                <span dir="auto" class="chat-name">Michał Programista</span>
+                <span class="chat-preview">Kod gotowy do testów E2E · Wczoraj</span>
+              </div>
+              <div class="chat-meta">
+                <span class="chat-time">Wczoraj</span>
+                <span class="chat-unread-badge" aria-label="3 nieprzeczytane wiadomości">3</span>
+              </div>
+            </a>
+          </div>
+          <!-- Wątek 4: Grupa Wydawnicza -->
+          <div
+            role="row"
+            class="chat-row-item"
+            aria-label="Grupa Wydawnicza, Ostatnia wiadomość: Nowy artykuł został opublikowany"
+          >
+            <a role="link" href="/t/100000000004" class="chat-row-link" aria-label="Grupa Wydawnicza">
+              <img
+                class="chat-avatar"
+                src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='44' viewBox='0 0 44 44'><circle cx='22' cy='22' r='22' fill='%23ec4899'/><text x='22' y='27' font-size='16' text-anchor='middle' fill='white' font-family='sans-serif'>GW</text></svg>"
+                width="44"
+                height="44"
+                alt="Grupa Wydawnicza"
+              />
+              <div class="chat-content">
+                <span dir="auto" class="chat-name">Grupa Wydawnicza</span>
+                <span class="chat-preview">Nowy artykuł został opublikowany · 2 dni</span>
+              </div>
+              <div class="chat-meta">
+                <span class="chat-time">2 dni</span>
+              </div>
+            </a>
+          </div>
+          <!-- Wątek 5: Biuro Obsługi -->
+          <div
+            role="row"
+            class="chat-row-item"
+            aria-label="Biuro Obsługi, Ostatnia wiadomość: Zgłoszenie #4821 zostało rozwiązane"
+          >
+            <a role="link" href="/t/100000000005" class="chat-row-link" aria-label="Biuro Obsługi">
+              <img
+                class="chat-avatar"
+                src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='44' viewBox='0 0 44 44'><circle cx='22' cy='22' r='22' fill='%23f59e0b'/><text x='22' y='27' font-size='16' text-anchor='middle' fill='white' font-family='sans-serif'>BO</text></svg>"
+                width="44"
+                height="44"
+                alt="Biuro Obsługi"
+              />
+              <div class="chat-content">
+                <span dir="auto" class="chat-name">Biuro Obsługi</span>
+                <span class="chat-preview">Zgłoszenie #4821 zostało rozwiązane · 3 dni</span>
+              </div>
+              <div class="chat-meta">
+                <span class="chat-time">3 dni</span>
+                <span class="chat-unread-badge" aria-label="1 nieprzeczytana wiadomość">1</span>
+              </div>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Główny panel aktywnej konwersacji -->
+      <main role="main" class="main-panel">
+        <header class="conversation-header">
+          <img
+            src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'><circle cx='20' cy='20' r='20' fill='%230084ff'/><text x='20' y='25' font-size='14' text-anchor='middle' fill='white' font-family='sans-serif'>JT</text></svg>"
+            width="40"
+            height="40"
+            alt="Jan Testowy"
+          />
+          <h2 role="heading" aria-level="2">Jan Testowy</h2>
+        </header>
+        <div class="messages-area"></div>
+      </main>
+    </div>
+    <script>
+      // Symulacja zachowania Messengera: wpisywanie w pole wyszukiwarki powoduje mutację listy czatów
+      document.addEventListener('DOMContentLoaded', () => {
+        const searchInput = document.querySelector('.search-section input');
+        const chatGrid = document.querySelector('.chat-grid');
+        if (searchInput && chatGrid) {
+          let marker = null;
+          const triggerMutation = () => {
+            if (marker && marker.parentNode) {
+              marker.remove();
+              marker = null;
+            }
+            if (searchInput.value.trim().length > 0) {
+              marker = document.createElement('div');
+              marker.className = 'messenger-search-active-indicator';
+              marker.style.display = 'none';
+              chatGrid.appendChild(marker);
+            } else {
+              const temp = document.createElement('div');
+              chatGrid.appendChild(temp);
+              temp.remove();
+            }
+          };
+          searchInput.addEventListener('input', triggerMutation);
+          searchInput.addEventListener('blur', triggerMutation);
+        }
+      });
+    </script>
+  </body>
+</html>

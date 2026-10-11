@@ -2,7 +2,8 @@
  * Messenger Folders - Skrypt zawartości (Content Script)
  *
  * Główny punkt wejścia wstrzykiwany na strony messenger.com i facebook.com.
- * Integruje moduły pamięci (Storage), detektora DOM (Detector) i interfejsu (UI).
+ * Integruje moduły pamięci (Storage), detektora DOM (Detector),
+ * silnika reguł (RulesEngine) i interfejsu (UI).
  *
  * Zgodny ze standardem Manifest V3 oraz normą PN-ISO 24495-1.
  */
@@ -15,7 +16,195 @@
   // Inicjalizacja instancji modułów
   const storage = new MessengerFoldersStorage();
   const detector = new MessengerDOMDetector();
-  const ui = new MessengerFoldersUI({ storage, detector });
+  const rulesEngine = typeof MessengerRulesEngine !== 'undefined' ? new MessengerRulesEngine({ storage }) : null;
+  const ui = new MessengerFoldersUI({ storage, detector, rulesEngine });
+
+  // Stan podręczny w pamięci (Memory Cache)
+  let currentFolders = [];
+  let currentActiveFolder = 'all';
+  let currentThreads = {};
+  let lastUrl = typeof window !== 'undefined' ? window.location.href : '';
+
+  // Zarządzanie stanem nieblokującej ewaluacji reguł
+  let isEvaluatingRules = false;
+  let hasPendingEvaluation = false;
+  const MAX_EVALUATED_CACHE = 1000;
+  const evaluatedCache = new Set(); // Klucze memoizacji: `${threadId}:${name}:${rulesVersion}`
+
+  /**
+   * Dodaje klucz do pamięci podręcznej z ograniczeniem do MAX_EVALUATED_CACHE wpisów (FIFO).
+   *
+   * @param {string} key
+   */
+  function addToEvaluatedCache(key) {
+    while (evaluatedCache.size >= MAX_EVALUATED_CACHE) {
+      const oldestKey = evaluatedCache.values().next().value;
+      if (oldestKey === undefined) break;
+      evaluatedCache.delete(oldestKey);
+    }
+    evaluatedCache.add(key);
+  }
+
+  /**
+   * Wykonuje nieblokujące dopasowanie wykrytych wątków do aktywnych reguł
+   * i zapisuje nowe przypisania w pojedynczej operacji wsadowej (batch write).
+   *
+   * @param {Array<Object>} detectedThreads - Lista wątków zwrócona przez detector.scanChatList()
+   */
+  async function evaluateRulesNonBlocking(detectedThreads) {
+    if (!rulesEngine || !detectedThreads || detectedThreads.length === 0) {
+      return;
+    }
+
+    // Blokada współbieżności (Mutex / Gate)
+    if (isEvaluatingRules) {
+      hasPendingEvaluation = true;
+      return;
+    }
+
+    isEvaluatingRules = true;
+    try {
+      const rules = (await rulesEngine.getRules()) || [];
+      const enabledRules = rules.filter((r) => r.enabled);
+
+      if (enabledRules.length === 0) {
+        return;
+      }
+
+      const folders = storage.getFoldersSync();
+      const existingThreads = storage.getAllThreadsSync();
+      const now = Date.now();
+      const rulesVersion = rules.map((r) => `${r.id}_${r.priority}_${r.enabled}`).join('|');
+
+      // Wyselekcjonuj kandydatów wymagających ewaluacji
+      const candidates = detectedThreads.filter((t) => {
+        if (!t || !t.threadId) return false;
+        const cacheKey = `${t.threadId}:${t.name || ''}:${rulesVersion}`;
+        if (evaluatedCache.has(cacheKey)) {
+          return false;
+        }
+
+        const existing = existingThreads[t.threadId];
+        const isManuallyAssigned =
+          existing && existing.folderId && existing.folderId !== 'uncategorized' && !existing.autoAssigned;
+
+        // Jeśli wątek jest przypisany ręcznie, pomijamy go, chyba że reguła zezwala na nadpisanie
+        if (isManuallyAssigned && !enabledRules.some((r) => r.overwriteManual)) {
+          addToEvaluatedCache(cacheKey);
+          return false;
+        }
+        return true;
+      });
+
+      if (candidates.length === 0) {
+        return;
+      }
+
+      const CHUNK_SIZE = 20;
+      const newAssignments = [];
+
+      // Przetwarzanie w porcjach z oddawaniem sterowania do pętli zdarzeń (60 FPS)
+      for (let i = 0; i < candidates.length; i += CHUNK_SIZE) {
+        const chunk = candidates.slice(i, i + CHUNK_SIZE);
+
+        for (const thread of chunk) {
+          const cacheKey = `${thread.threadId}:${thread.name || ''}:${rulesVersion}`;
+          addToEvaluatedCache(cacheKey);
+
+          const existing = existingThreads[thread.threadId];
+          const isManuallyAssigned =
+            existing && existing.folderId && existing.folderId !== 'uncategorized' && !existing.autoAssigned;
+
+          const threadToEval = {
+            ...thread,
+            folderId: existing?.folderId,
+            isManual: Boolean(isManuallyAssigned)
+          };
+
+          const matchedFolderId = rulesEngine.evaluateThread(threadToEval, enabledRules, folders);
+          if (matchedFolderId) {
+            if (!existing || existing.folderId !== matchedFolderId) {
+              newAssignments.push({
+                threadId: thread.threadId,
+                folderId: matchedFolderId,
+                metadata: {
+                  name: thread.name || '',
+                  avatar: thread.avatar || ''
+                }
+              });
+            }
+          }
+        }
+
+        // Oddanie kontroli przeglądarce przed kolejną porcją
+        if (i + CHUNK_SIZE < candidates.length) {
+          await new Promise((resolve) => {
+            if (typeof requestIdleCallback !== 'undefined') {
+              requestIdleCallback(resolve, { timeout: 40 });
+            } else {
+              setTimeout(resolve, 0);
+            }
+          });
+        }
+      }
+
+      // Pojedynczy zapis wsadowy (Single-Batch Write) do chrome.storage.local
+      if (newAssignments.length > 0) {
+        console.log(`Messenger Folders: Automatycznie przypisano ${newAssignments.length} wątków.`);
+
+        const updatedThreads = { ...storage.getAllThreadsSync() };
+        for (const item of newAssignments) {
+          const cleanId = String(item.threadId).trim();
+          const existing = updatedThreads[cleanId] || {};
+          updatedThreads[cleanId] = {
+            ...existing,
+            folderId: item.folderId,
+            name: item.metadata.name || existing.name || '',
+            avatar: item.metadata.avatar || existing.avatar || '',
+            assignedAt: existing.assignedAt || now,
+            updatedAt: now,
+            autoAssigned: true
+          };
+        }
+
+        await storage._set({ mf_threads: updatedThreads });
+
+        // Natychmiastowe odświeżenie interfejsu i aktywnego filtra z pamięci podręcznej
+        currentActiveFolder = storage.getActiveFolderSync();
+        currentThreads = storage.getAllThreadsSync();
+        currentFolders = storage.getFoldersSync();
+        ui.filterChatRows(currentActiveFolder, currentThreads);
+        ui.renderFolderBar(currentFolders, currentActiveFolder, currentThreads);
+      }
+    } catch (err) {
+      console.error('Błąd podczas ewaluacji reguł automatycznych:', err);
+    } finally {
+      isEvaluatingRules = false;
+      if (hasPendingEvaluation) {
+        hasPendingEvaluation = false;
+        const freshThreads = detector.scanChatList();
+        evaluateRulesNonBlocking(freshThreads);
+      }
+    }
+  }
+
+  // Powiązanie callbacku zmian reguł z interfejsu użytkownika
+  ui.onRulesChanged = async () => {
+    evaluatedCache.clear();
+    const scanned = detector.scanChatList();
+    await evaluateRulesNonBlocking(scanned);
+  };
+
+  // Nasłuchiwanie bezpośrednich zmian mf_rules w chrome.storage.local
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener(async (changes, areaName) => {
+      if (areaName === 'local' && changes.mf_rules) {
+        evaluatedCache.clear();
+        const scanned = detector.scanChatList();
+        await evaluateRulesNonBlocking(scanned);
+      }
+    });
+  }
 
   /**
    * Główna funkcja uruchamiająca wtyczkę na stronie.
@@ -24,10 +213,10 @@
     try {
       await storage.init();
 
-      let currentFolders = storage.getFoldersSync();
-      let currentActiveFolder = storage.getActiveFolderSync();
-      let currentThreads = storage.getAllThreadsSync();
-      let lastUrl = window.location.href;
+      currentFolders = storage.getFoldersSync();
+      currentActiveFolder = storage.getActiveFolderSync();
+      currentThreads = storage.getAllThreadsSync();
+      lastUrl = window.location.href;
 
       /**
        * Renderuje pasek folderów na podstawie stanu pamięci podręcznej i wstrzykuje go w DOM.
@@ -100,10 +289,16 @@
         setTimeout(() => clearInterval(retryTimer), 15000);
       }
 
+      // Wstępna ewaluacja reguł dla wątków już obecnych w drzewie DOM (Cold Start)
+      const initialDetected = detector.scanChatList();
+      if (initialDetected && initialDetected.length > 0) {
+        await evaluateRulesNonBlocking(initialDetected);
+      }
+
       // Podpięcie obserwatora dynamicznego ładowania listy czatów (virtual scrolling)
       // Wykorzystuje pamięć podręczną — nie odpytuje storage przy mutacjach DOM
       detector.setupObserver(
-        () => {
+        async (threads) => {
           // Wstrzyknij pasek tylko wtedy, gdy nie istnieje w DOM (np. po przebudowie kontenera przez aplikację)
           const barExists = document.getElementById('mf-folder-bar')?.isConnected;
           if (!barExists) {
@@ -115,16 +310,19 @@
             lastUrl = window.location.href;
           }
 
+          await evaluateRulesNonBlocking(threads);
           ui.filterChatRows(currentActiveFolder, currentThreads);
         },
         { throttleMs: 250 }
       );
 
       // Obsługa nawigacji w aplikacji Single Page App (SPA) bez ciągłego odpytywania w pętli setInterval
-      const handleNavigationChange = () => {
+      const handleNavigationChange = async () => {
         if (window.location.href !== lastUrl) {
           lastUrl = window.location.href;
           ui.filterChatRows(currentActiveFolder, currentThreads);
+          const scanned = detector.scanChatList();
+          await evaluateRulesNonBlocking(scanned);
         }
       };
 

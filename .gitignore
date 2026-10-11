@@ -9,3 +9,6 @@ node_modules/
 web-ext-artifacts/
 __pycache__/
 *.pyc
+.agents/
+pnpm-lock.yaml
+pnpm-workspace.yaml

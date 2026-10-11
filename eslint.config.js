@@ -2,8 +2,8 @@
  * Messenger Folders - Konfiguracja ESLint (flat config)
  *
  * Kod rozszerzenia to klasyczne skrypty (bez modułów ES) ładowane
- * przez manifest.json, testy działają w Node (CommonJS), a narzędzia w tools/
- * to moduły ES. Plugin no-unsanitized (Mozilla) oznacza każde przypisanie
+ * przez manifest.json, a testy działają w Node (CommonJS).
+ * Plugin no-unsanitized (Mozilla) oznacza każde przypisanie
  * do innerHTML/outerHTML i wywołanie insertAdjacentHTML z dynamiczną treścią.
  */
 
@@ -13,7 +13,7 @@ const noUnsanitized = require('eslint-plugin-no-unsanitized');
 
 module.exports = [
   {
-    ignores: ['node_modules/**', 'web-ext-artifacts/**']
+    ignores: ['node_modules/**', 'web-ext-artifacts/**', '.agents/**']
   },
   js.configs.recommended,
   {
@@ -30,9 +30,17 @@ module.exports = [
         MessengerDOMDetector: 'readonly',
         MessengerFoldersUI: 'readonly',
         MessengerUI: 'readonly',
-        // Eksport warunkowy dla testów w Node
+        MessengerUICore: 'readonly',
+        FolderBarComponent: 'readonly',
+        FolderModalComponent: 'readonly',
+        ThreadMenuComponent: 'readonly',
+        SettingsModalComponent: 'readonly',
+        MessengerRulesEngine: 'readonly',
+        RulesModalComponent: 'readonly',
+        // Eksport i import warunkowy dla testów w Node
         module: 'readonly',
-        global: 'readonly'
+        global: 'readonly',
+        require: 'readonly'
       }
     },
     plugins: { 'no-unsanitized': noUnsanitized },
@@ -45,7 +53,7 @@ module.exports = [
     }
   },
   {
-    files: ['tests/**/*.js', 'eslint.config.js'],
+    files: ['tests/**/*.js', 'eslint.config.js', 'playwright.config.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'commonjs',
@@ -53,14 +61,6 @@ module.exports = [
     },
     rules: {
       'no-unused-vars': ['warn', { args: 'none', caughtErrors: 'none' }]
-    }
-  },
-  {
-    files: ['tools/**/*.mjs'],
-    languageOptions: {
-      ecmaVersion: 2022,
-      sourceType: 'module',
-      globals: { ...globals.node }
     }
   }
 ];

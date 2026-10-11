@@ -4,8 +4,9 @@
   "private": true,
   "description": "Rozszerzenie przeglądarki porządkujące czaty Messengera w foldery",
   "scripts": {
-    "test": "node tests/test_storage_detector.js && node tests/test_ui.js",
-    "check": "for f in background/*.js src/*.js popup/*.js tests/*.js; do node --check \"$f\" || exit 1; done && node -e \"JSON.parse(require('fs').readFileSync('manifest.json'))\"",
+    "test": "node tests/test_storage_detector.js && node tests/test_ui.js && node tests/test_rules.js",
+    "test:e2e": "playwright test",
+    "check": "for f in background/*.js src/*.js src/ui/*.js popup/*.js tests/*.js tests/e2e/*.js; do [ -f \"$f\" ] || continue; node --check \"$f\" || exit 1; done && node -e \"JSON.parse(require('fs').readFileSync('manifest.json'))\"",
     "lint": "eslint .",
     "lint:firefox": "web-ext lint --source-dir . --ignore-files \"node_modules/**\" \"tests/**\" \"scripts/**\" \"kanban/**\" \"docs/**\" \"*.md\" \"eslint.config.js\" \"eslint-suppressions.json\" \"package*.json\" \"lefthook.yml\" \".agent/**\" \".aider.conf.yml\"",
     "format": "prettier --write .",
@@ -17,6 +18,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.0",
     "eslint": "^10.12.0",
     "eslint-plugin-no-unsanitized": "^4.1.5",
     "globals": "^17.13.0",
