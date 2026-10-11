@@ -207,6 +207,78 @@
     }
 
     /**
+     * Sprawdza, czy dany wątek posiada nieprzeczytane wiadomości.
+     * Stosuje kaskadę selektorów heurystycznych bez wywoływania getComputedStyle,
+     * aby uniknąć wymuszonego przeliczania układu (layout thrashing / reflow).
+     *
+     * Kaskada sprawdzania:
+     * 1. .chat-unread-badge, [class*="unread" i], [data-testid*="unread" i]
+     * 2. [aria-label*="nieprzeczytan" i], [aria-label*="unread" i] (element potomny)
+     * 3. Atrybut aria-label na linkElement oraz rowElement
+     * 4. Wizualny wskaźnik kropki: [style*="rgb(0, 132, 255)"], [style*="#0084ff" i]
+     * 5. Atrybut stanu: [data-unread="true"]
+     *
+     * @param {Element} rowElement Element wiersza czatu.
+     * @param {Element|null} [linkElement=null] Opcjonalny element linku wątku.
+     * @returns {boolean} Czy wątek zawiera nieprzeczytane wiadomości.
+     */
+    isThreadUnread(rowElement, linkElement = null) {
+      if (!rowElement || typeof rowElement.querySelector !== 'function') {
+        return false;
+      }
+
+      // 1. Dedykowana odznaka, klasa lub atrybut testowy nieprzeczytania
+      if (
+        rowElement.matches?.('.chat-unread-badge, [class*="unread" i], [data-testid*="unread" i]') ||
+        rowElement.querySelector?.('.chat-unread-badge, [class*="unread" i], [data-testid*="unread" i]')
+      ) {
+        return true;
+      }
+
+      // 2. Element potomny z atrybutem aria-label wskazującym na nieprzeczytane wiadomości
+      const ariaChild = rowElement.querySelector?.('[aria-label*="nieprzeczytan" i], [aria-label*="unread" i]');
+      if (ariaChild) {
+        const childLabel = (ariaChild.getAttribute?.('aria-label') || '').toLowerCase();
+        if (!childLabel.includes('oznacz jako') && !childLabel.includes('mark as')) {
+          return true;
+        }
+      }
+
+      // 3. Sprawdzenie atrybutu aria-label na samym linku lub wierszu
+      const rowLabel = (rowElement.getAttribute?.('aria-label') || '').toLowerCase();
+      const linkLabel = (linkElement?.getAttribute?.('aria-label') || '').toLowerCase();
+      const combinedLabel = `${rowLabel} ${linkLabel}`;
+      if (combinedLabel.includes('nieprzeczytan') || combinedLabel.includes('unread')) {
+        if (!combinedLabel.includes('oznacz jako') && !combinedLabel.includes('mark as')) {
+          return true;
+        }
+      }
+
+      // 4. Wizualny wskaźnik kropki (blue dot indicator: rgb(0, 132, 255) lub #0084ff)
+      const blueDot = rowElement.querySelector?.('[style*="rgb(0, 132, 255)"], [style*="#0084ff" i]');
+      if (blueDot) {
+        const isAvatar =
+          blueDot.tagName === 'IMG' ||
+          blueDot.classList?.contains('chat-avatar') ||
+          Boolean(blueDot.closest?.('.chat-avatar'));
+        if (!isAvatar) {
+          return true;
+        }
+      }
+
+      // 5. Atrybut danych data-unread="true" na wierszu lub elemencie potomnym
+      if (
+        rowElement.getAttribute?.('data-unread') === 'true' ||
+        rowElement.matches?.('[data-unread="true"]') ||
+        Boolean(rowElement.querySelector?.('[data-unread="true"]'))
+      ) {
+        return true;
+      }
+
+      return false;
+    }
+
+    /**
      * Odczytuje adres URL awatara z wiersza czatu.
      * @param {Element} rowElement Element wiersza czatu.
      * @returns {string} Adres URL awatara lub pusty ciąg.
@@ -365,13 +437,15 @@
 
           const name = this.extractThreadName(rowElement, link);
           const avatar = this.extractThreadAvatar(rowElement);
+          const isUnread = this.isThreadUnread(rowElement, link);
 
           detectedThreads.push({
             threadId,
             rowElement,
             linkElement: link,
             name,
-            avatar
+            avatar,
+            isUnread: Boolean(isUnread)
           });
         }
       }
