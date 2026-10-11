@@ -90,6 +90,11 @@
         }
       });
 
+      // Skróty Alt+1…9 i Alt+0 przełączające foldery
+      document.addEventListener('keydown', (event) => {
+        this._handleFolderShortcut(event);
+      });
+
       // Obsługa kliknięcia poza elementem (Click Outside)
       document.addEventListener('click', (event) => {
         if (this.activeDropdown) {
@@ -112,6 +117,34 @@
           }
         });
       }
+    }
+
+    /**
+     * Obsługuje skrót Alt+1…9 / Alt+0: klika pigułkę wskazanego folderu.
+     * Nic nie robi przy otwartym modalu ani podczas pisania w polu tekstowym.
+     * @param {KeyboardEvent} event
+     * @returns {boolean} `true`, gdy skrót przełączył folder
+     * @private
+     */
+    _handleFolderShortcut(event) {
+      if (!Core || typeof document === 'undefined' || this.activeModal) return false;
+      if (Core.isTypingTarget(event.target) || Core.isTypingTarget(document.activeElement)) return false;
+
+      const bar = document.getElementById('mf-folder-bar');
+      if (!bar) return false;
+      const pills = Array.from(bar.querySelectorAll('.mf-folder-pill'));
+      const folderId = Core.resolveFolderShortcut(
+        event,
+        pills.map((pill) => pill.dataset.folderId)
+      );
+      if (!folderId) return false;
+
+      const pill = pills.find((p) => p.dataset.folderId === folderId);
+      if (!pill) return false;
+
+      event.preventDefault();
+      pill.click();
+      return true;
     }
 
     /**

@@ -857,6 +857,126 @@ assert.strictEqual(
 
 console.log('✓ Pasek folderów: tablist, roving tabindex, strzałki/Home/End z zawijaniem, pomijanie ukrytych.');
 
+// 15. Skróty klawiszowe Alt+1…9 i Alt+0 (MF-012)
+console.log('Test 15: skróty Alt+1…9 / Alt+0 przełączające foldery...');
+const UICore = require('../src/ui/core.js');
+const keyEvent = (code, extra = {}) => {
+  const event = {
+    type: 'keydown',
+    code,
+    key: code.replace('Digit', ''),
+    altKey: true,
+    ctrlKey: false,
+    metaKey: false,
+    shiftKey: false,
+    defaultPrevented: false,
+    getModifierState: () => false,
+    preventDefault() {
+      this.defaultPrevented = true;
+    },
+    ...extra
+  };
+  return event;
+};
+const shortcutIds = ['all', 'work', 'friends'];
+
+// resolveFolderShortcut
+assert.strictEqual(UICore.resolveFolderShortcut(keyEvent('Digit0'), shortcutIds), 'all', 'Alt+0 → "all"');
+assert.strictEqual(
+  UICore.resolveFolderShortcut(keyEvent('Digit1'), shortcutIds),
+  'work',
+  'Alt+1 → 1. folder użytkownika'
+);
+assert.strictEqual(UICore.resolveFolderShortcut(keyEvent('Digit2'), shortcutIds), 'friends', 'Alt+2 → 2. folder');
+assert.strictEqual(UICore.resolveFolderShortcut(keyEvent('Digit3'), shortcutIds), null, 'Brak 3. folderu → null');
+assert.strictEqual(
+  UICore.resolveFolderShortcut(keyEvent('Digit1', { key: '¡' }), shortcutIds),
+  'work',
+  'macOS: Option+1 (key "¡") rozpoznany po code "Digit1"'
+);
+assert.strictEqual(
+  UICore.resolveFolderShortcut(keyEvent('Digit1', { altKey: false }), shortcutIds),
+  null,
+  'Bez Alt → null'
+);
+assert.strictEqual(
+  UICore.resolveFolderShortcut(keyEvent('Digit1', { ctrlKey: true }), shortcutIds),
+  null,
+  'Ctrl → null'
+);
+assert.strictEqual(
+  UICore.resolveFolderShortcut(keyEvent('Digit1', { metaKey: true }), shortcutIds),
+  null,
+  'Meta → null'
+);
+assert.strictEqual(
+  UICore.resolveFolderShortcut(keyEvent('Digit1', { shiftKey: true }), shortcutIds),
+  null,
+  'Shift → null'
+);
+assert.strictEqual(
+  UICore.resolveFolderShortcut(keyEvent('Digit1', { getModifierState: (m) => m === 'AltGraph' }), shortcutIds),
+  null,
+  'AltGraph → null'
+);
+assert.strictEqual(UICore.resolveFolderShortcut(keyEvent('KeyA', { key: 'a' }), shortcutIds), null, 'Alt+A → null');
+
+// isTypingTarget
+for (const tag of ['input', 'textarea', 'select']) {
+  assert.strictEqual(UICore.isTypingTarget(new MockElement(tag)), true, `<${tag}> to pole do pisania`);
+}
+const editableBox = new MockElement('div');
+editableBox.setAttribute('contenteditable', 'true');
+const editableChild = editableBox.appendChild(new MockElement('span'));
+assert.strictEqual(UICore.isTypingTarget(editableBox), true, 'contenteditable to pole do pisania');
+assert.strictEqual(UICore.isTypingTarget(editableChild), true, 'Potomek contenteditable to pole do pisania');
+const textboxRole = new MockElement('div');
+textboxRole.setAttribute('role', 'textbox');
+const textboxChild = textboxRole.appendChild(new MockElement('p'));
+assert.strictEqual(UICore.isTypingTarget(textboxRole), true, 'role="textbox" to pole do pisania');
+assert.strictEqual(UICore.isTypingTarget(textboxChild), true, 'Potomek role="textbox" to pole do pisania');
+const notEditable = new MockElement('div');
+notEditable.setAttribute('contenteditable', 'false');
+assert.strictEqual(UICore.isTypingTarget(notEditable), false, 'contenteditable="false" nie jest polem do pisania');
+assert.strictEqual(UICore.isTypingTarget(new MockElement('button')), false, 'Przycisk nie jest polem do pisania');
+assert.strictEqual(UICore.isTypingTarget(null), false, 'null nie jest polem do pisania');
+
+// Listener _handleFolderShortcut() na pasku z dokumentu
+const shortcutClicks = [];
+pillsOf().forEach((pill) => pill.addEventListener('click', () => shortcutClicks.push(pill.dataset.folderId)));
+global.document.activeElement = null;
+
+const hitEvent = keyEvent('Digit1', { target: global.document.body });
+assert.strictEqual(ui._handleFolderShortcut(hitEvent), true, 'Alt+1 przełącza folder');
+assert.deepStrictEqual(shortcutClicks, ['work'], 'Alt+1 klika pigułkę 1. folderu użytkownika');
+assert.strictEqual(hitEvent.defaultPrevented, true, 'Trafienie wywołuje preventDefault()');
+
+const allEvent = keyEvent('Digit0', { target: global.document.body });
+assert.strictEqual(ui._handleFolderShortcut(allEvent), true, 'Alt+0 przełącza folder');
+assert.deepStrictEqual(shortcutClicks, ['work', 'all'], 'Alt+0 klika pigułkę "Wszystkie"');
+
+const missEvent = keyEvent('Digit9', { target: global.document.body });
+assert.strictEqual(ui._handleFolderShortcut(missEvent), false, 'Alt+9 bez 9. folderu nic nie robi');
+assert.strictEqual(missEvent.defaultPrevented, false, 'Brak trafienia — bez preventDefault()');
+
+const typingEvent = keyEvent('Digit1', { target: editableChild });
+assert.strictEqual(ui._handleFolderShortcut(typingEvent), false, 'Alt+1 w polu wiadomości nic nie robi');
+assert.strictEqual(typingEvent.defaultPrevented, false, 'Pisanie — bez preventDefault()');
+
+global.document.activeElement = new MockElement('textarea');
+const focusedTypingEvent = keyEvent('Digit1', { target: global.document.body });
+assert.strictEqual(ui._handleFolderShortcut(focusedTypingEvent), false, 'Fokus w polu tekstowym blokuje skrót');
+global.document.activeElement = null;
+
+ui.activeModal = new MockElement('div');
+const modalEvent = keyEvent('Digit1', { target: global.document.body });
+assert.strictEqual(ui._handleFolderShortcut(modalEvent), false, 'Otwarty modal blokuje skrót');
+assert.strictEqual(modalEvent.defaultPrevented, false, 'Otwarty modal — bez preventDefault()');
+ui.activeModal = null;
+assert.deepStrictEqual(shortcutClicks, ['work', 'all'], 'Zablokowane skróty nie klikają pigułek');
+
+console.log('✓ Skróty: Alt+0/Alt+N, code zamiast key, odrzucanie modyfikatorów i AltGraph, strażnik pisania i modalu.');
+
 console.log('\n=============================================');
 console.log('WSZYSTKIE TESTY INTERFEJSU ZAKOŃCZONE SUKCESEM! ✓');
 console.log('=============================================');
