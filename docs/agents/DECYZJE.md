@@ -75,7 +75,7 @@ ręcznie, a Gemini przyjmował pracę Gemini (audyt swarmboard 2026-10-11).
 **Alternatywy:** „Lean Swarm” Antigravity (1–2 subagentów) — nadal koordynacja i crony poza tablicą;
 rój swarmboard (`sb swarm`) — możliwy później, decyzja właściciela.
 
-## D-009 · 2026-10-11 · przyjęta — WIP `review` 6 na czas porządków po audycie
+## D-009 · 2026-10-11 · zamknięta — WIP `review` 6 na czas porządków po audycie (powrót do 4 po zamknięciu kart P1)
 
 **Decyzja:** limit WIP kolumny `review` podniesiony z 4 do 6. Karty krytyczne z listy kontrolnej
 audytu (MF-014, MF-017, MF-019) wykonuje rój Claude; ich przegląd może zrobić tylko inny model albo
