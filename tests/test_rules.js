@@ -259,6 +259,76 @@ async function runRulesTests() {
     'folder_prio_0',
     'Reguła o priorytecie 0 powinna wygrać z regułami o priorytetach 1 oraz 5'
   );
+
+  // Test odporności normalizacji priorytetów na typy niebędące liczbami (false, [], whitespace)
+  const malformedPriorityRules = [
+    {
+      id: 'r_bool',
+      name: 'Reguła z priority false',
+      enabled: true,
+      priority: false,
+      folderId: 'f_bool',
+      conditions: [{ field: 'name', operator: 'contains', value: 'Wspólny' }]
+    },
+    {
+      id: 'r_spaces',
+      name: 'Reguła z priority whitespace',
+      enabled: true,
+      priority: '   ',
+      folderId: 'f_spaces',
+      conditions: [{ field: 'name', operator: 'contains', value: 'Wspólny' }]
+    },
+    {
+      id: 'r_arr',
+      name: 'Reguła z priority array',
+      enabled: true,
+      priority: [],
+      folderId: 'f_arr',
+      conditions: [{ field: 'name', operator: 'contains', value: 'Wspólny' }]
+    },
+    {
+      id: 'r_valid_5',
+      name: 'Reguła z priority 5',
+      enabled: true,
+      priority: 5,
+      folderId: 'f_valid_5',
+      conditions: [{ field: 'name', operator: 'contains', value: 'Wspólny' }]
+    },
+    {
+      id: 'r_valid_1',
+      name: 'Reguła z priority 1',
+      enabled: true,
+      priority: 1,
+      folderId: 'f_valid_1',
+      conditions: [{ field: 'name', operator: 'contains', value: 'Wspólny' }]
+    }
+  ];
+
+  assert.strictEqual(
+    engine.evaluateThread({ threadId: '100', name: 'Wspólny temat' }, malformedPriorityRules),
+    'f_valid_1',
+    'Priorytet 1 musi wygrać z regułami o wadliwych priorytetach i priorytecie 5'
+  );
+
+  assert.strictEqual(
+    engine.evaluateThread({ threadId: '100', name: 'Wspólny temat' }, malformedPriorityRules.slice(0, 4)),
+    'f_valid_5',
+    'Priorytet 5 musi wygrać z regułami o wadliwych priorytetach (false, [], "   " domyślnie otrzymują 10)'
+  );
+
+  // Bezpośrednia weryfikacja parsePriority
+  assert.strictEqual(MessengerRulesEngine.parsePriority(false), 10, 'false -> 10');
+  assert.strictEqual(MessengerRulesEngine.parsePriority([]), 10, '[] -> 10');
+  assert.strictEqual(MessengerRulesEngine.parsePriority('   '), 10, '"   " -> 10');
+  assert.strictEqual(MessengerRulesEngine.parsePriority(null), 10, 'null -> 10');
+  assert.strictEqual(MessengerRulesEngine.parsePriority(undefined), 10, 'undefined -> 10');
+  assert.strictEqual(MessengerRulesEngine.parsePriority(''), 10, '"" -> 10');
+  assert.strictEqual(MessengerRulesEngine.parsePriority(0), 0, '0 -> 0');
+  assert.strictEqual(MessengerRulesEngine.parsePriority('0'), 0, '"0" -> 0');
+  assert.strictEqual(MessengerRulesEngine.parsePriority(1), 1, '1 -> 1');
+  assert.strictEqual(MessengerRulesEngine.parsePriority(5), 5, '5 -> 5');
+  assert.strictEqual(MessengerRulesEngine.parsePriority(' 5 '), 5, '" 5 " -> 5');
+
   console.log('✓ Priorytety oraz reguły wyłączone są poprawnie respektowane.');
 
   // 5b. Test odporności na zniekształcone warunki (BUG_MALFORMED_CONDITIONS_THROW)
@@ -465,6 +535,22 @@ async function runRulesTests() {
   assert.strictEqual(deleted, true);
   const afterDelete = await engine.getRules();
   assert.strictEqual(afterDelete.length, 0);
+
+  // Weryfikacja normalizacji priorytetów przy zapisie przez engine.saveRules()
+  const malformedRulesToSave = [
+    { name: 'R_False', priority: false, folderId: 'work', conditions: [{ field: 'name', value: 'a' }] },
+    { name: 'R_Space', priority: '   ', folderId: 'work', conditions: [{ field: 'name', value: 'b' }] },
+    { name: 'R_Array', priority: [], folderId: 'work', conditions: [{ field: 'name', value: 'c' }] },
+    { name: 'R_Zero', priority: 0, folderId: 'work', conditions: [{ field: 'name', value: 'd' }] },
+    { name: 'R_StrFive', priority: ' 5 ', folderId: 'work', conditions: [{ field: 'name', value: 'e' }] }
+  ];
+  const savedMalformed = await engine.saveRules(malformedRulesToSave);
+  assert.strictEqual(savedMalformed[0].priority, 10, 'priority: false normalizuje do 10');
+  assert.strictEqual(savedMalformed[1].priority, 10, 'priority: "   " normalizuje do 10');
+  assert.strictEqual(savedMalformed[2].priority, 10, 'priority: [] normalizuje do 10');
+  assert.strictEqual(savedMalformed[3].priority, 0, 'priority: 0 zostaje zachowane jako 0');
+  assert.strictEqual(savedMalformed[4].priority, 5, 'priority: " 5 " konwertuje na liczbę 5');
+  await engine.saveRules([]); // reset do pustej listy
 
   console.log('✓ saveRules(), saveRule(), toggleRule(), deleteRule() i getRules() działają poprawnie.');
 

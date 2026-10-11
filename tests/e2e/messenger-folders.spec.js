@@ -352,6 +352,7 @@ test.describe('Messenger Folders E2E Test Suite (MF-006)', () => {
 
     // Wypełnij formularz reguły
     const nameInput = ruleEditor.locator('#mf-rule-name-input');
+    await expect(nameInput).toBeFocused();
     await nameInput.fill('Projekty firmowe');
 
     const folderSelect = ruleEditor.locator('#mf-rule-folder-select');

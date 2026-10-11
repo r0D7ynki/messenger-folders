@@ -42,6 +42,26 @@
   }
 
   /**
+   * Bezpiecznie parsuje priorytet reguły (akceptuje liczby i niepuste ciągi numeryczne,
+   * odrzuca booleany, tablice, obiekty i białe znaki, zwracając domyślnie defaultPriority).
+   * @param {*} rawPriority
+   * @param {number} [defaultPriority=10]
+   * @returns {number}
+   */
+  function parsePriority(rawPriority, defaultPriority = 10) {
+    if (typeof rawPriority === 'number' && Number.isFinite(rawPriority)) {
+      return rawPriority;
+    }
+    if (typeof rawPriority === 'string' && rawPriority.trim() !== '') {
+      const parsed = Number(rawPriority);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+    return defaultPriority;
+  }
+
+  /**
    * Normalizuje i waliduje pojedynczy obiekt reguły.
    * @param {Object} rule
    * @param {number} [index=0]
@@ -59,14 +79,7 @@
       typeof rule.name === 'string' && rule.name.trim() ? rule.name.trim().slice(0, 50) : `Reguła ${index + 1}`;
 
     const enabled = rule.enabled !== false;
-    const priority =
-      rule &&
-      rule.priority !== null &&
-      rule.priority !== undefined &&
-      rule.priority !== '' &&
-      Number.isFinite(Number(rule.priority))
-        ? Number(rule.priority)
-        : 10;
+    const priority = parsePriority(rule ? rule.priority : undefined, 10);
     const folderId = typeof rule.folderId === 'string' ? rule.folderId.trim() : '';
     const matchMode = rule.matchMode === 'any' ? 'any' : 'all';
 
@@ -311,22 +324,8 @@
             r.conditions.some((c) => c && typeof c === 'object')
         )
         .sort((a, b) => {
-          const prioA =
-            a &&
-            a.priority !== null &&
-            a.priority !== undefined &&
-            a.priority !== '' &&
-            Number.isFinite(Number(a.priority))
-              ? Number(a.priority)
-              : 10;
-          const prioB =
-            b &&
-            b.priority !== null &&
-            b.priority !== undefined &&
-            b.priority !== '' &&
-            Number.isFinite(Number(b.priority))
-              ? Number(b.priority)
-              : 10;
+          const prioA = parsePriority(a ? a.priority : undefined, 10);
+          const prioB = parsePriority(b ? b.priority : undefined, 10);
           return prioA - prioB;
         });
 
@@ -412,6 +411,9 @@
     }
   }
 
+  MessengerRulesEngine.parsePriority = parsePriority;
+  MessengerRulesEngine.normalizePriority = parsePriority;
+
   // Udostępnienie w zasięgu globalnym oraz jako moduł CommonJS
   if (typeof global !== 'undefined') {
     global.MessengerRulesEngine = MessengerRulesEngine;
@@ -423,7 +425,8 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       MessengerRulesEngine,
-      STORAGE_KEYS
+      STORAGE_KEYS,
+      parsePriority
     };
     module.exports.default = MessengerRulesEngine;
   }

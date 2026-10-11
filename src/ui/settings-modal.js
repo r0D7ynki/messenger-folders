@@ -606,7 +606,15 @@
         priorityInput.className = 'mf-modal-input';
         priorityInput.min = '0';
         priorityInput.max = '100';
-        priorityInput.value = ruleToEdit && Number.isFinite(Number(ruleToEdit.priority)) ? ruleToEdit.priority : 10;
+        priorityInput.value =
+          ruleToEdit && typeof ruleToEdit.priority === 'number' && Number.isFinite(ruleToEdit.priority)
+            ? ruleToEdit.priority
+            : ruleToEdit &&
+                typeof ruleToEdit.priority === 'string' &&
+                ruleToEdit.priority.trim() !== '' &&
+                Number.isFinite(Number(ruleToEdit.priority))
+              ? Number(ruleToEdit.priority)
+              : 10;
 
         priorityCol.appendChild(priorityLabel);
         priorityCol.appendChild(priorityInput);
@@ -942,9 +950,9 @@
         setTimeout(() => {
           if (
             typeof document !== 'undefined' &&
-            (document.activeElement === overlay ||
-              document.activeElement === modal ||
-              !modal.contains(document.activeElement))
+            (document.activeElement === editorOverlay ||
+              document.activeElement === editorModal ||
+              !editorModal.contains(document.activeElement))
           ) {
             nameInput.focus();
           }
