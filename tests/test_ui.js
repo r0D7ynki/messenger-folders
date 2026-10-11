@@ -710,13 +710,13 @@ assert.strictEqual(unreadBadgeOf(workPill()), null, 'Odznaka znika po spadku lic
 unreadBarComp.updateFolderCounts({ work: 2 }, { work: '<img src=x onerror=alert(1)>' });
 assert.strictEqual(unreadBadgeOf(workPill()), null, 'Nieliczbowa wartość licznika nie tworzy odznaki');
 
-const folderBarSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui', 'folder-bar.js'), 'utf8');
-const pillBadgesBody = folderBarSource.slice(
-  folderBarSource.indexOf('_updatePillBadges(pill, fId'),
-  folderBarSource.indexOf('updateFolderCounts(counts = {}')
-);
-assert.ok(pillBadgesBody.includes('unreadBadge.textContent = unreadText'), 'Odznaka ustawiana przez textContent');
-assert.ok(!pillBadgesBody.includes('innerHTML'), '_updatePillBadges nie używa innerHTML');
+// Zachowanie, nie tekst źródła: złośliwy licznik nie tworzy żadnych elementów w pigułce
+assert.strictEqual(workPill().querySelectorAll('img').length, 0, 'Licznik z <img onerror> nie tworzy elementu <img>');
+assert.strictEqual(unreadBadgeOf(workPill()), null, 'Licznik z <img onerror> nie tworzy odznaki');
+unreadBarComp.updateFolderCounts({ work: 2 }, { work: 7 });
+assert.strictEqual(workPill().querySelectorAll('img').length, 0, 'Poprawna odznaka nie dodaje elementów <img>');
+assert.strictEqual(unreadBadgeOf(workPill()).children.length, 0, 'Odznaka zawiera wyłącznie tekst, bez elementów');
+unreadBarComp.updateFolderCounts({ work: 2 }, { work: 0 });
 console.log('✓ Odznaka: brak przy 0, liczba 1–99, 99+ przy 100, usunięcie po spadku do 0, treść przez textContent.');
 
 // MF-022 pkt 9: typ argumentu rozpoznawany per wpis, nie po pierwszej wartości

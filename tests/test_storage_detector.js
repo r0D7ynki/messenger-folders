@@ -608,6 +608,88 @@ function runDetectorTests() {
   assert.strictEqual(detector.isThreadUnread(readRow, readRow.children[0]), false, 'Wiersz przeczytany → false');
   assert.strictEqual(detector.isThreadUnread(null), false, 'Brak wiersza → false');
   console.log('✓ detector.isThreadUnread() ma test na każdy krok heurystyki i na wiersz przeczytany');
+
+  // MF-024: utwardzenie heurystyki (przeglądy MF-014 i MF-019)
+  // Pkt 1: potomek przycisku akcji nie jest wskaźnikiem — sprawdzana jest ścieżka przodków
+  const actionIcon = mockElement('span', { 'data-testid': 'unread_icon' });
+  mockElement('button', { 'aria-label': 'Menu' }, [actionIcon]);
+  assert.strictEqual(detector._isActionElement(actionIcon), true, 'Potomek <button> to element akcji');
+  assert.strictEqual(
+    detector.isThreadUnread(
+      row(
+        mockElement('div', { role: 'menuitem' }, [mockElement('span', { 'data-testid': 'mark_unread_icon' })]),
+        mockElement('div', { role: 'button' }, [mockElement('span', { 'aria-label': '1 unread' })])
+      )
+    ),
+    false,
+    'Wskaźniki wewnątrz przycisków i pozycji menu nie oznaczają nieprzeczytania'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(
+      row(
+        mockElement('button', {}, [mockElement('span', { 'data-testid': 'unread_icon' })]),
+        mockElement('span', { 'data-testid': 'unread_badge' })
+      )
+    ),
+    true,
+    'Prawdziwa odznaka poza przyciskiem nadal działa'
+  );
+
+  // Pkt 2: awatar bez <img> (div z obrazem w tle lub role="img") nie jest niebieską kropką
+  assert.strictEqual(
+    detector.isThreadUnread(
+      row(mockElement('div', { style: 'background: url(a.png); border: 2px solid rgb(0, 132, 255)' }))
+    ),
+    false,
+    'Awatar-div z tłem url() nie jest kropką'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(row(mockElement('div', { role: 'img', style: 'border: 2px solid #0084ff' }))),
+    false,
+    'Element role="img" nie jest kropką'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(row(mockElement('div', { style: 'background: rgb(0, 132, 255)' }))),
+    true,
+    'Zwykła niebieska kropka nadal działa'
+  );
+
+  // Pkt 3: etykieta stanu „Oznaczony…” to stan, nie akcja „Oznacz…”
+  assert.strictEqual(
+    detector.isThreadUnread(row(mockElement('span', { 'aria-label': 'Oznaczony jako nieprzeczytany' }))),
+    true,
+    'Krok 2: „Oznaczony jako nieprzeczytany” to stan'
+  );
+  const stateLink = threadLink({ 'aria-label': 'Oznaczony jako nieprzeczytany' });
+  assert.strictEqual(detector.isThreadUnread(row(stateLink), stateLink), true, 'Krok 3: etykieta stanu');
+  assert.strictEqual(
+    detector.isThreadUnread(row(mockElement('span', { 'aria-label': 'Oznacz jako nieprzeczytane' }))),
+    false,
+    'Etykieta akcji „Oznacz…” nadal pomijana'
+  );
+
+  // Pkt 4: krok 1 przez ścieżkę potomka, krok 5 osobno (bez innych gałęzi OR)
+  assert.strictEqual(
+    detector.isThreadUnread(row(threadLink({}, [mockElement('span', { 'data-testid': 'unread_dot' })]))),
+    true,
+    'Krok 1: data-testid z „unread” na potomku'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(mockElement('div', { role: 'row', 'data-unread': 'true' }, [threadLink()])),
+    true,
+    'Krok 5: data-unread="true" na wierszu'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(row(threadLink({}, [mockElement('span', { 'data-unread': 'true' })]))),
+    true,
+    'Krok 5: data-unread="true" na potomku'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(row(threadLink({}, [mockElement('span', { 'data-unread': 'false' })]))),
+    false,
+    'data-unread="false" → false'
+  );
+  console.log('✓ detector.isThreadUnread() (MF-024): przodkowie-akcje, awatary bez <img>, etykieta „Oznaczony…”');
 }
 
 /**
@@ -672,6 +754,12 @@ function runUnreadCountsTests() {
     { all: 0, work: 0, friends: 0, uncategorized: 0 },
     'Brak wątków → same zera, także dla uncategorized'
   );
+  // MF-024 pkt 4: folderId spoza listy folderów — wątek liczony w 'all' i pod własnym kluczem, bez wpływu na inne foldery
+  const orphan = calculateUnreadCounts([{ threadId: 'x1', isUnread: true }], { x1: { folderId: 'usuniety' } }, folders);
+  assert.strictEqual(orphan.all, 1, "Wątek z nieznanym folderId liczony w 'all'");
+  assert.strictEqual(orphan.usuniety, 1, 'Licznik pod kluczem nieznanego folderu');
+  assert.strictEqual(orphan.uncategorized, 0, 'Nieznany folderId nie trafia do uncategorized');
+  assert.strictEqual(orphan.work + orphan.friends, 0, 'Znane foldery bez zmian');
   assert.strictEqual(calculateUnreadCounts(null, null, null).all, 0, 'Niepoprawne wejście → 0');
   console.log("✓ calculateUnreadCounts(): suma dla 'all', nieprzypisane → uncategorized, duplikaty liczone raz");
 }
