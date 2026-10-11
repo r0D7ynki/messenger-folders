@@ -574,6 +574,69 @@
   background: rgba(255, 255, 255, 0.12);
 }
 
+/* ==========================================================================
+   ODZNAKA NIEPRZECZYTANYCH WIADOMOŚCI W PIGUŁCE FOLDERU (.mf-folder-unread-badge)
+   ========================================================================== */
+
+.mf-folder-unread-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 18px !important;
+  height: 18px !important;
+  padding: 0 5px !important;
+  border-radius: var(--mf-radius-pill, 9999px) !important;
+  background: var(--mf-primary, #0084ff) !important;
+  color: #ffffff !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  font-family: var(--mf-font) !important;
+  line-height: 1 !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  box-sizing: border-box !important;
+  flex-shrink: 0 !important;
+  box-shadow: 0 1px 3px rgba(0, 132, 255, 0.35) !important;
+  pointer-events: none !important;
+  transition:
+    background var(--mf-transition-fast),
+    color var(--mf-transition-fast),
+    box-shadow var(--mf-transition-fast),
+    transform var(--mf-transition-fast) !important;
+}
+
+/* Odznaka na aktywnej pigułce (.mf-active) - pełny kontrast */
+.mf-folder-pill.mf-active .mf-folder-unread-badge,
+.mf-folder-tab.active .mf-folder-unread-badge {
+  background: #ffffff !important;
+  color: var(--mf-folder-color, var(--mf-primary, #0084ff)) !important;
+  font-weight: 700 !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25) !important;
+}
+
+/* Wsparcie motywu ciemnego (Facebook / Messenger Dark Mode) */
+.__fb-dark-mode .mf-folder-unread-badge,
+[data-theme='dark'] .mf-folder-unread-badge,
+.dark-mode .mf-folder-unread-badge {
+  background: var(--mf-primary, #0084ff) !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5) !important;
+}
+
+.__fb-dark-mode .mf-folder-pill.mf-active .mf-folder-unread-badge,
+[data-theme='dark'] .mf-folder-pill.mf-active .mf-folder-unread-badge,
+.dark-mode .mf-folder-pill.mf-active .mf-folder-unread-badge {
+  background: #ffffff !important;
+  color: var(--mf-folder-color, var(--mf-primary, #0084ff)) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5) !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  .mf-folder-unread-badge {
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5) !important;
+  }
+}
+
 /* Przycisk edycji na pigułce - usunięty zgodnie z życzeniem użytkownika (edycja wyłącznie przez Ustawienia) */
 .mf-pill-edit-icon {
   display: none !important;

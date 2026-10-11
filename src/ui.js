@@ -132,6 +132,7 @@
      * @param {Array<Object>} folders - Lista folderów użytkownika
      * @param {string} activeFolderId - ID aktywnego folderu ('all' dla wszystkich)
      * @param {Object} counts - Mapa liczników lub obiekt z wątkami: { [folderId]: number }
+     * @param {Object|Function} [unreadCounts] - Mapa liczników nieprzeczytanych wiadomości lub callback onSelectFolder
      * @param {Function} [onSelectFolder] - Callback po wyborze folderu (folderId)
      * @param {Function} [onAddFolder] - Callback po kliknięciu dodawania folderu
      * @param {Function} [onEditFolder] - Callback po kliknięciu edycji folderu (folder)
@@ -142,6 +143,7 @@
       folders = [],
       activeFolderId = 'all',
       counts = {},
+      unreadCounts = {},
       onSelectFolder,
       onAddFolder,
       onEditFolder,
@@ -152,11 +154,25 @@
           folders,
           activeFolderId,
           counts,
+          unreadCounts,
           onSelectFolder,
           onAddFolder,
           onEditFolder,
           onOpenSettings
         );
+      }
+      return null;
+    }
+
+    /**
+     * Aktualizuje liczniki wątków oraz odznaki nieprzeczytanych wiadomości na pasku folderów.
+     * @param {Object} counts - Mapa liczników wszystkich wątków
+     * @param {Object} unreadCounts - Mapa liczników nieprzeczytanych wiadomości
+     * @returns {HTMLElement|null}
+     */
+    updateFolderCounts(counts = {}, unreadCounts = {}) {
+      if (this.folderBar && typeof this.folderBar.updateFolderCounts === 'function') {
+        return this.folderBar.updateFolderCounts(counts, unreadCounts);
       }
       return null;
     }

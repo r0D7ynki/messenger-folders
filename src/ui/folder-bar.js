@@ -32,11 +32,115 @@
     }
 
     /**
+     * Aktualizuje odznaki nieprzeczytanych wiadomości oraz liczbę wątków w danej pigułce.
+     * @private
+     * @param {HTMLElement} pill - Element pigułki .mf-folder-pill
+     * @param {string} fId - Identyfikator folderu
+     * @param {Object} resolvedCounts - Mapa łącznej liczby wątków
+     * @param {Object} resolvedUnreadCounts - Mapa nieprzeczytanych wątków
+     */
+    _updatePillBadges(pill, fId, resolvedCounts, resolvedUnreadCounts) {
+      const isActive = pill.classList.contains('mf-active');
+      const countVal = resolvedCounts[fId] || 0;
+      const unreadVal = Number(resolvedUnreadCounts && resolvedUnreadCounts[fId]) || 0;
+
+      // 1. Odznaka nieprzeczytanych wiadomości (.mf-folder-unread-badge)
+      let unreadBadge = pill.querySelector('.mf-folder-unread-badge');
+      if (unreadVal > 0) {
+        if (!unreadBadge) {
+          unreadBadge = document.createElement('span');
+          unreadBadge.className = 'mf-folder-unread-badge';
+          const countEl = pill.querySelector('.mf-folder-count');
+          if (countEl && typeof pill.insertBefore === 'function') {
+            pill.insertBefore(unreadBadge, countEl);
+          } else {
+            pill.appendChild(unreadBadge);
+          }
+        }
+        const unreadText = unreadVal > 99 ? '99+' : String(unreadVal);
+        if (unreadBadge.textContent !== unreadText) {
+          unreadBadge.textContent = unreadText;
+        }
+        unreadBadge.setAttribute('aria-label', `${unreadVal} nieprzeczytanych`);
+      } else if (unreadBadge) {
+        unreadBadge.remove();
+      }
+
+      // 2. Licznik wszystkich przypisanych wątków (.mf-folder-count)
+      let countEl = pill.querySelector('.mf-folder-count');
+      if (countVal > 0 || isActive) {
+        if (!countEl) {
+          countEl = document.createElement('span');
+          countEl.className = 'mf-folder-count';
+          pill.appendChild(countEl);
+        }
+        const countText = countVal > 99 ? '99+' : String(countVal);
+        if (countEl.textContent !== countText) {
+          countEl.textContent = countText;
+        }
+      } else if (countEl) {
+        countEl.remove();
+      }
+    }
+
+    /**
+     * Aktualizuje liczniki wątków oraz odznaki nieprzeczytanych wiadomości w istniejącym pasku folderów.
+     *
+     * @param {Object} [counts] - Mapa wątków lub obiekt { [folderId]: number }
+     * @param {Object} [unreadCounts] - Mapa nieprzeczytanych wątków: { [folderId]: number, all: number }
+     * @returns {HTMLElement|null} Element paska #mf-folder-bar lub null
+     */
+    updateFolderCounts(counts = {}, unreadCounts = {}) {
+      if (typeof document === 'undefined') return null;
+
+      const bar = document.getElementById('mf-folder-bar');
+      if (!bar) return null;
+
+      let resolvedCounts = {};
+      if (counts && typeof counts === 'object') {
+        const firstVal = Object.values(counts)[0];
+        if (firstVal && typeof firstVal === 'object' && 'folderId' in firstVal) {
+          for (const thread of Object.values(counts)) {
+            const fId = thread.folderId || 'uncategorized';
+            resolvedCounts[fId] = (resolvedCounts[fId] || 0) + 1;
+          }
+        } else {
+          resolvedCounts = counts;
+        }
+      }
+
+      const resolvedUnread = unreadCounts && typeof unreadCounts === 'object' ? unreadCounts : {};
+      const pills = bar.querySelectorAll('.mf-folder-pill');
+
+      pills.forEach((pill) => {
+        const fId = pill.dataset.folderId;
+        if (!fId) return;
+
+        this._updatePillBadges(pill, fId, resolvedCounts, resolvedUnread);
+
+        // Aktualizacja atrybutu title pigułki
+        const nameEl = pill.querySelector('.mf-folder-name');
+        const folderName = nameEl ? (nameEl.textContent || '').trim() : '';
+        const countVal = resolvedCounts[fId] || 0;
+        const unreadVal = Number(resolvedUnread[fId]) || 0;
+        if (folderName) {
+          pill.title =
+            unreadVal > 0
+              ? `${folderName} (${countVal} rozmów, ${unreadVal} nieprzeczytanych)`
+              : `${folderName} (${countVal} rozmów)`;
+        }
+      });
+
+      return bar;
+    }
+
+    /**
      * Renderuje poziomy pasek folderów z przewijaniem i licznikami.
      *
      * @param {Array<Object>} folders - Lista folderów użytkownika
      * @param {string} activeFolderId - ID aktywnego folderu ('all' dla wszystkich)
      * @param {Object} counts - Mapa liczników lub obiekt z wątkami: { [folderId]: number }
+     * @param {Object|Function} [unreadCounts] - Mapa liczników nieprzeczytanych wiadomości lub callback onSelectFolder
      * @param {Function} [onSelectFolder] - Callback po wyborze folderu (folderId)
      * @param {Function} [onAddFolder] - Callback po kliknięciu dodawania folderu
      * @param {Function} [onEditFolder] - Callback po kliknięciu edycji folderu (folder)
@@ -47,6 +151,7 @@
       folders = [],
       activeFolderId = 'all',
       counts = {},
+      unreadCounts = {},
       onSelectFolder,
       onAddFolder,
       onEditFolder,
@@ -54,18 +159,32 @@
     ) {
       if (typeof document === 'undefined') return null;
 
+      // Polimorficzna obsługa unreadCounts dla 100% kompatybilności wstecznej
+      let resolvedUnreadCounts = {};
+      let selectHandler = onSelectFolder;
+      let addHandler = onAddFolder;
+      let settingsHandler = onOpenSettings;
+
+      if (typeof unreadCounts === 'function') {
+        settingsHandler = onEditFolder;
+        addHandler = onSelectFolder;
+        selectHandler = unreadCounts;
+        resolvedUnreadCounts = {};
+      } else if (unreadCounts && typeof unreadCounts === 'object') {
+        resolvedUnreadCounts = unreadCounts;
+      }
+
       // Obsługa domyślnych callbacków przy integracji ze storage
-      const selectHandler =
-        onSelectFolder ||
-        (async (folderId) => {
+      if (!selectHandler) {
+        selectHandler = async (folderId) => {
           if (this.ui && this.ui.storage) {
             await this.ui.storage.setActiveFolder(folderId);
           }
-        });
+        };
+      }
 
-      const addHandler =
-        onAddFolder ||
-        (() => {
+      if (!addHandler) {
+        addHandler = () => {
           if (this.ui && typeof this.ui.showFolderModal === 'function') {
             this.ui.showFolderModal({
               onSave: async (newFolder) => {
@@ -75,15 +194,16 @@
               }
             });
           }
-        });
+        };
+      }
 
-      const settingsHandler =
-        onOpenSettings ||
-        (() => {
+      if (!settingsHandler) {
+        settingsHandler = () => {
           if (this.ui && typeof this.ui.showSettingsModal === 'function') {
             this.ui.showSettingsModal();
           }
-        });
+        };
+      }
 
       // Jeśli w parametrze `counts` przekazano obiekt mapy wątków z folderId (np. allThreads)
       let resolvedCounts = {};
@@ -158,24 +278,14 @@
                 pill.style.setProperty('--mf-folder-color', folderObj.color);
               }
               const countVal = resolvedCounts[fId] || 0;
-              pill.title = `${folderObj.name} (${countVal} rozmów)`;
+              const unreadVal = Number(resolvedUnreadCounts[fId]) || 0;
+              pill.title =
+                unreadVal > 0
+                  ? `${folderObj.name} (${countVal} rozmów, ${unreadVal} nieprzeczytanych)`
+                  : `${folderObj.name} (${countVal} rozmów)`;
             }
 
-            const count = resolvedCounts[fId] || 0;
-            let countEl = pill.querySelector('.mf-folder-count');
-            if (count > 0 || isActive) {
-              if (!countEl) {
-                countEl = document.createElement('span');
-                countEl.className = 'mf-folder-count';
-                pill.appendChild(countEl);
-              }
-              const countText = count > 99 ? '99+' : String(count);
-              if (countEl.textContent !== countText) {
-                countEl.textContent = countText;
-              }
-            } else if (countEl) {
-              countEl.remove();
-            }
+            this._updatePillBadges(pill, fId, resolvedCounts, resolvedUnreadCounts);
           });
 
           // Zsynchronizuj widoczność pigułek z wpisaną frazą wyszukiwania
@@ -353,7 +463,11 @@
         pill.setAttribute('data-mf-pill', 'true');
         pill.setAttribute('role', 'tab');
         pill.setAttribute('aria-selected', isActive ? 'true' : 'false');
-        pill.title = `${folder.name} (${count} rozmów)`;
+        const unreadVal = Number(resolvedUnreadCounts[folder.id]) || 0;
+        pill.title =
+          unreadVal > 0
+            ? `${folder.name} (${count} rozmów, ${unreadVal} nieprzeczytanych)`
+            : `${folder.name} (${count} rozmów)`;
 
         // Stała szerokość pigułki w pasku
         pill.style.width = '110px';
@@ -377,13 +491,8 @@
         nameEl.textContent = folder.name;
         pill.appendChild(nameEl);
 
-        // Licznik czatów
-        if (count > 0 || isActive) {
-          const countEl = document.createElement('span');
-          countEl.className = 'mf-folder-count';
-          countEl.textContent = count > 99 ? '99+' : count;
-          pill.appendChild(countEl);
-        }
+        // Aktualizacja/dodanie odznak (.mf-folder-unread-badge i .mf-folder-count)
+        this._updatePillBadges(pill, folder.id, resolvedCounts, resolvedUnreadCounts);
 
         // Wybór folderu z natychmiastową reakcją wizualną i filtrowaniem
         pill.addEventListener('click', () => {
