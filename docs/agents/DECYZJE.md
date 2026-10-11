@@ -59,3 +59,15 @@ i `"swarmboard_version": "0.3.0"`.
 **Powód:** ujednolicenie silnika tablicy z ekosystemem swarmboard (obsługa roju, niezależny reviewer,
 wielojęzyczność, lepsza diagnostyka przez `sb doctor`).
 
+
+## D-008 · 2026-10-11 · przyjęta — Koniec trybu zespołowego Antigravity, tablica jako jedyne źródło stanu
+
+**Decyzja:** praca toczy się wyłącznie na kartach `kanban/tasks/` (swarmboard). Nie używamy trybu
+zespołowego Antigravity (`/teamwork-preview`: sentinel, orkiestrator, roje subagentów, crony).
+Jedna karta = jeden wykonawca + jeden niezależny przegląd; zasady oszczędzania limitu w
+`docs/agents/WORKFLOW.md`. Stan zespołu (`.agents/teamwork/`) zarchiwizowano poza repo.
+**Powód:** tryb zespołowy wyczerpał tygodniowy limit subskrypcji; około 3/4 tokenów poszło na
+koordynację i weryfikację. Stan pracy był w dwóch miejscach (tablica i `.agents/`), karty zmieniano
+ręcznie, a Gemini przyjmował pracę Gemini (audyt swarmboard 2026-10-11).
+**Alternatywy:** „Lean Swarm” Antigravity (1–2 subagentów) — nadal koordynacja i crony poza tablicą;
+rój swarmboard (`sb swarm`) — możliwy później, decyzja właściciela.

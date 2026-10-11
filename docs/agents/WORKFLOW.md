@@ -13,7 +13,7 @@ leży w `kanban/config.json`, a bramki egzekwuje `scripts/kanban/kanban.py`.
 | `ready` | spełnia DoR, można brać | planista (zwykle `claude` lub człowiek) | **DoR** |
 | `in-progress` | ktoś pracuje | wykonawca | DoR + limit WIP (3 łącznie, 1 na model) |
 | `review` | czeka na przegląd | wykonawca | wszystkie kryteria odhaczone, Dowód wypełniony, limit 4 |
-| `done` | scalone do gałęzi | **reviewer ≠ wykonawca** | **DoD** + `npm test` + `npm run check` |
+| `done` | przejrzane i przyjęte | **reviewer ≠ faktyczny wykonawca** | **DoD** + bramka `npm run verify` |
 
 Ruch w lewo (np. `review → in-progress` po uwagach) jest zawsze dozwolony.
 
@@ -27,7 +27,7 @@ Karta może trafić do `ready`, gdy (sprawdza skrypt):
 - [ ] **Pliki**: istniejące ścieżki (nowe oznaczone `(nowy)`) — to zarazem granica zakresu
 - [ ] **Kryteria akceptacji**: co najmniej jedno `- [ ]`, sprawdzalne
 - [ ] **Weryfikacja**: komendy lub kroki ręczne
-- [ ] wszystkie `depends` są `done`
+- [ ] wszystkie `depends` są co najmniej `ready` (kolejność wykonania pilnuje bramka `in-progress`)
 
 Dodatkowe DoR zależne od modelu: patrz `docs/agents/models/*.md`.
 
@@ -54,9 +54,26 @@ Rotacja reviewera: `deepseek` → przegląda `claude`; `claude` → przegląda `
 
 ## Cykl pracy wykonawcy (do wklejenia jako prompt startowy)
 
-> Przeczytaj `AGENTS.md`. Uruchom `python3 scripts/kanban/kanban.py next <model>`, przeczytaj wskazaną kartę,
-> przenieś ją do `in-progress`, utwórz gałąź `mf-XXX-opis`. Zmieniaj tylko pliki z sekcji Pliki.
-> Gdy kryteria są spełnione, wypełnij Dowód i przenieś kartę do `review`. Nie przenoś do `done`.
+> Przeczytaj `AGENTS.md`. Uruchom `python3 scripts/kanban/kanban.py next <model> --start` (gałąź karty
+> + `in-progress`). Zmieniaj tylko pliki z sekcji Pliki. Gdy kryteria są spełnione, wklej do Dowodu
+> realne wyjście `npm run verify` z kodem wyjścia, zacommituj i uruchom
+> `python3 scripts/kanban/kanban.py submit <ID>`. Nie przenoś karty do `done`.
+
+## Oszczędzanie limitu subskrypcji
+
+Agenci pracują na subskrypcjach z tygodniowym oknem kwoty. W trybie zespołowym Antigravity
+(`/teamwork-preview`, 2026-10-10…11) około 3/4 tokenów poszło na koordynację i weryfikację, a nie na
+kod. Dlatego:
+
+1. **Jedna karta = jeden wykonawca + jeden niezależny przegląd.** Bez orkiestratorów, sentineli,
+   challengerów i audytorów. Przegląd robi jeden inny model (`/code-review` albo druga sesja).
+2. **Bez cronów, heartbeatów i pętli „liveness”.** Agent pracuje, gdy człowiek albo rój go uruchomi.
+3. **Wyczerpana kwota = stop.** Wpis w Logu karty (`kwota wyczerpana, odnowienie <czas z komunikatu>`),
+   karta zostaje w obecnej kolumnie, koniec sesji. Bez ponawiania co kilka minut.
+4. **Nowa sesja agenta na każdą kartę.** Kontekst = `AGENTS.md` + karta; nie ciągnij historii
+   poprzednich kart.
+5. **Eksploracja tylko dla kart `L`.** Karty `S`/`M` mają w Kontekście `plik:linia` — wykonawca
+   czyta wskazane miejsca, a nie całe repo. Brakuje kontekstu → pytanie w Logu, nie eksploracja.
 
 ## Rejestr decyzji
 
