@@ -91,16 +91,63 @@ def commit_card(board: Any, card: Any, message: str) -> str | None:
     return None if res.returncode == 0 else (res.stderr or res.stdout).strip()
 
 
+def status_on_branch(board: Any, card: Any) -> str | None:
+    """
+    Status karty na jej niescalonej gałęzi (`<id>-<tytuł>`); None, gdy gałęzi nie ma albo jest już
+    scalona do gałęzi głównej (np. karta ponownie otwarta po `done`).
+    """
+    branch = card_branch(card)
+    main = main_branch(board)
+    if not branch_exists(board.root, branch) or not main:
+        return None
+    if git_run(board.root, "merge-base", "--is-ancestor", branch, main).returncode == 0:
+        return None
+    rel = card.path.relative_to(board.root).as_posix()
+    res = git_run(board.root, "show", f"refs/heads/{branch}:./{rel}")  # ./ — tablica w podkatalogu
+    if res.returncode != 0:
+        return None
+    match = re.search(r"^status:\s*(\S+)", res.stdout, re.M)
+    return match.group(1) if match else None
+
+
 def pick_startable(board: Any, model: str, cards: list[Any]) -> tuple[Any, list[str]]:
     """Pierwsza karta `ready` modelu (wg priorytetu), która przechodzi bramkę in-progress."""
     first: tuple[Any, list[str]] = (None, [])
     for card in board.ready_cards(model, cards):
         errors = board.gate_errors(card, "in-progress", cards)
+        # Gałąź karty bywa przed gałęzią główną (np. `review` czeka na scalenie) — SB-057
+        on_branch = None if errors else status_on_branch(board, card)
+        if on_branch in ("review", "done"):
+            errors = [tr("kanban.start.branch_ahead", branch=card_branch(card), status=on_branch)]
         if not errors:
             return card, []
         if first[0] is None:
             first = (card, errors)
     return first
+
+
+def watcher_running_here(board: Any) -> bool:
+    """
+    Watcher roju działa na tym repo, a tablica leży w jego głównym drzewie (SB-033) — ręczne
+    `start`/`submit` przełączałyby gałąź i commitowały kartę w trakcie scalania roju.
+    """
+    try:
+        import fcntl
+    except ImportError:  # bez flock (Windows) — bez tej kontroli
+        return False
+    dirs = git_run(board.root, "rev-parse", "--git-dir", "--git-common-dir").stdout.splitlines()
+    if len(dirs) != 2 or Path(board.root, dirs[0]).resolve() != Path(board.root, dirs[1]).resolve():
+        return False  # osobny worktree — praca ręczna obok roju jest bezpieczna
+    lock = Path(board.root, dirs[1], "swarm", "watcher.lock")
+    if not lock.exists():
+        return False
+    with open(lock) as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except OSError:
+            return True
+        fcntl.flock(handle, fcntl.LOCK_UN)
+    return False
 
 
 def start(board: Any, model: str) -> dict[str, Any]:
@@ -117,6 +164,8 @@ def start(board: Any, model: str) -> dict[str, Any]:
     main = main_branch(board)
     if main is None:
         return {**result, "errors": [tr("kanban.start.no_main_branch")]}
+    if watcher_running_here(board):
+        return {**result, "errors": [tr("kanban.start.watcher_running")]}
     if git_run(board.root, "status", "--porcelain", "--untracked-files=no").stdout.strip():
         return {**result, "errors": [tr("kanban.start.dirty")]}
     branch = card_branch(card)
@@ -129,6 +178,8 @@ def start(board: Any, model: str) -> dict[str, Any]:
         return {**result, "branch": branch, "base": base, "errors": [error]}
     card = board.card(card.id)  # treść karty z gałęzi, na którą przełączono
     card.meta["branch"] = branch
+    card.meta["executor"] = model  # faktyczny wykonawca — bramka done porównuje z reviewerem
+    card.meta["base"] = base  # baza gałęzi — zakres plików przy submit liczony od niej
     note = "kanban.log.resumed" if resumed else "kanban.log.started"
     card.move("in-progress", tr(note, branch=branch, base=base))
     card.save()
@@ -153,12 +204,48 @@ def submit(board: Any, card_id: str) -> list[str]:
     current = git_run(board.root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
     if branch and current != branch:
         return [tr("kanban.submit.wrong_branch", branch=branch, current=current)]
+    main = main_branch(board)
+    if not branch and current == main:  # karta bez gałęzi (np. ręczny status) — SB-039
+        return [tr("kanban.submit.on_main", branch=main)]
     if git_run(board.root, "status", "--porcelain").stdout.strip():
         return [tr("kanban.submit.uncommitted")]
+    if watcher_running_here(board):
+        return [tr("kanban.start.watcher_running")]
+    outside = files_outside_scope(board, card, scope_base(board, card, main))
+    if outside and board.config.get("scope") == "strict":
+        return [tr("kanban.submit.scope_outside", files=", ".join(outside))]
     errors = board.review_errors(card, cards) or board.run_gate(tail_lines=20)
     if errors:
         return errors
+    if outside:  # tryb domyślny: ostrzeżenie w Logu karty (SB-040)
+        card.append_log(tr("kanban.log.scope_outside", files=", ".join(outside)))
     card.move("review", tr("kanban.log.submitted"))
     card.save()
     failed = commit_card(board, card, f"chore(kanban): {card.id} → review")
     return [tr("kanban.start.commit_failed", error=failed)] if failed else []
+
+
+def scope_base(board: Any, card: Any, main: str | None) -> str | None:
+    """Baza gałęzi karty (`base:` z startu, np. gałąź niescalonej zależności), inaczej główna."""
+    base = card.meta.get("base")
+    if base and git_run(board.root, "rev-parse", "--verify", "-q", base).returncode == 0:
+        return base
+    return main
+
+
+def files_outside_scope(board: Any, card: Any, base: str | None) -> list[str]:
+    """
+    Pliki zmienione na gałęzi karty (od rozwidlenia z bazą) spoza sekcji Files — poza plikiem
+    samej karty; wpis zakończony `/` obejmuje katalog (SB-040). Ścieżki względem tablicy.
+    """
+    if not base:
+        return []
+    res = git_run(board.root, "diff", "--name-only", "--relative", f"{base}...HEAD")
+    if res.returncode != 0:
+        return []
+    allowed = {path for path, _ in board.section_paths(card.section("Files"), any_name=True)}
+    allowed.add(card.path.relative_to(board.root).as_posix())
+    folders = tuple(a if a.endswith("/") else a + "/" for a in allowed)
+    return [
+        f for f in res.stdout.split("\n") if f and f not in allowed and not f.startswith(folders)
+    ]
