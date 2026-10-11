@@ -414,6 +414,74 @@ async function runStorageTests() {
 console.log('\n--- Test 3: MessengerDOMDetector ---');
 const MessengerDOMDetector = require('../src/detector.js');
 
+/**
+ * Sprawdza prosty selektor złożony (tag, .klasy, atrybuty z operatorami =, *= i flagą i) na elemencie mocka.
+ * @param {object} element Element mocka.
+ * @param {string} compound Selektor bez przecinków i kombinatorów.
+ * @returns {boolean} Czy element pasuje.
+ */
+function mockMatchesCompound(element, compound) {
+  const tagMatch = compound.match(/^[a-z]+/i);
+  if (tagMatch && tagMatch[0].toUpperCase() !== element.tagName) return false;
+  const classes = (element.attrs.class || '').split(/\s+/);
+  for (const [, className] of compound.replace(/\[[^\]]*\]/g, '').matchAll(/\.([\w-]+)/g)) {
+    if (!classes.includes(className)) return false;
+  }
+  const attrRe = /\[([\w-]+)(?:(\*?=)"([^"]*)"(?:\s+(i))?)?\]/g;
+  let m;
+  while ((m = attrRe.exec(compound))) {
+    const [, name, op, value, flag] = m;
+    if (!(name in element.attrs)) return false;
+    if (!op) continue;
+    let actual = element.attrs[name];
+    let expected = value;
+    if (flag) {
+      actual = actual.toLowerCase();
+      expected = expected.toLowerCase();
+    }
+    if (op === '=' ? actual !== expected : !actual.includes(expected)) return false;
+  }
+  return true;
+}
+
+/**
+ * Tworzy minimalny element DOM z querySelector(All), matches, closest i getAttribute.
+ * @param {string} tag Nazwa tagu.
+ * @param {Record<string, string>} attrs Atrybuty.
+ * @param {object[]} [children] Elementy potomne.
+ * @returns {object} Element mocka.
+ */
+function mockElement(tag, attrs, children = []) {
+  const element = {
+    tagName: tag.toUpperCase(),
+    attrs,
+    children,
+    parentElement: null,
+    getAttribute: (name) => (name in attrs ? attrs[name] : null),
+    matches: (selector) => selector.split(/,(?![^[]*\])/).some((part) => mockMatchesCompound(element, part.trim())),
+    closest: (selector) => {
+      for (let node = element; node; node = node.parentElement) {
+        if (node.matches(selector)) return node;
+      }
+      return null;
+    },
+    querySelectorAll: (selector) => {
+      const found = [];
+      const walk = (node) => {
+        for (const child of node.children) {
+          if (child.matches(selector)) found.push(child);
+          walk(child);
+        }
+      };
+      walk(element);
+      return found;
+    },
+    querySelector: (selector) => element.querySelectorAll(selector)[0] || null
+  };
+  children.forEach((child) => (child.parentElement = element));
+  return element;
+}
+
 function runDetectorTests() {
   const detector = new MessengerDOMDetector();
 
@@ -438,6 +506,67 @@ function runDetectorTests() {
   assert.strictEqual(detector._isTimeOrBadge('Jan Kowalski'), false);
   assert.strictEqual(detector._isTimeOrBadge('Zespół Projektowy'), false);
   console.log('✓ detector._isTimeOrBadge() poprawnie odróżnia nazwy od znaczników czasu');
+
+  // Testy isThreadUnread (MF-019) na minimalnym mocku DOM
+  const row = (...children) => mockElement('div', { role: 'row' }, children);
+  assert.strictEqual(
+    detector.isThreadUnread(
+      row(
+        mockElement('button', { 'aria-label': 'Oznacz jako nieprzeczytane' }),
+        mockElement('span', { 'aria-label': '2 nieprzeczytane wiadomości' })
+      )
+    ),
+    true,
+    'Przycisk „Oznacz jako nieprzeczytane” nie może przesłonić prawdziwej odznaki'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(
+      row(
+        mockElement('img', { class: 'chat-avatar', style: 'border: 2px solid rgb(0, 132, 255)' }),
+        mockElement('div', { style: 'background: rgb(0, 132, 255)' })
+      )
+    ),
+    true,
+    'Awatar z niebieską ramką nie może przesłonić niebieskiej kropki'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(
+      row(
+        mockElement('button', {
+          class: 'mark-as-unread-btn',
+          'data-testid': 'mark_as_unread_button',
+          'aria-label': 'Oznacz jako nieprzeczytane'
+        })
+      )
+    ),
+    false,
+    'Przycisk akcji z „unread” w klasie i data-testid nie oznacza nieprzeczytania'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(row(mockElement('button', { 'aria-label': 'Oznacz wątek jako nieprzeczytany' }))),
+    false,
+    'Etykieta „Oznacz wątek jako nieprzeczytany” to akcja, nie stan'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(
+      row(mockElement('div', { style: 'border: 2px solid #0084FF' }, [mockElement('img', { src: 'a.png' })]))
+    ),
+    false,
+    'Ramka wokół awatara nie jest kropką nieprzeczytania'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(row(mockElement('span', { 'data-testid': 'unread_badge' }))),
+    true,
+    'Atrybut data-testid odznaki oznacza nieprzeczytanie'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(row(mockElement('span', { class: 'chat-unread-badge' }))),
+    false,
+    'Sama klasa CSS nie jest podstawą detekcji'
+  );
+  assert.strictEqual(detector.isThreadUnread(row(mockElement('span', { 'data-unread': 'true' }))), true);
+  assert.strictEqual(detector.isThreadUnread(row(mockElement('span', {}))), false);
+  console.log('✓ detector.isThreadUnread() pomija akcje „Oznacz jako nieprzeczytane” i awatary, bez klas CSS');
 }
 
 (async () => {
