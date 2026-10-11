@@ -147,12 +147,12 @@ async function runStorageTests() {
   // Test assignThread()
   const assigned = await storage.assignThread('100012345', newFolder.id, {
     name: 'Jan Kowalski',
-    avatar: 'https://example.com/avatar.jpg'
+    avatar: 'https://scontent.xx.fbcdn.net/avatar.jpg'
   });
   assert.strictEqual(assigned.threadId, '100012345');
   assert.strictEqual(assigned.folderId, newFolder.id);
   assert.strictEqual(assigned.name, 'Jan Kowalski');
-  assert.strictEqual(assigned.avatar, 'https://example.com/avatar.jpg');
+  assert.strictEqual(assigned.avatar, 'https://scontent.xx.fbcdn.net/avatar.jpg');
   console.log('✓ storage.assignThread() poprawnie przypisuje wątek do folderu');
 
   // Test getThreadFolder()

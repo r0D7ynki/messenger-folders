@@ -136,7 +136,7 @@
     /**
      * Aktualizuje liczniki wątków oraz odznaki nieprzeczytanych wiadomości w istniejącym pasku folderów.
      *
-     * @param {Object} [counts] - Mapa wątków lub obiekt { [folderId]: number }
+     * @param {Object} [counts] - Mapa wątków { [threadId]: { folderId } } lub liczniki { [folderId]: number }
      * @param {Object} [unreadCounts] - Mapa nieprzeczytanych wątków: { [folderId]: number, all: number }
      * @returns {HTMLElement|null} Element paska #mf-folder-bar lub null
      */
@@ -146,16 +146,16 @@
       const bar = document.getElementById('mf-folder-bar');
       if (!bar) return null;
 
-      let resolvedCounts = {};
+      // Każdy wpis rozpoznawany osobno: liczba to licznik folderu, obiekt to rekord wątku
+      const resolvedCounts = {};
       if (counts && typeof counts === 'object') {
-        const firstVal = Object.values(counts)[0];
-        if (firstVal && typeof firstVal === 'object' && 'folderId' in firstVal) {
-          for (const thread of Object.values(counts)) {
-            const fId = thread.folderId || 'uncategorized';
+        for (const [key, value] of Object.entries(counts)) {
+          if (value && typeof value === 'object') {
+            const fId = value.folderId || 'uncategorized';
             resolvedCounts[fId] = (resolvedCounts[fId] || 0) + 1;
+          } else if (typeof value === 'number' && Number.isFinite(value)) {
+            resolvedCounts[key] = (resolvedCounts[key] || 0) + value;
           }
-        } else {
-          resolvedCounts = counts;
         }
       }
 

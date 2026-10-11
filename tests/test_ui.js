@@ -196,6 +196,13 @@ class MockElement {
     this.dispatchEvent({ type: 'click' });
   }
 
+  contains(node) {
+    for (let current = node; current; current = current.parentElement) {
+      if (current === this) return true;
+    }
+    return false;
+  }
+
   focus() {
     global.document.activeElement = this;
     this.dispatchEvent({ type: 'focus' });
@@ -712,6 +719,21 @@ assert.ok(pillBadgesBody.includes('unreadBadge.textContent = unreadText'), 'Odzn
 assert.ok(!pillBadgesBody.includes('innerHTML'), '_updatePillBadges nie używa innerHTML');
 console.log('✓ Odznaka: brak przy 0, liczba 1–99, 99+ przy 100, usunięcie po spadku do 0, treść przez textContent.');
 
+// MF-022 pkt 9: typ argumentu rozpoznawany per wpis, nie po pierwszej wartości
+unreadBarComp.updateFolderCounts({ t1: { name: 'Bez folderu' }, t2: { folderId: 'work' }, t3: { folderId: 'work' } });
+assert.strictEqual(
+  workPill().querySelector('.mf-folder-count').textContent,
+  '2',
+  'Mapa wątków liczona poprawnie, choć pierwszy rekord nie ma folderId'
+);
+unreadBarComp.updateFolderCounts({ work: 5 });
+assert.strictEqual(
+  workPill().querySelector('.mf-folder-count').textContent,
+  '5',
+  'Mapa liczników { folderId: liczba }'
+);
+console.log('✓ updateFolderCounts() rozpoznaje rekordy wątków i liczniki per wpis.');
+
 // 14. Dostępność klawiaturowa paska folderów: tablist, roving tabindex, strzałki (MF-013)
 console.log('Test 14: pasek folderów jako tablist (roving tabindex, strzałki, Home/End)...');
 
@@ -1083,6 +1105,204 @@ assert.deepStrictEqual(shortcutClicks, ['work', 'all'], 'Zablokowane skróty nie
 
 console.log('✓ Skróty: Alt+0/Alt+N, code zamiast key, odrzucanie modyfikatorów i AltGraph, strażnik pisania i modalu.');
 
-console.log('\n=============================================');
-console.log('WSZYSTKIE TESTY INTERFEJSU ZAKOŃCZONE SUKCESEM! ✓');
-console.log('=============================================');
+// 16. Znaleziska LOW przeglądu MF-017 (MF-022): awatary, ID wątków, edytor reguł
+async function runLowFindingsTests() {
+  console.log('Test 16: awatary spoza dozwolonych hostów, ID __proto__, edytor reguł (MF-022)...');
+  // Ten plik nie deklaruje `chrome` — storage.js i rules.js nie mogą rzucać ReferenceError (pkt 3)
+  assert.strictEqual(typeof chrome, 'undefined', 'Testy UI działają bez globalnego chrome');
+  const { MessengerFoldersStorage, sanitizeAvatarUrl } = require('../src/storage.js');
+  const { MessengerRulesEngine } = require('../src/rules.js');
+
+  // Pamięć w RAM z synchronicznymi wywołaniami zwrotnymi (jak chrome.storage.local, bez chrome)
+  const memoryArea = (initial = {}) => ({
+    store: JSON.parse(JSON.stringify(initial)),
+    get(keys, cb) {
+      const out = {};
+      for (const k of Array.isArray(keys) ? keys : [keys]) {
+        if (this.store[k] !== undefined) out[k] = JSON.parse(JSON.stringify(this.store[k]));
+      }
+      cb(out);
+    },
+    set(items, cb) {
+      Object.assign(this.store, JSON.parse(JSON.stringify(items)));
+      if (cb) cb();
+    }
+  });
+
+  // a) sanitizeAvatarUrl — pkt 10
+  const goodAvatar = 'https://scontent.xx.fbcdn.net/v/t1.0/p100x100/a.jpg?oh=1';
+  assert.strictEqual(sanitizeAvatarUrl(goodAvatar), goodAvatar, 'CDN Facebooka (fbcdn.net) dozwolony');
+  assert.strictEqual(sanitizeAvatarUrl('https://lookaside.fbsbx.com/x.png'), 'https://lookaside.fbsbx.com/x.png');
+  assert.strictEqual(sanitizeAvatarUrl('data:image/png;base64,iVBORw0KGgo='), 'data:image/png;base64,iVBORw0KGgo=');
+  for (const bad of [
+    'https://evil.example/track.png',
+    'https://fbcdn.net.evil.example/a.jpg',
+    'https://evilfbcdn.net/a.jpg',
+    'http://scontent.xx.fbcdn.net/a.jpg',
+    'https://user:pw@scontent.xx.fbcdn.net/a.jpg',
+    'https://scontent.xx.fbcdn.net:8443/a.jpg',
+    'javascript:alert(1)',
+    'data:image/svg+xml;base64,PHN2Zz4=',
+    '//scontent.xx.fbcdn.net/a.jpg',
+    { href: goodAvatar },
+    null
+  ]) {
+    assert.strictEqual(sanitizeAvatarUrl(bad), '', `Odrzucony awatar: ${JSON.stringify(bad)}`);
+  }
+
+  // b) Import JSON: złe awatary czyszczone, wątek "__proto__" pominięty — pkt 10 i 12
+  const importStorage = new MessengerFoldersStorage(memoryArea());
+  await importStorage.init();
+  await importStorage.importData(
+    '{"folders":[{"id":"work","name":"Praca"}],"threads":{' +
+      '"111":{"folderId":"work","avatar":"https://evil.example/a.png"},' +
+      '"222":{"folderId":"work","avatar":"' +
+      goodAvatar +
+      '"},' +
+      '"__proto__":{"folderId":"work","polluted":true}}}'
+  );
+  const importedThreads = importStorage.getAllThreadsSync();
+  assert.strictEqual(importedThreads['111'].avatar, '', 'Awatar z obcego hosta wyczyszczony przy imporcie');
+  assert.strictEqual(importedThreads['222'].avatar, goodAvatar, 'Awatar z CDN zachowany przy imporcie');
+  assert.strictEqual(
+    Object.getPrototypeOf(importStorage._threads),
+    Object.prototype,
+    'Prototyp mapy wątków nietknięty'
+  );
+  assert.strictEqual(importStorage._threads.polluted, undefined, 'Brak właściwości z wątku "__proto__"');
+  assert.deepStrictEqual(Object.keys(importedThreads).sort(), ['111', '222'], 'Wątek "__proto__" pominięty');
+
+  // c) Zapis i wczytanie: assignThread / applyAutoAssignments / init — pkt 10 i 12
+  await assert.rejects(importStorage.assignThread('__proto__', 'work'), /Identyfikator wątku/, '__proto__ odrzucony');
+  const autoApplied = await importStorage.applyAutoAssignments([
+    { threadId: '__proto__', folderId: 'work', expectedFolderId: null },
+    { threadId: '333', folderId: 'work', expectedFolderId: null, metadata: { avatar: 'https://evil.example/b.png' } }
+  ]);
+  assert.deepStrictEqual(autoApplied, ['333'], 'Automatyczne przypisanie pomija __proto__');
+  assert.strictEqual(importStorage.getAllThreadsSync()['333'].avatar, '', 'Awatar z reguł też walidowany');
+  const assigned = await importStorage.assignThread('444', 'work', { avatar: 'https://evil.example/c.png' });
+  assert.strictEqual(assigned.avatar, '', 'assignThread() nie zapisuje awatara z obcego hosta');
+  const legacyStorage = new MessengerFoldersStorage(
+    memoryArea({ mf_threads: { 555: { folderId: 'work', avatar: 'https://evil.example/d.png' } } })
+  );
+  await legacyStorage.init();
+  assert.strictEqual(legacyStorage.getAllThreadsSync()['555'].avatar, '', 'Stare dane czyszczone przy init()');
+
+  // d) Zakładka Rozmowy: img.src tylko z dozwolonych hostów — pkt 10 (kryterium akceptacji)
+  const folders = [
+    { id: 'all', name: 'Wszystkie', icon: '💬' },
+    { id: 'work', name: 'Praca', icon: '💼' },
+    { id: 'friends', name: 'Znajomi', icon: '👥' },
+    { id: 'uncategorized', name: 'Inne', icon: '📁' }
+  ];
+  const toasts = [];
+  const rulesArea = memoryArea({
+    mf_rules: [
+      {
+        id: 'r_old',
+        name: 'Stary RegEx',
+        folderId: 'work',
+        priority: '7',
+        conditions: [{ field: 'name', operator: 'regex', value: '(foo|bar)+' }]
+      },
+      { id: 'r_gone', name: 'Usunięty folder', folderId: 'deleted', conditions: [{ value: 'x' }] }
+    ]
+  });
+  const fakeUi = {
+    activeModal: null,
+    storage: {
+      getFoldersSync: () => folders.map((f) => ({ ...f })),
+      _threads: {
+        t1: { name: 'Projekt Alfa', folderId: 'friends', avatar: 'https://evil.example/track.png' },
+        t2: { name: 'Projekt Beta', folderId: 'uncategorized', avatar: goodAvatar },
+        t3: { name: 'Inna', avatar: 'javascript:alert(1)' }
+      }
+    },
+    detector: { scanChatList: () => [] },
+    rulesEngine: new MessengerRulesEngine({ storageArea: rulesArea }),
+    showToast: (msg) => toasts.push(msg),
+    onRulesChanged: async () => {}
+  };
+  const modalComp = new SettingsModalComp(fakeUi);
+  modalComp.show({ defaultTab: 'threads' });
+  const avatarSrcs = fakeUi.activeModal.querySelectorAll('img').map((img) => img.src);
+  assert.deepStrictEqual(avatarSrcs, [goodAvatar], 'Do img.src trafia tylko awatar z CDN Messengera');
+  assert.strictEqual(
+    fakeUi.activeModal.querySelectorAll('.mf-settings-thread-avatar-placeholder').length,
+    2,
+    'Odrzucone awatary zastąpione zaślepką'
+  );
+  modalComp.close();
+
+  // e) Zakładka Reguły: powód nieaktywności — pkt 13 (RegEx sprzed budżetu) i pkt 5 (brak folderu)
+  modalComp.show({ defaultTab: 'rules' });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const ruleItems = fakeUi.activeModal.querySelectorAll('.mf-settings-rule-item');
+  assert.strictEqual(ruleItems.length, 2, 'Lista pokazuje obie reguły');
+  const problemOf = (item) => item.querySelector('.mf-rule-problem');
+  assert.ok(problemOf(ruleItems[0]).textContent.startsWith('Nieaktywna: Wyrażenie „(foo|bar)+”'), 'RegEx ma powód');
+  assert.ok(ruleItems[0].classList.contains('mf-rule-inactive'), 'Reguła oznaczona jako nieaktywna');
+  assert.ok(problemOf(ruleItems[1]).textContent.includes('Folder docelowy nie istnieje'), 'Brak folderu ma powód');
+
+  // f) Edytor: priorytet przez normalizePriority, bez „Inne”, zaślepka usuniętego folderu — pkt 4 i 5
+  const editBtnOf = (item) => item.querySelectorAll('button').find((b) => b.title === 'Edytuj regułę');
+  editBtnOf(ruleItems[0]).onclick();
+  assert.strictEqual(global.document.getElementById('mf-rule-priority-input').value, '7', 'Priorytet "7" → 7');
+  let optionValues = global.document.getElementById('mf-rule-folder-select').children.map((o) => o.value);
+  assert.deepStrictEqual(optionValues, ['work', 'friends'], 'Bez "Wszystkie" i "Inne" na liście folderów');
+  global.document
+    .getElementById('mf-rule-folder-select')
+    .parentElement.parentElement.parentElement.parentElement.remove();
+
+  editBtnOf(ruleItems[1]).onclick();
+  const missingSelect = global.document.getElementById('mf-rule-folder-select');
+  optionValues = missingSelect.children.map((o) => o.value);
+  assert.deepStrictEqual(optionValues, ['', 'work', 'friends'], 'Usunięty folder: pusta opcja na początku');
+  assert.strictEqual(missingSelect.children[0].selected, true, 'Pusta opcja wybrana — brak cichej podmiany');
+  missingSelect.parentElement.parentElement.parentElement.parentElement.remove();
+
+  // g) Podgląd liczby dopasowań uwzględnia overwriteManual — pkt 7
+  fakeUi.activeModal.querySelector('#mf-rules-add-btn').onclick();
+  const editor = global.document.getElementById('mf-rule-folder-select').parentElement.parentElement.parentElement;
+  const valInput = editor.querySelector('.mf-rule-condition-val');
+  valInput.value = 'Projekt';
+  valInput.oninput();
+  const preview = editor.querySelector('.mf-rule-dry-run-preview');
+  assert.strictEqual(preview.textContent, 'Liczba pasujących czatów: 1', 'Ręczne przypisanie (t1) chronione');
+  const owCheckbox = global.document.getElementById('mf-rule-overwrite-manual');
+  owCheckbox.checked = true;
+  owCheckbox.onchange();
+  assert.strictEqual(preview.textContent, 'Liczba pasujących czatów: 2', 'Z overwriteManual liczy też t1');
+
+  // h) Zapis: priorytet przycięty do 0–100, wyjątek po zapisie nie ucieka z onclick — pkt 4 i 6
+  global.document.getElementById('mf-rule-name-input').value = 'Projekty';
+  global.document.getElementById('mf-rule-folder-select').value = 'work';
+  global.document.getElementById('mf-rule-priority-input').value = '250';
+  fakeUi.onRulesChanged = async () => {
+    throw new Error('awaria odświeżania');
+  };
+  const saveBtn = editor.querySelectorAll('button').find((b) => b.textContent === 'Zapisz regułę');
+  await saveBtn.onclick();
+  assert.ok(
+    toasts.some((t) => t === 'Błąd podczas zapisywania reguły: awaria odświeżania'),
+    'Błąd zapisu pokazany w komunikacie zamiast nieobsłużonego odrzucenia'
+  );
+  const savedRule = (await fakeUi.rulesEngine.getRules()).find((r) => r.name === 'Projekty');
+  assert.strictEqual(savedRule.priority, 100, 'Priorytet 250 zapisany jako 100');
+  modalComp.close();
+
+  console.log(
+    '✓ Awatary tylko z CDN/data:image, __proto__ odrzucony, edytor reguł: priorytet, foldery, podgląd, błędy.'
+  );
+}
+
+runLowFindingsTests()
+  .then(() => {
+    console.log('\n=============================================');
+    console.log('WSZYSTKIE TESTY INTERFEJSU ZAKOŃCZONE SUKCESEM! ✓');
+    console.log('=============================================');
+  })
+  .catch((err) => {
+    console.error('BŁĄD PODCZAS WYKONYWANIA TESTÓW INTERFEJSU:', err);
+    process.exit(1);
+  });

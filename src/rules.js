@@ -27,6 +27,18 @@
   // Pamięć podręczna analiz wzorców (matchCondition wołane jest dla każdego wątku przy każdym skanie)
   const MAX_REGEX_ANALYSIS_CACHE = 200;
   const regexAnalysisCache = new Map();
+  // Zakres priorytetu reguły (pole „Priorytet” w edytorze)
+  const MIN_PRIORITY = 0;
+  const MAX_PRIORITY = 100;
+
+  /**
+   * Zwraca chrome.runtime.lastError albo null — także gdy `chrome` nie jest zadeklarowane
+   * (`chrome?.runtime` rzuca wtedy ReferenceError).
+   * @returns {Object|null}
+   */
+  function getRuntimeLastError() {
+    return typeof chrome !== 'undefined' && chrome && chrome.runtime ? chrome.runtime.lastError || null : null;
+  }
 
   /**
    * Odczytuje kwantyfikator zaczynający się na pozycji `index` (`*`, `+`, `?`, `{n}`, `{n,}`, `{n,m}`).
@@ -309,6 +321,26 @@
   }
 
   /**
+   * Parsuje priorytet (parsePriority) i ogranicza go do zakresu 0–100 z edytora reguł.
+   * @param {*} rawPriority
+   * @param {number} [defaultPriority=10]
+   * @returns {number}
+   */
+  function normalizePriority(rawPriority, defaultPriority = 10) {
+    return Math.min(MAX_PRIORITY, Math.max(MIN_PRIORITY, parsePriority(rawPriority, defaultPriority)));
+  }
+
+  /**
+   * Zwraca znacznik czasu (liczba > 0) albo null — `null`, `''` i `false` nie są zamieniane na 0.
+   * @param {*} value
+   * @returns {number|null}
+   */
+  function parseTimestamp(value) {
+    const num = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN;
+    return Number.isFinite(num) && num > 0 ? num : null;
+  }
+
+  /**
    * Normalizuje i waliduje pojedynczy obiekt reguły.
    * @param {Object} rule
    * @param {number} [index=0]
@@ -326,15 +358,15 @@
       typeof rule.name === 'string' && rule.name.trim() ? rule.name.trim().slice(0, 50) : `Reguła ${index + 1}`;
 
     const enabled = rule.enabled !== false;
-    const priority = parsePriority(rule ? rule.priority : undefined, 10);
+    const priority = normalizePriority(rule.priority, 10);
     const folderId = typeof rule.folderId === 'string' ? rule.folderId.trim() : '';
     const matchMode = rule.matchMode === 'any' ? 'any' : 'all';
 
     const conditions = Array.isArray(rule.conditions) ? rule.conditions.map(normalizeCondition).filter(Boolean) : [];
 
     const overwriteManual = Boolean(rule.overwriteManual);
-    const createdAt = Number.isFinite(Number(rule.createdAt)) ? Number(rule.createdAt) : Date.now();
-    const updatedAt = Number.isFinite(Number(rule.updatedAt)) ? Number(rule.updatedAt) : Date.now();
+    const createdAt = parseTimestamp(rule.createdAt) || Date.now();
+    const updatedAt = parseTimestamp(rule.updatedAt) || createdAt;
 
     return {
       id,
@@ -348,6 +380,31 @@
       createdAt,
       updatedAt
     };
+  }
+
+  /**
+   * Opisuje, dlaczego włączona reguła nie jest wykonywana: wzorzec RegEx odrzucony przez
+   * validateRegexPattern (np. reguła zapisana przed wprowadzeniem budżetu nawrotów) albo folder
+   * docelowy, którego nie ma na liście `folders`.
+   * @param {Object} rule Reguła.
+   * @param {Array<Object|string>} [folders] Istniejące foldery (bez listy — folder nie jest sprawdzany).
+   * @returns {string|null} Powód po polsku albo null, gdy reguła może działać.
+   */
+  function describeRuleProblem(rule, folders = null) {
+    if (!rule || typeof rule !== 'object') return null;
+    for (const cond of Array.isArray(rule.conditions) ? rule.conditions : []) {
+      if (cond && cond.operator === 'regex') {
+        const regexError = validateRegexPattern(cond.value);
+        if (regexError) return `Wyrażenie „${String(cond.value ?? '')}” nie jest wykonywane: ${regexError}`;
+      }
+    }
+    if (Array.isArray(folders)) {
+      const folderIds = folders.map((f) => (typeof f === 'string' ? f : f?.id));
+      if (!rule.folderId || rule.folderId === 'all' || !folderIds.includes(rule.folderId)) {
+        return 'Folder docelowy nie istnieje — wybierz inny folder.';
+      }
+    }
+    return null;
   }
 
   class MessengerRulesEngine {
@@ -375,7 +432,7 @@
         return new Promise((resolve) => {
           try {
             this._storageArea.get(STORAGE_KEYS.RULES, (items) => {
-              if (chrome?.runtime?.lastError) {
+              if (getRuntimeLastError()) {
                 resolve(this._cachedRules.map((r) => ({ ...r })));
               } else {
                 const raw = items && items[STORAGE_KEYS.RULES];
@@ -410,8 +467,9 @@
         await new Promise((resolve, reject) => {
           try {
             this._storageArea.set({ [STORAGE_KEYS.RULES]: normalized }, () => {
-              if (chrome?.runtime?.lastError) {
-                reject(new Error(chrome.runtime.lastError.message));
+              const lastError = getRuntimeLastError();
+              if (lastError) {
+                reject(new Error(lastError.message));
               } else {
                 resolve();
               }
@@ -437,15 +495,21 @@
       if (!normalized) throw new Error('Nieprawidłowy obiekt reguły.');
       assertSafeRegexConditions([normalized]);
 
+      // Edycja zachowuje datę utworzenia zapisanej reguły; każdy zapis dostaje nowy updatedAt
       const existingIndex = current.findIndex((r) => r.id === normalized.id);
+      const saved = {
+        ...normalized,
+        createdAt: existingIndex >= 0 ? current[existingIndex].createdAt : normalized.createdAt,
+        updatedAt: Date.now()
+      };
       if (existingIndex >= 0) {
-        current[existingIndex] = { ...normalized, updatedAt: Date.now() };
+        current[existingIndex] = saved;
       } else {
-        current.push(normalized);
+        current.push(saved);
       }
 
       await this.saveRules(current);
-      return normalized;
+      return { ...saved };
     }
 
     /**
@@ -672,7 +736,10 @@
 
   MessengerRulesEngine.parsePriority = parsePriority;
   MessengerRulesEngine.validateRegexPattern = validateRegexPattern;
-  MessengerRulesEngine.normalizePriority = parsePriority;
+  MessengerRulesEngine.normalizePriority = normalizePriority;
+  MessengerRulesEngine.describeRuleProblem = describeRuleProblem;
+  MessengerRulesEngine.MIN_PRIORITY = MIN_PRIORITY;
+  MessengerRulesEngine.MAX_PRIORITY = MAX_PRIORITY;
 
   // Udostępnienie w zasięgu globalnym oraz jako moduł CommonJS
   if (typeof global !== 'undefined') {
@@ -687,7 +754,9 @@
       MessengerRulesEngine,
       STORAGE_KEYS,
       parsePriority,
-      validateRegexPattern
+      normalizePriority,
+      validateRegexPattern,
+      describeRuleProblem
     };
     module.exports.default = MessengerRulesEngine;
   }

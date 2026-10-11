@@ -146,6 +146,17 @@ const STORAGE_KEYS = {
    Pole `autoAssigned` ma wartość `true`, gdy przypisanie wykonała reguła
    (metoda `applyAutoAssignments`, opis w sekcji o silniku reguł).
 
+   Pole `avatar` przechodzi przez `sanitizeAvatarUrl()` przy wczytaniu (`init`, `onChanged`),
+   imporcie JSON i każdym zapisie. Zostaje tylko adres `https://` z hostów CDN Messengera
+   i Facebooka (`*.fbcdn.net`, `*.fbsbx.com`, bez portu i danych logowania) albo
+   `data:image/png|jpeg|gif|webp;base64,…`. Inny adres zamienia się na pusty tekst, bo
+   `img.src` wysłałby żądanie do dowolnego hosta. Okno ustawień sprawdza awatar jeszcze raz
+   przed wstawieniem do `img.src`.
+
+   Identyfikator wątku (`isSafeThreadId`) to niepusty tekst do 256 znaków inny niż `__proto__`,
+   `constructor` i `prototype`. Nie musi składać się z cyfr — Facebook używa też adresów
+   `/messages/t/<nazwa.użytkownika>`. Import pomija wątki z niepoprawnym identyfikatorem.
+
 Reguły automatycznego przypisywania leżą pod osobnym kluczem `mf_rules`, którym zarządza
 [src/rules.js](../src/rules.js). Eksport i import JSON obejmują tylko foldery i przypisania — bez reguł.
 
@@ -216,8 +227,12 @@ Każdy odczyt i zapis przechodzi przez normalizację (`normalizeRule`, `normaliz
 - `field`: `name` albo `threadId`; starszy alias `threadName` zamienia się na `name`.
 - `operator`: `contains`, `startsWith`, `endsWith`, `exact` (alias `equals`) lub `regex`;
   nieznany operator zamienia się na `contains`.
-- `priority`: liczba albo niepusty tekst liczbowy (`parsePriority`), w innym razie `10`.
-  Edytor proponuje zakres 0–100. Niższa wartość oznacza wyższy priorytet.
+- `priority`: liczba albo niepusty tekst liczbowy (`parsePriority`), w innym razie `10`,
+  przycięta do zakresu 0–100 (`normalizePriority`, używane też przez edytor reguł).
+  Niższa wartość oznacza wyższy priorytet.
+- `createdAt`, `updatedAt`: liczba większa od zera; `null`, `''` i brak wartości oznaczają czas
+  zapisu. `saveRule()` przy edycji zachowuje `createdAt` zapisanej reguły i zawsze ustawia nowy
+  `updatedAt`.
 - `matchMode`: `all` (wszystkie warunki) albo `any` (dowolny warunek).
 - `name` jest przycinana do 50 znaków; brak `id` oznacza wygenerowanie nowego.
 
@@ -240,7 +255,9 @@ przy starcie, po mutacjach listy czatów, po nawigacji SPA, po zapisie w edytorz
   przeglądarce (`requestIdleCallback`), aby nie blokować przewijania.
 - Wynik zapisuje jedna operacja `storage.applyAutoAssignments()`. Metoda aktualizuje pamięć
   podręczną magazynu przed zapisem i pomija wątki, których folder zmienił się w trakcie
-  ewaluacji — ręczne przypisanie zrobione w tym czasie wygrywa z regułą.
+  ewaluacji — ręczne przypisanie zrobione w tym czasie wygrywa z regułą. Dotyczy to także reguł
+  z `overwriteManual: true`: decyzja policzona na starszym stanie nie nadpisuje świeższej akcji
+  użytkownika. Reguła zadziała przy kolejnej ewaluacji (zmiana nazwy wątku albo reguł).
 
 ### Ochrona wyrażeń regularnych
 
@@ -282,6 +299,13 @@ Walidacja działa w trzech miejscach:
 - `saveRules()` rzuca wyjątek dla nowych i zmienionych wzorców. Wzorzec zapisany wcześniej (ta sama
   reguła i wartość) nie blokuje przełączania ani usuwania innych reguł, a `matchCondition` i tak
   go nie wykona.
+
+Taka reguła (np. `(foo|bar)+` zapisane przed wprowadzeniem budżetu) nie działa po cichu: lista
+reguł w oknie ustawień pokazuje pod nią „Nieaktywna: …” z powodem z `describeRuleProblem()`.
+Ta sama funkcja zgłasza regułę, której folder docelowy usunięto. Edytor takiej reguły nie wybiera
+wtedy pierwszego folderu z listy, tylko pustą opcję, którą trzeba zmienić przed zapisem. Lista
+folderów docelowych pomija „Wszystkie” i „Inne”. Podgląd liczby dopasowań w edytorze liczy wątki
+przez `evaluateThread()`, więc uwzględnia ochronę ręcznych przypisań (`overwriteManual`).
 
 ---
 

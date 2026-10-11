@@ -737,6 +737,92 @@ async function runRulesTests() {
   assert.strictEqual(rulesFromStorageInstance[0].name, 'Reguła integracyjna');
   console.log('✓ MessengerRulesEngine bezproblemowo integruje się z MessengerFoldersStorage.');
 
+  // 11. Znaleziska LOW przeglądu MF-017 (MF-022)
+  console.log('\nTest 11: lastError bez chrome, priorytet 0–100, znaczniki czasu, powód nieaktywności...');
+
+  // pkt 3: bez zadeklarowanego `chrome` odczyt nie wpada w ReferenceError (i nie zwraca pustej pamięci)
+  const savedChrome = global.chrome;
+  delete global.chrome;
+  try {
+    const noChromeArea = new MockStorageArea();
+    await new MessengerRulesEngine({ storageArea: noChromeArea }).saveRules([
+      { id: 'r_nc', name: 'Bez chrome', folderId: 'work', conditions: [{ value: 'x' }] }
+    ]);
+    const freshEngine = new MessengerRulesEngine({ storageArea: noChromeArea });
+    const rulesNoChrome = await freshEngine.getRules();
+    assert.deepStrictEqual(
+      rulesNoChrome.map((r) => r.id),
+      ['r_nc'],
+      'getRules() czyta pamięć także bez globalnego chrome'
+    );
+  } finally {
+    global.chrome = savedChrome;
+  }
+
+  // pkt 4: jedna logika priorytetu z zakresem 0–100
+  assert.strictEqual(MessengerRulesEngine.normalizePriority(150), 100, '150 → 100');
+  assert.strictEqual(MessengerRulesEngine.normalizePriority('-5'), 0, '"-5" → 0');
+  assert.strictEqual(MessengerRulesEngine.normalizePriority('abc'), 10, '"abc" → domyślne 10');
+  assert.strictEqual(MessengerRulesEngine.normalizePriority(' 42 '), 42, '" 42 " → 42');
+  assert.strictEqual(MessengerRulesEngine.parsePriority(150), 150, 'parsePriority() nie przycina (sortowanie)');
+
+  // pkt 8: createdAt null nie staje się 0, edycja zachowuje createdAt i odświeża updatedAt
+  const tsEngine = new MessengerRulesEngine({ storageArea: new MockStorageArea() });
+  const realNow = Date.now;
+  try {
+    Date.now = () => 1000;
+    const created = await tsEngine.saveRule({
+      id: 'r_ts',
+      name: 'Czas',
+      folderId: 'work',
+      priority: 500,
+      createdAt: null,
+      updatedAt: '',
+      conditions: [{ value: 'a' }]
+    });
+    assert.strictEqual(created.createdAt, 1000, 'createdAt: null → bieżący czas, nie 0');
+    assert.strictEqual(created.updatedAt, 1000, 'Nowa reguła: updatedAt = czas zapisu');
+    assert.strictEqual(created.priority, 100, 'saveRule() przycina priorytet do 100');
+
+    Date.now = () => 5000;
+    const edited = await tsEngine.saveRule({
+      id: 'r_ts',
+      name: 'Czas 2',
+      folderId: 'work',
+      conditions: [{ value: 'b' }]
+    });
+    assert.strictEqual(edited.createdAt, 1000, 'Edycja zachowuje createdAt zapisanej reguły');
+    assert.strictEqual(edited.updatedAt, 5000, 'Edycja zwraca nowy updatedAt');
+    const stored = (await tsEngine.getRules()).find((r) => r.id === 'r_ts');
+    assert.strictEqual(stored.updatedAt, 5000, 'Zapisany updatedAt jest nowy');
+    assert.strictEqual(stored.createdAt, 1000, 'Zapisany createdAt bez zmian');
+  } finally {
+    Date.now = realNow;
+  }
+
+  // pkt 13: reguła poza budżetem RegEx i reguła bez folderu mają powód nieaktywności
+  const legacyRule = { folderId: 'work', conditions: [{ field: 'name', operator: 'regex', value: '(foo|bar)+' }] };
+  assert.ok(
+    MessengerRulesEngine.describeRuleProblem(legacyRule, ['work']).startsWith(
+      'Wyrażenie „(foo|bar)+” nie jest wykonywane'
+    ),
+    'RegEx sprzed MF-020 opisany'
+  );
+  assert.strictEqual(engine.matchCondition('foo', legacyRule.conditions[0]), false, 'Silnik i tak go nie wykonuje');
+  assert.strictEqual(
+    MessengerRulesEngine.describeRuleProblem({ folderId: 'gone', conditions: [{ value: 'x' }] }, [{ id: 'work' }]),
+    'Folder docelowy nie istnieje — wybierz inny folder.',
+    'Brak folderu opisany'
+  );
+  assert.strictEqual(
+    MessengerRulesEngine.describeRuleProblem({ folderId: 'work', conditions: [{ operator: 'regex', value: '^a+$' }] }, [
+      'work'
+    ]),
+    null,
+    'Poprawna reguła bez powodu'
+  );
+  console.log('✓ lastError bez chrome, normalizePriority(), createdAt/updatedAt, describeRuleProblem().');
+
   console.log('\n=============================================');
   console.log('WSZYSTKIE TESTY REGUŁ ZAKOŃCZONE SUKCESEM! ✓');
   console.log('=============================================');
