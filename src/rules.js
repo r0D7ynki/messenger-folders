@@ -18,9 +18,155 @@
   const VALID_FIELDS = ['name', 'threadId', 'threadName'];
 
   // Zabezpieczenie przed ReDoS (catastrophic backtracking) i zbyt złożonymi wzorcami
-  const DANGEROUS_REGEX_PATTERN =
-    /(?:[+*]|\{\d+,?\d*\})\s*(?:[+*]|\{\d+,?\d*\})|\([^(]*(?:[+*]|\{\d+,?\d*\})[^)]*\)+\s*(?:[+*]|\{\d+,?\d*\})/;
   const MAX_REGEX_PATTERN_LENGTH = 250;
+  // Nazwy wątków i identyfikatory są krótkie — dłuższy tekst przycinamy, by ograniczyć koszt dopasowania
+  const MAX_REGEX_TEXT_LENGTH = 100;
+  // Kilka sąsiednich powtórzeń (np. \w*\w*\w*\w*!) daje nawrót wielomianowy — ograniczamy ich liczbę
+  const MAX_REGEX_REPEATS = 3;
+
+  /**
+   * Odczytuje kwantyfikator zaczynający się na pozycji `index` (`*`, `+`, `?`, `{n}`, `{n,}`, `{n,m}`).
+   * @param {string} pattern Wzorzec wyrażenia regularnego.
+   * @param {number} index Pozycja w wzorcu.
+   * @returns {{length: number, repeats: boolean, varies: boolean}|null} Opis kwantyfikatora albo null:
+   *   `repeats` — atom może wystąpić więcej niż raz, `varies` — liczba powtórzeń nie jest stała.
+   */
+  function readQuantifier(pattern, index) {
+    const ch = pattern[index];
+    if (ch === '*' || ch === '+') return { length: 1, repeats: true, varies: true };
+    if (ch === '?') return { length: 1, repeats: false, varies: true };
+    if (ch !== '{') return null;
+    const m = /^\{(\d+)(,(\d*))?\}/.exec(pattern.slice(index));
+    if (!m) return null;
+    const min = Number(m[1]);
+    const max = m[2] ? (m[3] === '' ? Infinity : Number(m[3])) : min;
+    return { length: m[0].length, repeats: max > 1, varies: max !== min };
+  }
+
+  /**
+   * Szuka we wzorcu konstrukcji grożących wykładniczym nawrotem (ReDoS):
+   * kwantyfikatora tuż po kwantyfikatorze (`a++`) oraz powtarzanej grupy, która zawiera
+   * alternatywę albo zmienny kwantyfikator (`(a|a)*`, `(a|ab)*`, `(a+)+`, `((a*)b)*`),
+   * a także więcej niż MAX_REGEX_REPEATS zmiennych powtórzeń (`*`, `+`, `{n,m}`) w całym wzorcu.
+   * Klasy znaków `[...]` i sekwencje ucieczki traktuje jak pojedynczy atom.
+   * @param {string} pattern Wzorzec wyrażenia regularnego.
+   * @returns {string|null} Opis zagrożenia albo null, gdy wzorzec jest bezpieczny.
+   */
+  function findRegexHazard(pattern) {
+    // Ramka na każdy poziom grupy: czy zawiera `|` albo zmienny kwantyfikator
+    const stack = [{ hasAlt: false, hasQuant: false }];
+    // Ostatni element: null (brak atomu), 'atom', 'quant' albo ramka zamkniętej grupy
+    let last = null;
+    let repeats = 0;
+    let i = 0;
+
+    while (i < pattern.length) {
+      const ch = pattern[i];
+
+      if (ch === '\\') {
+        last = 'atom';
+        i += 2;
+        continue;
+      }
+
+      if (ch === '[') {
+        i++;
+        if (pattern[i] === '^') i++;
+        if (pattern[i] === ']') i++;
+        while (i < pattern.length && pattern[i] !== ']') {
+          if (pattern[i] === '\\') i++;
+          i++;
+        }
+        i++;
+        last = 'atom';
+        continue;
+      }
+
+      if (ch === '(') {
+        stack.push({ hasAlt: false, hasQuant: false });
+        i++;
+        if (pattern[i] === '?') {
+          // Grupy specjalne: (?: (?= (?! (?<= (?<! (?<nazwa>
+          i++;
+          if (pattern[i] === '<' && pattern[i + 1] !== '=' && pattern[i + 1] !== '!') {
+            const end = pattern.indexOf('>', i);
+            i = end === -1 ? pattern.length : end + 1;
+          } else {
+            i += pattern[i] === '<' ? 2 : 1;
+          }
+        }
+        last = null;
+        continue;
+      }
+
+      if (ch === ')') {
+        const frame = stack.length > 1 ? stack.pop() : stack[0];
+        const parent = stack[stack.length - 1];
+        parent.hasAlt = parent.hasAlt || frame.hasAlt;
+        parent.hasQuant = parent.hasQuant || frame.hasQuant;
+        last = frame;
+        i++;
+        continue;
+      }
+
+      if (ch === '|') {
+        stack[stack.length - 1].hasAlt = true;
+        last = null;
+        i++;
+        continue;
+      }
+
+      const quant = readQuantifier(pattern, i);
+      if (quant) {
+        if (last === 'quant') {
+          return 'Kwantyfikator tuż po kwantyfikatorze (np. a++).';
+        }
+        if (quant.repeats && last && typeof last === 'object' && (last.hasAlt || last.hasQuant)) {
+          return last.hasAlt
+            ? 'Powtarzana grupa z alternatywą „|” (np. (a|b)*) może zawiesić stronę.'
+            : 'Zagnieżdżone kwantyfikatory (np. (a+)+) mogą zawiesić stronę.';
+        }
+        if (quant.varies) {
+          stack[stack.length - 1].hasQuant = true;
+        }
+        if (quant.repeats && quant.varies && ++repeats > MAX_REGEX_REPEATS) {
+          return `Za dużo powtórzeń (*, +, {n,m}) — dozwolone są najwyżej ${MAX_REGEX_REPEATS}.`;
+        }
+        i += quant.length;
+        // Modyfikator leniwy (*?, +?, {n,m}?) nie jest osobnym kwantyfikatorem
+        if (pattern[i] === '?' && quant.length > 0 && ch !== '?') i++;
+        last = 'quant';
+        continue;
+      }
+
+      last = 'atom';
+      i++;
+    }
+
+    return null;
+  }
+
+  /**
+   * Sprawdza, czy wzorzec RegEx nadaje się do reguły: długość, składnia i ryzyko ReDoS.
+   * @param {string} pattern Wzorzec wyrażenia regularnego.
+   * @returns {string|null} Komunikat błędu po polsku albo null, gdy wzorzec jest poprawny.
+   */
+  function validateRegexPattern(pattern) {
+    const valStr = String(pattern ?? '');
+    if (valStr.length > MAX_REGEX_PATTERN_LENGTH) {
+      return `Wyrażenie jest za długie (maks. ${MAX_REGEX_PATTERN_LENGTH} znaków).`;
+    }
+    const hazard = findRegexHazard(valStr);
+    if (hazard) {
+      return hazard;
+    }
+    try {
+      new RegExp(valStr, 'i');
+    } catch (_) {
+      return 'Nieprawidłowa składnia wyrażenia regularnego.';
+    }
+    return null;
+  }
 
   /**
    * Normalizuje pojedynczy warunek reguły.
@@ -187,6 +333,10 @@
       const current = await this.getRules();
       const normalized = normalizeRule(rule);
       if (!normalized) throw new Error('Nieprawidłowy obiekt reguły.');
+      for (const cond of normalized.conditions || []) {
+        const regexError = cond.operator === 'regex' ? validateRegexPattern(cond.value) : null;
+        if (regexError) throw new Error(regexError);
+      }
 
       const existingIndex = current.findIndex((r) => r.id === normalized.id);
       if (existingIndex >= 0) {
@@ -229,6 +379,15 @@
       target.updatedAt = Date.now();
       await this.saveRules(current);
       return { ...target };
+    }
+
+    /**
+     * Sprawdza wzorzec RegEx warunku (długość, składnia, ryzyko ReDoS).
+     * @param {string} pattern Wzorzec wyrażenia regularnego.
+     * @returns {string|null} Komunikat błędu albo null, gdy wzorzec jest poprawny.
+     */
+    validateRegexPattern(pattern) {
+      return validateRegexPattern(pattern);
     }
 
     /**
@@ -275,15 +434,12 @@
         }
 
         case 'regex': {
-          if (valStr.length > MAX_REGEX_PATTERN_LENGTH) {
-            return false;
-          }
-          if (DANGEROUS_REGEX_PATTERN.test(valStr)) {
+          if (validateRegexPattern(valStr) !== null) {
             return false;
           }
           try {
             const re = new RegExp(valStr, 'i');
-            return re.test(textStr);
+            return re.test(textStr.slice(0, MAX_REGEX_TEXT_LENGTH));
           } catch (_) {
             // Bezpieczne wyłapanie błędu składniowego wyrażenia regularnego
             return false;
@@ -412,6 +568,7 @@
   }
 
   MessengerRulesEngine.parsePriority = parsePriority;
+  MessengerRulesEngine.validateRegexPattern = validateRegexPattern;
   MessengerRulesEngine.normalizePriority = parsePriority;
 
   // Udostępnienie w zasięgu globalnym oraz jako moduł CommonJS
@@ -426,7 +583,8 @@
     module.exports = {
       MessengerRulesEngine,
       STORAGE_KEYS,
-      parsePriority
+      parsePriority,
+      validateRegexPattern
     };
     module.exports.default = MessengerRulesEngine;
   }

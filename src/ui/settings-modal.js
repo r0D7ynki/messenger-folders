@@ -771,6 +771,45 @@
           previewBox.textContent = `Liczba pasujących czatów: ${matchesCount}`;
         };
 
+        /**
+         * Sprawdza wzorzec RegEx silnikiem reguł (składnia, ryzyko ReDoS).
+         * @param {string} pattern Wzorzec z pola warunku.
+         * @returns {string|null} Komunikat błędu albo null.
+         */
+        const validateRegex = (pattern) => {
+          const engine = this.ui && this.ui.rulesEngine;
+          if (engine && typeof engine.validateRegexPattern === 'function') {
+            return engine.validateRegexPattern(pattern);
+          }
+          if (typeof MessengerRulesEngine !== 'undefined' && MessengerRulesEngine.validateRegexPattern) {
+            return MessengerRulesEngine.validateRegexPattern(pattern);
+          }
+          return null;
+        };
+
+        // Komunikat błędu warunku wyświetlany bezpośrednio pod jego wierszem
+        const clearConditionError = (row) => {
+          if (row.mfErrorEl) {
+            row.mfErrorEl.remove();
+            row.mfErrorEl = null;
+          }
+        };
+        const showConditionError = (row, message) => {
+          const errorEl = document.createElement('div');
+          errorEl.className = 'mf-rule-condition-error';
+          errorEl.setAttribute('role', 'alert');
+          errorEl.style.color = 'var(--mf-danger)';
+          errorEl.style.fontSize = '12px';
+          errorEl.style.margin = '-4px 0 8px';
+          errorEl.textContent = message;
+          if (typeof row.after === 'function') {
+            row.after(errorEl);
+          } else {
+            condContainer.appendChild(errorEl);
+          }
+          row.mfErrorEl = errorEl;
+        };
+
         // Funkcja dodawania wiersza warunku
         const addConditionRow = (initialData = null) => {
           const row = document.createElement('div');
@@ -830,14 +869,22 @@
           this._setIcon(removeBtn, 'trash');
           removeBtn.onclick = () => {
             if (condContainer.querySelectorAll('.mf-rule-condition-row').length > 1) {
+              clearConditionError(row);
               row.remove();
               updateDryRun();
             }
           };
 
           fieldSel.onchange = updateDryRun;
-          opSel.onchange = updateDryRun;
-          valInp.oninput = updateDryRun;
+          opSel.onchange = () => {
+            clearConditionError(row);
+            updateDryRun();
+          };
+          valInp.oninput = () => {
+            clearConditionError(row);
+            valInp.style.borderColor = '';
+            updateDryRun();
+          };
 
           row.appendChild(fieldSel);
           row.appendChild(opSel);
@@ -895,14 +942,29 @@
           }
 
           const conditions = [];
+          let invalidRegexInput = null;
           condContainer.querySelectorAll('.mf-rule-condition-row').forEach((r) => {
             const f = r.querySelector('.mf-rule-condition-field')?.value || 'name';
             const o = r.querySelector('.mf-rule-condition-op')?.value || 'contains';
-            const v = r.querySelector('.mf-rule-condition-val')?.value || '';
+            const valEl = r.querySelector('.mf-rule-condition-val');
+            const v = valEl?.value || '';
+            clearConditionError(r);
             if (v.trim()) {
               conditions.push({ field: f, operator: o, value: v });
+              const regexError = o === 'regex' ? validateRegex(v) : null;
+              if (regexError) {
+                showConditionError(r, `Wyrażenie RegEx odrzucone: ${regexError}`);
+                if (valEl) valEl.style.borderColor = 'var(--mf-danger)';
+                invalidRegexInput = invalidRegexInput || valEl;
+              }
             }
           });
+
+          // Wzorce grożące zawieszeniem karty (ReDoS) lub błędne składniowo — nie zapisujemy reguły
+          if (invalidRegexInput) {
+            invalidRegexInput.focus();
+            return;
+          }
 
           if (conditions.length === 0) {
             const firstVal = condContainer.querySelector('.mf-rule-condition-val');
@@ -929,7 +991,14 @@
           };
 
           if (this.ui && this.ui.rulesEngine) {
-            await this.ui.rulesEngine.saveRule(ruleData);
+            try {
+              await this.ui.rulesEngine.saveRule(ruleData);
+            } catch (err) {
+              if (typeof this.ui.showToast === 'function') {
+                this.ui.showToast(`Nie zapisano reguły: ${err && err.message ? err.message : err}`);
+              }
+              return;
+            }
             if (typeof this.ui.onRulesChanged === 'function') {
               await this.ui.onRulesChanged();
             }
