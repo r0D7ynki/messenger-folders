@@ -233,6 +233,25 @@ def scope_base(board: Any, card: Any, main: str | None) -> str | None:
     return main
 
 
+# Wartości metadanych (SB-066): bez nowej linii — inaczej dopisałaby klucze nagłówka (status)
+META_VALUES = {"branch": re.compile(r"^[\w./-]+$"), "priority": re.compile(r"^[Pp]\d+$")}
+
+
+def set_meta(board: Any, card_id: str, key: str, value: str, reason: str = "") -> list[str]:
+    """Zmiana metadanej karty z wpisem administracyjnym w Logu (bez bramek; także po done)."""
+    if key not in META_VALUES:
+        return [tr("kanban.set.bad_key", name=key, keys=", ".join(META_VALUES))]
+    if not META_VALUES[key].match(value) or "\n" in reason:
+        return [tr("kanban.set.bad_value", name=key, value=value)]
+    card = board.card(card_id)
+    old = card.meta.get(key, "")
+    card.meta[key] = value
+    entry = tr("kanban.log.meta", name=key, old=old or "—", new=value or "—", reason=reason)
+    card.append_log(entry.rstrip())
+    card.save()
+    return []
+
+
 def files_outside_scope(board: Any, card: Any, base: str | None) -> list[str]:
     """
     Pliki zmienione na gałęzi karty (od rozwidlenia z bazą) spoza sekcji Files — poza plikiem

@@ -32,12 +32,23 @@ TRANSITIONS_SINCE = "2026-10-12"
 
 
 # Wpisy roju dopisywane asynchronicznie (przegląd automatyczny, most) — nie są pracą po done
-AUTOMATIC_KEYS = ("review.log", "bridge.log.merged", "bridge.log.failed", "bridge.log.requeued")
+AUTOMATIC_KEYS = (
+    "review.log",
+    "bridge.log.merged",
+    "bridge.log.failed",
+    "bridge.log.requeued",
+)
+# Metadane zmieniane `kanban.py set` (także w done) — wpis „klucz: stara → nowa” nie jest pracą
+META_KEYS = ("branch", "priority")
+MANUAL_META = re.compile(rf"^(?:{'|'.join(META_KEYS)}): \S+ → \S+")
 
 
 def automatic_entry(line: str) -> bool:
-    text = re.sub(r"^- \d{4}-\d\d-\d\d \d\d:\d\d ", "", line)
-    return any(text.startswith(tr(key).split("{")[0]) for key in AUTOMATIC_KEYS)
+    text = re.sub(r"^- \d{4}-\d\d-\d\d(?: \d\d:\d\d)? ", "", line)
+    if MANUAL_META.match(text):
+        return True
+    prefixes = [tr(key).split("{")[0] for key in AUTOMATIC_KEYS]
+    return any(prefix and text.startswith(prefix) for prefix in prefixes)
 
 
 def transition_errors(card: Any, since: str) -> list[str]:

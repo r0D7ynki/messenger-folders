@@ -653,6 +653,15 @@ def cmd_move(board: Board, args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_set(board: Board, args: argparse.Namespace) -> int:
+    errors = load_workflow().set_meta(board, args.id, args.key, args.value, args.reason or "")
+    if errors:
+        print_errors(tr("kanban.set.refused", card_id=args.id), errors)
+        return EXIT_FAILED
+    print(f"✓ {args.id}: {args.key} = {args.value}")
+    return EXIT_OK
+
+
 def cmd_check(board: Board, args: argparse.Namespace) -> int:
     result = board.check(args.id)
     warnings = {k: v for k, v in board.check_warnings.items() if v}
@@ -733,6 +742,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("id")
     p.add_argument("to", choices=COLUMNS)
     p.add_argument("--reason", help=tr("kanban.cli.reason_help"))
+    p = sub.add_parser("set", help=tr("kanban.cli.set_help"))
+    p.add_argument("id")
+    p.add_argument("key")
+    p.add_argument("value")
+    p.add_argument("--reason", help=tr("kanban.cli.reason_help"))
     p = sub.add_parser("check", help=tr("kanban.cli.check_help"))
     p.add_argument("id", nargs="?")
     p.add_argument("--json", action="store_true", help=tr("kanban.cli.json_help"))
@@ -752,6 +766,7 @@ COMMANDS = {
     "new": cmd_new,
     "move": cmd_move,
     "check": cmd_check,
+    "set": cmd_set,
     "next": cmd_next,
     "submit": cmd_submit,
 }
