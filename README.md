@@ -16,6 +16,7 @@ Szanuje Twoją prywatność i chroni historię rozmów.
 
 - [Kluczowe możliwości](#kluczowe-możliwości)
 - [Instalacja na komputerze](#instalacja-na-komputerze)
+- [Instalacja w Firefoksie](#instalacja-w-firefoksie)
 - [Instalacja na telefonie](#instalacja-na-telefonie)
 - [Podręcznik użytkowania krok po kroku](#podręcznik-użytkowania-krok-po-kroku)
 - [Prywatność i bezpieczeństwo](#prywatność-i-bezpieczeństwo)
@@ -35,15 +36,19 @@ Szanuje Twoją prywatność i chroni historię rozmów.
 - **Wskaźnik w otwartym czacie**: Pigułka w nagłówku aktywnej rozmowy pokazuje jej aktualny folder.
 - **Reguły automatycznego przypisywania**: Nowe rozmowy same trafiają do folderów według nazwy czatu lub identyfikatora wątku.
 - **Kopia zapasowa JSON**: Eksportuj całą konfigurację do pliku. Bez trudu przenieś dane na inny komputer.
+- **Odznaki nieprzeczytanych**: Pigułki folderów pokazują, ile rozmów czeka na przeczytanie.
+- **Skróty klawiszowe**: `Alt+1…9` i `Alt+0` przełączają foldery, strzałki przesuwają fokus po pasku.
+- **Chromium i Firefox**: Jedna paczka działa w Chrome, Brave, Edge, Operze, Vivaldi oraz Firefoksie.
 - **Wsparcie dla trybu ciemnego**: Interfejs automatycznie dopasowuje kolory do jasnego i ciemnego motywu Messengera.
-- **Pełna zgodność z Manifest V3**: Rozszerzenie wykorzystuje najnowszy standard bezpieczeństwa i wydajności Chrome.
+- **Pełna zgodność z Manifest V3**: Rozszerzenie wykorzystuje najnowszy standard bezpieczeństwa i wydajności przeglądarek.
 
 ---
 
 ## Instalacja na komputerze
 
 Rozszerzenie działa we wszystkich nowoczesnych przeglądarkach opartych na silniku Chromium:
-Google Chrome, Brave, Microsoft Edge, Opera oraz Vivaldi.
+Google Chrome, Brave, Microsoft Edge, Opera oraz Vivaldi. Działa też w **Firefoksie**
+(opis w sekcji [Instalacja w Firefoksie](#instalacja-w-firefoksie)).
 
 ### Krok 1: Pobierz pliki rozszerzenia
 
@@ -84,6 +89,23 @@ Rozszerzenie automatycznie doda pasek folderów bezpośrednio pod polem wyszukiw
 > [!TIP]
 > Przypnij ikonę rozszerzenia na pasku przeglądarki.
 > Kliknij ikonę puzzla obok paska adresu, a potem kliknij symbol pinezki przy Messenger Folders.
+
+---
+
+## Instalacja w Firefoksie
+
+Wymagany jest **Firefox 140 lub nowszy** (na Androidzie **Firefox 142 lub nowszy**) — wartości
+`strict_min_version` w [manifest.json](manifest.json). Wtyczka ładuje się jako dodatek tymczasowy:
+
+1. Pobierz pliki rozszerzenia tak jak w kroku 1 instalacji na komputerze.
+2. Wpisz w pasku adresu `about:debugging#/runtime/this-firefox` i naciśnij Enter.
+3. Kliknij **Załaduj tymczasowy dodatek…** (Load Temporary Add-on…).
+4. Wskaż plik [manifest.json](manifest.json) w pobranym katalogu.
+5. Otwórz [messenger.com](https://www.messenger.com) lub [facebook.com/messages](https://www.facebook.com/messages).
+
+> [!NOTE]
+> Dodatek tymczasowy znika po zamknięciu Firefoksa — przy kolejnym uruchomieniu załaduj go ponownie.
+> Dane folderów zostają w pamięci lokalnej przeglądarki (`storage.local`) i nie wychodzą poza komputer.
 
 ---
 
@@ -216,6 +238,33 @@ takie rozmowy. Usunięcie lub wyłączenie reguły nie cofa przypisań, które j
 - Odrzucony albo niepoprawny wzorzec nie zgłasza błędu. Nie pasuje wtedy do żadnej rozmowy.
   Licznik **Liczba pasujących czatów** pokaże `0`.
 - Używaj prostych wzorców i unikaj powtórzeń grup z alternatywą, np. `(a|ab)*`.
+
+### 7. Odznaki nieprzeczytanych
+
+Przy nazwie folderu na pasku pojawia się kolorowa **odznaka** z liczbą rozmów, które mają
+nieprzeczytane wiadomości (powyżej 99 widać `99+`). Odznaka znika, gdy w folderze nie ma
+nieprzeczytanych rozmów. Pigułka **Wszystkie** sumuje wszystkie foldery, a rozmowy bez folderu
+liczą się do **Inne**. Liczba rozmów w folderze (szara odznaka) to osobna wartość.
+
+> [!NOTE]
+> Liczniki obejmują tylko rozmowy aktualnie **wyrenderowane** na liście czatów. Messenger ładuje
+> starsze rozmowy dopiero po przewinięciu listy, więc nieprzeczytane rozmowy poza ekranem pojawią się
+> w licznikach po ich załadowaniu.
+
+### 8. Skróty klawiszowe
+
+| Skrót | Działanie |
+|---|---|
+| `Alt+1` … `Alt+9` | włącza N-ty folder użytkownika (w kolejności paska) |
+| `Alt+0` | włącza folder **Wszystkie** |
+| `←` / `→` | przenosi fokus na poprzednią / następną pigułkę (z zawijaniem) |
+| `Home` / `End` | przenosi fokus na pierwszą / ostatnią pigułkę |
+| `Esc` | zamyka otwarte menu lub okno; w polu wyszukiwarki folderów czyści wpisany tekst |
+| `Enter` / `Spacja` | na pigułce włącza folder; w wyszukiwarce folderów włącza pierwszą widoczną pigułkę |
+
+Skróty `Alt+cyfra` nie działają podczas pisania w polu tekstowym (np. w wiadomości), przy
+otwartym oknie dialogowym ani z dodatkowymi klawiszami `Ctrl`, `Shift` i `Meta`.
+Na macOS używaj klawisza `Option`.
 
 ---
 

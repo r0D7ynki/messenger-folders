@@ -192,6 +192,28 @@ Metoda `findFolderBarInjectionPoint()` automatycznie lokalizuje najlepsze miejsc
 
 Dzięki temu pasek pojawia się zawsze w logicznym miejscu, niezależnie od wersji interfejsu.
 
+### Wykrywanie nieprzeczytanych rozmów
+
+Metoda `isThreadUnread(rowElement, linkElement)` zwraca `true`, gdy wiersz wygląda na nieprzeczytany.
+Nie czyta klas CSS ani `getComputedStyle` (brak wymuszonego przeliczania układu). Sprawdza po kolei
+(pierwszy trafny sygnał wygrywa):
+1. `[data-testid*="unread" i]` na wierszu lub potomku,
+2. potomek z `aria-label` zawierającym „nieprzeczytan” / „unread”,
+3. `aria-label` samego wiersza lub linku,
+4. niebieska kropka (`[style*="rgb(0, 132, 255)"]`, `#0084ff`) poza awatarem,
+5. `data-unread="true"`.
+
+Akcje „Oznacz jako nieprzeczytane” / „Mark as unread” (przyciski, pozycje menu, etykiety z
+„oznacz” / „mark as”) są pomijane (`_isActionElement`), bo nie opisują stanu rozmowy.
+`scanChatList()` zapisuje wynik w polu `isUnread` każdego wątku.
+
+**Ograniczenia:**
+- Heurystyka widzi **tylko wiersze obecne w DOM**. Messenger wirtualizuje listę, więc nieprzeczytane
+  rozmowy poza przewiniętym fragmentem nie są liczone, dopóki się nie wyrenderują.
+- Opiera się na atrybutach i etykietach, które Meta może zmienić; błąd daje zaniżony lub zawyżony
+  licznik, ale nie wpływa na przypisania folderów.
+- Rozpoznaje etykiety polskie i angielskie.
+
 ---
 
 ## Silnik reguł automatycznego przypisywania (Rules)
@@ -405,6 +427,35 @@ Elementy widoczne dla użytkownika:
   oraz reguł automatycznego przypisywania (zakładka **⚡ Reguły** z edytorem i podglądem liczby
   pasujących czatów).
 
+### Liczniki nieprzeczytanych (przepływ)
+
+1. [src/content.js](../src/content.js) wywołuje `calculateUnreadCounts(wykryteWątki, mapaWątków, foldery)`.
+   Funkcja zlicza unikalne wątki z `isUnread` i zwraca `{ all, [folderId] }`; wątek bez
+   przypisania liczy się do `uncategorized`. Każdy folder ma wartość początkową `0`.
+2. Przeliczenie następuje przy starcie (zimny start), po każdej partii mutacji DOM
+   (`detector.setupObserver`, throttle 250 ms), po nawigacji SPA, po zmianie `chrome.storage`
+   i po automatycznym przypisaniu przez reguły.
+3. Wynik trafia do `ui.updateFolderCounts(wątki, nieprzeczytane)` → `FolderBarComponent`, który
+   w miejscu aktualizuje odznakę `.mf-folder-unread-badge` (`textContent`, `99+` powyżej 99,
+   `aria-label` „N nieprzeczytanych”) i usuwa ją przy zerze. Brak paska powoduje jego
+   ponowne wstrzyknięcie (`renderAndInjectBar`).
+
+Liczniki nie są zapisywane w magazynie — wynikają wyłącznie z bieżącego DOM.
+
+### Obsługa klawiatury
+
+- **`Alt+1…9`, `Alt+0`** — `MessengerUI._handleFolderShortcut()` w [src/ui.js](../src/ui.js) podpina
+  nasłuch `keydown` na `document` i klika pigułkę wskazaną przez `resolveFolderShortcut()` z
+  [src/ui/core.js](../src/ui/core.js). Cyfrę czyta z `event.code` (`Digit0…9`), bo na macOS
+  `Option+1` daje inny `event.key`. Odrzuca `Ctrl`/`Meta`/`Shift`, AltGraph, kompozycję IME,
+  otwarty modal oraz pola do pisania (`isTypingTarget`: `input`, `textarea`, `contenteditable`,
+  `role="textbox"`).
+- **Strzałki, `Home`, `End`** — nasłuch na `#mf-folder-bar` w
+  [src/ui/folder-bar.js](../src/ui/folder-bar.js) przenosi fokus między widocznymi pigułkami z
+  zawijaniem (roving tabindex); folder zmienia dopiero `Enter`, `Spacja` lub kliknięcie.
+- **`Esc`** zamyka menu lub okno (fasada), a w wyszukiwarce folderów czyści zapytanie; `Enter` w
+  wyszukiwarce włącza pierwszą widoczną pigułkę.
+
 ### Zgodność z motywem jasnym i ciemnym
 
 Plik [src/content.css](../src/content.css) pobiera wartości kolorów bezpośrednio ze zmiennych środowiskowych Meta:
@@ -480,10 +531,13 @@ Testy nie wymagają zewnętrznych bibliotek i uruchamiają się bezpośrednio w 
 3. **Detektor DOM (`MessengerDOMDetector`)**:
    - Rozpoznawanie wszystkich wariantów adresów URL wątków.
    - Odróżnianie znaczników czasu i liczników od nazwisk kontaktów.
+   - Heurystyka `isThreadUnread()` i pole `isUnread` w `scanChatList()`.
 4. **Silnik reguł (`MessengerRulesEngine`)**:
    - Operatory, tryby `all`/`any`, priorytety (w tym `0`) i reguły wyłączone.
    - Odrzucanie niepoprawnych i niebezpiecznych wyrażeń regularnych.
    - Ochrona ręcznych przypisań oraz zapis reguł w `chrome.storage.local`.
+5. **Interfejs (`tests/test_ui.js`)**: odznaki nieprzeczytanych, `resolveFolderShortcut()` i nawigacja
+   strzałkami po pasku.
 
 ### Uruchomienie testów
 
