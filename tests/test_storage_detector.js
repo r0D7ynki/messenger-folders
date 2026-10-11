@@ -136,11 +136,13 @@ async function runStorageTests() {
   assert.strictEqual(editedFolder.icon, '🎯');
   console.log('✓ storage.saveFolder() aktualizuje istniejący folder');
 
-  // Test setActiveFolder() i getActiveFolder()
+  // Test setActiveFolder(), getActiveFolder() i getActiveFolderSync()
   await storage.setActiveFolder(newFolder.id);
   const active = await storage.getActiveFolder();
   assert.strictEqual(active, newFolder.id, 'Aktywny folder powinien zostać zaktualizowany');
-  console.log('✓ storage.setActiveFolder() i getActiveFolder() działają poprawnie');
+  const activeSync = storage.getActiveFolderSync();
+  assert.strictEqual(activeSync, newFolder.id, 'getActiveFolderSync powinien zwrócić aktywny folder synchronicznie');
+  console.log('✓ storage.setActiveFolder(), getActiveFolder() i getActiveFolderSync() działają poprawnie');
 
   // Test assignThread()
   const assigned = await storage.assignThread('100012345', newFolder.id, {
@@ -169,10 +171,12 @@ async function runStorageTests() {
   assert.strictEqual(inAll.length, 1);
   console.log('✓ storage.getThreadsInFolder() filtruje wątki według folderu');
 
-  // Test getAllThreads()
+  // Test getAllThreads() i getAllThreadsSync()
   const allThreads = await storage.getAllThreads();
   assert.ok(allThreads['100012345']);
-  console.log('✓ storage.getAllThreads() zwraca mapę wszystkich wątków');
+  const allThreadsSync = storage.getAllThreadsSync();
+  assert.ok(allThreadsSync['100012345'], 'getAllThreadsSync powinien zawierać przypisany wątek synchronicznie');
+  console.log('✓ storage.getAllThreads() i getAllThreadsSync() zwracają mapę wszystkich wątków');
 
   // Test deleteFolder()
   // Blokada usuwania folderów systemowych:

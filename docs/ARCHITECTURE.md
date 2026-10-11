@@ -213,9 +213,10 @@ Podczas przewijania przeglądarka usuwa niewidoczne elementy i wstawia nowe wier
 
 Aby zapewnić płynne działanie, detektor tworzy obiekt `MutationObserver`:
 - Obserwuje dodawanie i usuwanie węzłów w elemencie `document.body`.
-- Wykorzystuje technikę dławienia wywołań (**throttling**) z interwałem 150–200 ms.
+- Wykorzystuje technikę dławienia wywołań (**throttling**) z interwałem 250 ms.
 - Chroni procesor przed nadmiernym obciążeniem podczas szybkiego przewijania listy.
-- Błyskawicznie oznacza nowo doładowane wiersze czatów i stosuje aktywny filtr.
+- Błyskawicznie oznacza nowo doładowane wiersze czatów i stosuje aktywny filtr przy użyciu pamięci podręcznej (bez odpytywania pamięci `chrome.storage.local`).
+- Pasek folderów jest wstrzykiwany tylko w razie potrzeby (przy starcie lub gdy kontener zostanie usunięty przez SPA).
 
 ---
 
