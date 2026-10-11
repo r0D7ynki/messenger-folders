@@ -11,7 +11,7 @@
   "wip": {
     "in-progress": 3,
     "in-progress-per-model": 1,
-    "review": 4
+    "review": 6
   },
   "sizes": {
     "S": "1 plik, do ~50 zmienionych linii, bez zmian w API modułów",
