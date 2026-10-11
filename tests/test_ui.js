@@ -652,6 +652,49 @@ assert.ok(ui.settingsModal, 'ui.settingsModal powinno być instancją SettingsMo
 
 console.log('✓ Architektura modułowa zweryfikowana pomyślnie.');
 
+// 4. Odznaki nieprzeczytanych w pigułkach folderów (MF-014)
+console.log('Test 4: odznaki nieprzeczytanych (_updatePillBadges / updateFolderCounts)...');
+const unreadBarComp = new FolderBarComp(ui);
+const unreadBar = unreadBarComp.render(sampleFolders, 'all', { work: 2 }, { work: 0 });
+if (!global.document.getElementById('mf-folder-bar')) {
+  mockBody.appendChild(unreadBar);
+}
+const workPill = () => global.document.getElementById('mf-folder-bar').querySelectorAll('.mf-folder-pill')[1];
+const unreadBadgeOf = (pill) => pill.querySelector('.mf-folder-unread-badge');
+assert.strictEqual(workPill().dataset.folderId, 'work', 'Druga pigułka to folder "work"');
+assert.strictEqual(unreadBadgeOf(workPill()), null, 'Brak odznaki przy 0 nieprzeczytanych');
+
+for (const n of [1, 42, 99]) {
+  unreadBarComp.updateFolderCounts({ work: 2 }, { work: n });
+  const unreadBadge = unreadBadgeOf(workPill());
+  assert.ok(unreadBadge, `Odznaka powinna istnieć przy ${n} nieprzeczytanych`);
+  assert.strictEqual(unreadBadge.textContent, String(n), `Odznaka pokazuje liczbę ${n}`);
+  assert.strictEqual(unreadBadge.innerHTML, '', 'Treść odznaki ustawiana przez textContent, nie innerHTML');
+  assert.strictEqual(
+    workPill().querySelectorAll('.mf-folder-unread-badge').length,
+    1,
+    'Kolejna aktualizacja nie dubluje odznaki'
+  );
+}
+
+unreadBarComp.updateFolderCounts({ work: 2 }, { work: 100 });
+assert.strictEqual(unreadBadgeOf(workPill()).textContent, '99+', 'Przy 100 nieprzeczytanych odznaka pokazuje 99+');
+
+unreadBarComp.updateFolderCounts({ work: 2 }, { work: 0 });
+assert.strictEqual(unreadBadgeOf(workPill()), null, 'Odznaka znika po spadku licznika do 0');
+
+unreadBarComp.updateFolderCounts({ work: 2 }, { work: '<img src=x onerror=alert(1)>' });
+assert.strictEqual(unreadBadgeOf(workPill()), null, 'Nieliczbowa wartość licznika nie tworzy odznaki');
+
+const folderBarSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui', 'folder-bar.js'), 'utf8');
+const pillBadgesBody = folderBarSource.slice(
+  folderBarSource.indexOf('_updatePillBadges(pill, fId'),
+  folderBarSource.indexOf('updateFolderCounts(counts = {}')
+);
+assert.ok(pillBadgesBody.includes('unreadBadge.textContent = unreadText'), 'Odznaka ustawiana przez textContent');
+assert.ok(!pillBadgesBody.includes('innerHTML'), '_updatePillBadges nie używa innerHTML');
+console.log('✓ Odznaka: brak przy 0, liczba 1–99, 99+ przy 100, usunięcie po spadku do 0, treść przez textContent.');
+
 console.log('\n=============================================');
 console.log('WSZYSTKIE TESTY INTERFEJSU ZAKOŃCZONE SUKCESEM! ✓');
 console.log('=============================================');

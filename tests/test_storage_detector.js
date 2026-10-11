@@ -567,11 +567,108 @@ function runDetectorTests() {
   assert.strictEqual(detector.isThreadUnread(row(mockElement('span', { 'data-unread': 'true' }))), true);
   assert.strictEqual(detector.isThreadUnread(row(mockElement('span', {}))), false);
   console.log('✓ detector.isThreadUnread() pomija akcje „Oznacz jako nieprzeczytane” i awatary, bez klas CSS');
+
+  // Testy isThreadUnread (MF-014): po jednym przypadku na każdy krok heurystyki i wiersz przeczytany
+  const threadLink = (attrs = {}, children = []) =>
+    mockElement('a', { href: '/t/123/', role: 'link', ...attrs }, children);
+  assert.strictEqual(
+    detector.isThreadUnread(mockElement('div', { role: 'row', 'data-testid': 'unread_row' }, [threadLink()])),
+    true,
+    'Krok 1: data-testid z „unread” na samym wierszu'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(row(threadLink({}, [mockElement('span', { 'aria-label': '1 unread message' })]))),
+    true,
+    'Krok 2: potomek z aria-label „unread”'
+  );
+  const labelledRow = mockElement('div', { role: 'row', 'aria-label': 'Jan Kowalski, nieprzeczytane' }, [threadLink()]);
+  assert.strictEqual(detector.isThreadUnread(labelledRow), true, 'Krok 3: aria-label wiersza');
+  const plainLink = threadLink({ 'aria-label': 'Anna Nowak — unread messages' });
+  assert.strictEqual(detector.isThreadUnread(row(plainLink), plainLink), true, 'Krok 3: aria-label linku');
+  const actionLink = threadLink({ 'aria-label': 'Mark as unread' });
+  assert.strictEqual(detector.isThreadUnread(row(), actionLink), false, 'Krok 3: etykieta akcji „Mark as unread”');
+  assert.strictEqual(
+    detector.isThreadUnread(row(threadLink({}, [mockElement('span', { style: 'background-color: #0084FF' })]))),
+    true,
+    'Krok 4: niebieska kropka #0084FF'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(mockElement('div', { role: 'row', 'data-unread': 'true' }, [threadLink()])),
+    true,
+    'Krok 5: data-unread="true" na wierszu'
+  );
+  const readRow = row(
+    threadLink({ 'aria-label': 'Jan Kowalski' }, [
+      mockElement('img', { src: 'avatar.jpg', style: 'border: 2px solid rgb(0, 132, 255)' }),
+      mockElement('span', { dir: 'auto' }),
+      mockElement('span', { 'data-unread': 'false' })
+    ]),
+    mockElement('div', { role: 'button', 'aria-label': 'Menu' })
+  );
+  assert.strictEqual(detector.isThreadUnread(readRow, readRow.children[0]), false, 'Wiersz przeczytany → false');
+  assert.strictEqual(detector.isThreadUnread(null), false, 'Brak wiersza → false');
+  console.log('✓ detector.isThreadUnread() ma test na każdy krok heurystyki i na wiersz przeczytany');
+}
+
+/**
+ * Ładuje src/content.js w osobnym kontekście vm z atrapami modułów i zwraca calculateUnreadCounts.
+ * document.readyState === 'loading', więc start() nie rusza — testujemy tylko czystą funkcję.
+ * @returns {Function} calculateUnreadCounts z content.js.
+ */
+function loadCalculateUnreadCounts() {
+  const vm = require('vm');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'content.js'), 'utf8');
+  const sandbox = {
+    console: { log() {}, warn() {}, error() {} },
+    MessengerFoldersStorage: class {},
+    MessengerDOMDetector: class {},
+    MessengerFoldersUI: class {},
+    window: { location: { href: 'https://www.messenger.com/' } },
+    document: { readyState: 'loading', addEventListener() {} }
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(source, sandbox);
+  assert.strictEqual(typeof sandbox.calculateUnreadCounts, 'function', 'content.js eksportuje calculateUnreadCounts');
+  return sandbox.calculateUnreadCounts;
+}
+
+function runUnreadCountsTests() {
+  const calculateUnreadCounts = loadCalculateUnreadCounts();
+  const folders = [{ id: 'all' }, { id: 'work' }, { id: 'friends' }];
+  const threadsMap = { t1: { folderId: 'work' }, t2: { folderId: 'work' }, t3: { folderId: 'friends' } };
+  const detected = [
+    { threadId: 't1', isUnread: true },
+    { threadId: 't2', isUnread: true },
+    { threadId: 't3', isUnread: false },
+    { threadId: 't4', isUnread: true },
+    { threadId: 't1', isUnread: true },
+    { threadId: ' t2 ', isUnread: true }
+  ];
+  const counts = calculateUnreadCounts(detected, threadsMap, folders);
+  assert.strictEqual(counts.all, 3, "Suma dla 'all' to liczba unikalnych nieprzeczytanych wątków");
+  assert.strictEqual(counts.work, 2, 'Ten sam wątek dwa razy w DOM liczony raz');
+  assert.strictEqual(counts.friends, 0, 'Przeczytany wątek nie zwiększa licznika folderu');
+  assert.strictEqual(counts.uncategorized, 1, 'Wątek nieprzypisany trafia do uncategorized');
+  assert.strictEqual(
+    counts.all,
+    counts.work + counts.friends + counts.uncategorized,
+    "Suma 'all' równa sumie folderów"
+  );
+
+  const empty = calculateUnreadCounts([], threadsMap, folders);
+  assert.deepStrictEqual(
+    { ...empty },
+    { all: 0, work: 0, friends: 0, uncategorized: 0 },
+    'Brak wątków → same zera, także dla uncategorized'
+  );
+  assert.strictEqual(calculateUnreadCounts(null, null, null).all, 0, 'Niepoprawne wejście → 0');
+  console.log("✓ calculateUnreadCounts(): suma dla 'all', nieprzypisane → uncategorized, duplikaty liczone raz");
 }
 
 (async () => {
   await runStorageTests();
   runDetectorTests();
+  runUnreadCountsTests();
   console.log('\n=============================================');
   console.log('WSZYSTKIE TESTY ZAKOŃCZYŁY SIĘ POWODZENIEM! ✓');
   console.log('=============================================');
