@@ -1,5 +1,5 @@
 {
-  "swarmboard_tool_hash": "d9a53ad71ed0a7f1f9c6c67df413eabf27ec5be65513c8248d8518c8251cc1b0",
+  "swarmboard_tool_hash": "02608d9ba68681fb36b1baf2e3abc7f030c724d6371640fed3b187cc788968e6",
   "prefix": "MF",
   "columns": [
     "backlog",
@@ -62,5 +62,5 @@
   ],
   "headings": "pl",
   "tool_dir": "scripts/kanban",
-  "swarmboard_version": "0.6.8"
+  "swarmboard_version": "0.6.14"
 }
