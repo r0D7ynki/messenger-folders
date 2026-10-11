@@ -11,6 +11,12 @@
 (function (global) {
   'use strict';
 
+  /** Selektor elementów interaktywnych (akcje), których potomkowie nie są wskaźnikami stanu. */
+  const ACTION_SELECTOR = 'button, [role="button"], [role="menuitem"]';
+
+  /** Etykieta akcji „Oznacz … jako nieprzeczytane” / „Mark as unread” — ze słowem, nie z „Oznaczony…”. */
+  const ACTION_LABEL_PATTERN = /(?<!\p{L})(?:oznacz|mark[\s_-]*as)(?!\p{L})/iu;
+
   class MessengerDOMDetector {
     /**
      * Tworzy instancję detektora DOM.
@@ -213,11 +219,11 @@
      * @returns {boolean} Czy element należy pominąć jako akcję.
      */
     _isActionElement(element) {
-      if (element.matches?.('button, [role="button"], [role="menuitem"]')) {
+      if (element.closest?.(ACTION_SELECTOR) || element.matches?.(ACTION_SELECTOR)) {
         return true;
       }
       const label = `${element.getAttribute?.('aria-label') || ''} ${element.getAttribute?.('data-testid') || ''}`;
-      return /oznacz|mark[\s_-]*as/i.test(label);
+      return ACTION_LABEL_PATTERN.test(label);
     }
 
     /**
@@ -228,7 +234,14 @@
      */
     _isAvatarElement(element) {
       const tag = (element.tagName || '').toUpperCase();
-      return tag === 'IMG' || tag === 'IMAGE' || Boolean(element.querySelector?.('img, image'));
+      if (tag === 'IMG' || tag === 'IMAGE' || tag === 'SVG' || element.getAttribute?.('role') === 'img') {
+        return true;
+      }
+      // Awatar-div z obrazem w tle (bez <img>)
+      if (/url\(/i.test(element.getAttribute?.('style') || '')) {
+        return true;
+      }
+      return Boolean(element.querySelector?.('img, image'));
     }
 
     /**
@@ -291,7 +304,7 @@
       const linkLabel = (linkElement?.getAttribute?.('aria-label') || '').toLowerCase();
       const combinedLabel = `${rowLabel} ${linkLabel}`;
       if (combinedLabel.includes('nieprzeczytan') || combinedLabel.includes('unread')) {
-        if (!/oznacz|mark[\s_-]*as/.test(combinedLabel)) {
+        if (!ACTION_LABEL_PATTERN.test(combinedLabel)) {
           return true;
         }
       }
