@@ -33,6 +33,7 @@ Szanuje Twoją prywatność i chroni historię rozmów.
 - **Dedykowane centrum ustawień**: Otwieraj okno zarządzania folderami przyciskiem przypiętym obok wyszukiwarki.
 - **Czysty widok czatów**: Lista wiadomości pozostaje uporządkowana i czytelna bez zbędnych etykiet.
 - **Wskaźnik w otwartym czacie**: Pigułka w nagłówku aktywnej rozmowy pokazuje jej aktualny folder.
+- **Reguły automatycznego przypisywania**: Nowe rozmowy same trafiają do folderów według nazwy czatu lub identyfikatora wątku.
 - **Kopia zapasowa JSON**: Eksportuj całą konfigurację do pliku. Bez trudu przenieś dane na inny komputer.
 - **Wsparcie dla trybu ciemnego**: Interfejs automatycznie dopasowuje kolory do jasnego i ciemnego motywu Messengera.
 - **Pełna zgodność z Manifest V3**: Rozszerzenie wykorzystuje najnowszy standard bezpieczeństwa i wydajności Chrome.
@@ -167,6 +168,55 @@ Rozmowę możesz przypisać na trzy proste sposoby:
 4. Na nowym urządzeniu kliknij **Importuj z pliku** i wskaż pobrany wcześniej plik.
 5. Wtyczka natychmiast odtworzy Twoje foldery i wszystkie przypisania.
 
+Kopia zapasowa nie obejmuje reguł automatycznego przypisywania. Po przeniesieniu danych na nowe
+urządzenie utwórz reguły ponownie.
+
+### 6. Reguły automatycznego przypisywania
+
+Reguła sama przypisuje rozmowę do folderu, gdy nazwa czatu lub identyfikator wątku spełnia
+podane warunki. Wtyczka sprawdza reguły przy otwarciu Messengera, podczas przewijania listy czatów
+i po każdej zmianie reguł.
+
+**Jak dodać regułę:**
+1. Kliknij przycisk zębatki `⚙️` na pasku folderów.
+2. Przejdź do zakładki **⚡ Reguły** i kliknij **Nowa reguła**.
+3. Wpisz nazwę reguły i wybierz **Folder docelowy**.
+4. Ustaw **Priorytet** i tryb dopasowania: wszystkie warunki muszą pasować albo wystarczy jeden.
+5. Dodaj warunki. Każdy warunek ma pole (**Nazwa czatu** albo **ID wątku**), operator i wartość.
+6. Sprawdź licznik **Liczba pasujących czatów** pod formularzem.
+7. Kliknij **Zapisz regułę**.
+
+Na liście reguł możesz regułę włączyć lub wyłączyć przełącznikiem, edytować ołówkiem albo usunąć.
+
+**Operatory:**
+
+| Operator | Znaczenie |
+| :--- | :--- |
+| Zawiera | Tekst zawiera wartość. Kilka wartości po przecinku oznacza „którakolwiek z nich”, np. `projekt, budowa`. |
+| Zaczyna się od | Tekst zaczyna się od wartości. |
+| Kończy się na | Tekst kończy się na wartości. |
+| Dokładne | Tekst jest identyczny z wartością. |
+| Wyrażenie (RegEx) | Tekst pasuje do wyrażenia regularnego, np. `^Zespół \d+$`. |
+
+Wielkość liter nie ma znaczenia. W operatorach innych niż RegEx wtyczka pomija spacje na początku
+i końcu wartości.
+
+**Priorytet:** każda rozmowa trafia do folderu pierwszej pasującej reguły. Wtyczka sprawdza reguły
+od najniższego priorytetu, więc reguła z priorytetem `0` wygrywa z regułą z priorytetem `5`.
+Domyślny priorytet to `10`.
+
+**Ręczne przypisania:** reguła domyślnie pomija rozmowy, które są już w folderze innym niż
+**Inne**. Zaznacz **Nadpisuj wcześniejsze ręczne przypisania**, jeśli reguła ma przenosić także
+takie rozmowy. Usunięcie lub wyłączenie reguły nie cofa przypisań, które już wykonała.
+
+**Wyrażenia regularne i ich ograniczenia:**
+- Wtyczka odrzuca wzorce dłuższe niż 250 znaków.
+- Wtyczka odrzuca wzorce z zagnieżdżonymi powtórzeniami, np. `(a+)+` albo `(\d*)*`. Takie wzorce
+  mogą zawiesić kartę przeglądarki.
+- Odrzucony albo niepoprawny wzorzec nie zgłasza błędu. Nie pasuje wtedy do żadnej rozmowy.
+  Licznik **Liczba pasujących czatów** pokaże `0`.
+- Używaj prostych wzorców i unikaj powtórzeń grup z alternatywą, np. `(a|ab)*`.
+
 ---
 
 ## Prywatność i bezpieczeństwo
@@ -191,7 +241,14 @@ messenger-folders/
 ├── src/
 │   ├── storage.js             # Pamięć lokalna i synchronizacja danych
 │   ├── detector.js            # Wykrywanie elementów DOM i odporność na zmiany klas
-│   ├── ui.js                  # Pasek folderów, plakietki, menu i okna modalne
+│   ├── rules.js               # Silnik reguł automatycznego przypisywania
+│   ├── ui.js                  # Fasada interfejsu łącząca moduły z katalogu ui/
+│   ├── ui/
+│   │   ├── core.js            # Stałe, ikony SVG, bezpieczny DOM i powiadomienia
+│   │   ├── folder-bar.js      # Pasek folderów z wyszukiwarką i licznikami
+│   │   ├── folder-modal.js    # Okno tworzenia i edycji folderu
+│   │   ├── thread-menu.js     # Menu przypisania, plakietki i pigułka w nagłówku
+│   │   └── settings-modal.js  # Okno ustawień z zakładkami i edytorem reguł
 │   ├── content.js             # Główny skrypt integrujący moduły na stronie
 │   └── content.css            # Style interfejsu z obsługą motywu jasnego i ciemnego
 ├── popup/
@@ -200,7 +257,11 @@ messenger-folders/
 │   └── popup.js               # Logika zarządzania folderami i kopią zapasową
 ├── icons/                     # Ikony rozszerzenia w różnych formatach
 ├── tests/
-│   └── test_storage_detector.js # Zestaw automatycznych testów jednostkowych
+│   ├── test_storage_detector.js # Testy pamięci, detektora i koordynatora
+│   ├── test_ui.js             # Testy warstwy interfejsu
+│   ├── test_rules.js          # Testy silnika reguł
+│   ├── fixtures/              # Statyczna kopia DOM Messengera dla testów E2E
+│   └── e2e/                   # Testy E2E Playwright
 └── docs/
     ├── INSTALL_MOBILE.md      # Instrukcja uruchomienia na smartfonie
     └── ARCHITECTURE.md        # Szczegółowa dokumentacja techniczna
