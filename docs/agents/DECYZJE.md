@@ -33,6 +33,9 @@ requeście. Narzędzia i zmiany kodu w osobnych PR.
 **Decyzja:** rozszerzenie oficjalnie wspiera przeglądarkę Mozilla Firefox w standardzie Manifest V3 (Gecko MV3). W `manifest.json` dodano sekcję `browser_specific_settings.gecko` z ID (`messenger-folders@local`), minimalną wersją (`strict_min_version: "109.0"`) i deklaracją `data_collection_permissions: { required: ["none"] }` oraz fallback `background.scripts: ["background/background.js"]` dla silnika Gecko. Polecenie `npm run lint:firefox` (`web-ext lint`) zostało włączone do głównego łańcucha weryfikacji projektu `npm run verify` w `package.json`.
 **Powód:** realizacja zadania MF-009 i wymagania R1. Kod źródłowy używa uniwersalnego API `chrome.*`, w pełni wspieranego przez Firefoksa, a konfiguracja Gecko MV3 eliminuje błędy `ADDON_ID_REQUIRED` i `BACKGROUND_SERVICE_WORKER_NOFALLBACK`. Włączenie `web-ext lint` do `verify` trwale zapobiega regresjom kompatybilności wieloplatformowej w CI.
 
+**Aktualizacja MF-025 (2026-10-11):** minimalna wersja to `strict_min_version: "140.0"`, a dla `gecko_android` — `"142.0"` (wartość `"109.0"` z pierwotnej decyzji jest nieaktualna).
+**Powód:** klucz `data_collection_permissions`, którego manifest używa, istnieje dopiero od Firefoksa 140 (Firefox for Android 142) — przy niższej wartości `npm run lint:firefox` zgłasza ostrzeżenia `KEY_FIREFOX_UNSUPPORTED_BY_MIN_VERSION` i `KEY_FIREFOX_ANDROID_UNSUPPORTED_BY_MIN_VERSION`, czyli deklaruje wsparcie dla wersji, w których manifest nie jest w pełni obsługiwany. Dodatkowo w MV3 przed Firefoksem 127 uprawnienia z `host_permissions` nie są nadawane przy instalacji, więc rozszerzenie nie działałoby bez ręcznej zgody użytkownika.
+
 ## D-005 · 2026-10-10 · przyjęta — Issues jako wejście, karty jako źródło prawdy
 
 **Decyzja:** zgłoszenia z zewnątrz przez GitHub Issues (szablony z polami DoR), praca agentów
