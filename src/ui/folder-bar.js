@@ -24,8 +24,13 @@
 
   /**
    * Ustawia roving tabindex (wzorzec WAI-ARIA Tabs): dokładnie jedna pigułka ma
-   * tabindex="0", pozostałe "-1". Punktem odniesienia jest pigułka preferowana (np. z fokusem),
-   * w razie jej braku — pigułka aktywna, a gdy żadna nie jest aktywna — pierwsza widoczna.
+   * tabindex="0", pozostałe "-1".
+   *
+   * Jedynym źródłem prawdy o bieżącym przystanku Tab jest atrybut `tabindex="0"` w DOM, a nie
+   * stan zapamiętany w domknięciu — dzięki temu aktualizacja liczników, filtrowanie wyszukiwarką
+   * i odświeżenie paska nie rozjeżdżają przystanku Tab z pigułką wskazaną strzałkami.
+   * Kolejność wyboru pigułki: pigułka preferowana (np. z fokusem), potem dotychczasowy przystanek
+   * Tab z DOM, potem pigułka aktywna, na końcu pierwsza widoczna.
    * @param {HTMLElement} container - Kontener pigułek (role="tablist")
    * @param {HTMLElement} [preferredPill] - Pigułka, która ma przejąć przystanek Tab
    * @returns {HTMLElement|null} Pigułka z tabindex="0"
@@ -36,15 +41,22 @@
     const allPills = Array.from(container.querySelectorAll('.mf-folder-pill'));
     if (!allPills.length) return null;
 
-    const visiblePills = visibleFolderPills(container);
+    // Jedno przejście po pigułkach: pula widocznych (pomijamy ukryte filtrem) i bieżący przystanek Tab
+    const isVisible = (pill) => !pill.classList.contains('mf-pill-hidden') && pill.style.display !== 'none';
+    const visiblePills = allPills.filter(isVisible);
     const pool = visiblePills.length ? visiblePills : allPills;
+    const inPool = (pill) => Boolean(pill) && pool.indexOf(pill) !== -1;
 
-    let target = preferredPill && pool.indexOf(preferredPill) !== -1 ? preferredPill : null;
+    let target = inPool(preferredPill) ? preferredPill : null;
+    if (!target) target = pool.find((pill) => pill.getAttribute('tabindex') === '0') || null;
     if (!target) target = pool.find((pill) => pill.classList.contains('mf-active')) || null;
     if (!target) target = pool[0];
 
     allPills.forEach((pill) => {
-      pill.setAttribute('tabindex', pill === target ? '0' : '-1');
+      const tabindex = pill === target ? '0' : '-1';
+      if (pill.getAttribute('tabindex') !== tabindex) {
+        pill.setAttribute('tabindex', tabindex);
+      }
     });
     return target;
   }
@@ -169,7 +181,8 @@
         }
       });
 
-      // Roving tabindex: po aktualizacji liczników nadal dokładnie jedna pigułka ma tabindex="0"
+      // Roving tabindex: po aktualizacji liczników nadal dokładnie jedna pigułka ma tabindex="0",
+      // a przystanek Tab zostaje tam, gdzie wskazał go użytkownik (źródło prawdy: tabindex w DOM)
       applyRovingTabindex(bar.querySelector('.mf-folder-scroll-container'));
 
       return bar;
@@ -282,6 +295,10 @@
           existingIds.every((id, idx) => id === newIds[idx]);
 
         if (isSameStructure) {
+          // Folder aktywny przed tą aktualizacją — zmiana wyboru przenosi przystanek Tab na nową pigułkę
+          const previousActive = Array.from(existingPills).find((p) => p.classList.contains('mf-active'));
+          const previousActiveId = previousActive ? previousActive.dataset.folderId : null;
+
           // Zaktualizuj ikony i pozycję przycisków przewijania
           const btnL = pillsRow.querySelector('.mf-scroll-btn-left');
           if (btnL) {
@@ -348,13 +365,20 @@
             });
           }
 
-          // Roving tabindex po aktualizacji w miejscu: kontener to tablist, jedna pigułka na Tab
+          // Roving tabindex po aktualizacji w miejscu: kontener to tablist, jedna pigułka na Tab.
+          // Zmiana aktywnego folderu (spoza kliknięcia pigułki) przenosi przystanek Tab na nową
+          // pigułkę aktywną; w pozostałych przypadkach zostaje on tam, gdzie wskazał go użytkownik
+          // (źródło prawdy: atrybut tabindex="0" w DOM, nie stan domknięcia).
           const scrollContainer = pillsRow.querySelector('.mf-folder-scroll-container');
           if (scrollContainer) {
             scrollContainer.setAttribute('role', 'tablist');
             scrollContainer.setAttribute('aria-label', 'Foldery rozmów');
             scrollContainer.setAttribute('aria-orientation', 'horizontal');
-            applyRovingTabindex(scrollContainer);
+            const selectionChanged = previousActiveId !== activeFolderId;
+            const preferredPill = selectionChanged
+              ? Array.from(existingPills).find((pill) => pill.dataset.folderId === activeFolderId) || null
+              : null;
+            applyRovingTabindex(scrollContainer, preferredPill);
           }
 
           return bar; // Gotowe, zero resetu DOM!
@@ -450,45 +474,37 @@
         btnRight.classList.toggle('mf-visible', maxScroll > 6 && container.scrollLeft < maxScroll - 6);
       };
 
-      // Bieżący przystanek Tab w pasku (roving tabindex) — pigułka z tabindex="0"
-      let rovingPill = null;
-
-      // Ustawia przystanek Tab (bez przenoszenia fokusu) na pigułce preferowanej lub
-      // na aktywnej, gdy preferowana jest nieobecna albo ukryta filtrem wyszukiwania.
-      const applyRoving = (preferredPill) => {
-        rovingPill = applyRovingTabindex(container, preferredPill || rovingPill);
-        return rovingPill;
-      };
-
       // Przenosi fokus i przystanek Tab na pigułkę — bez zmiany aktywnego folderu
       // (manualna aktywacja: folder zmienia dopiero Enter/Spacja/kliknięcie).
       const focusPill = (pill) => {
         if (!pill) return;
-        applyRoving(pill);
+        applyRovingTabindex(container, pill);
         if (typeof pill.focus === 'function') pill.focus();
         if (typeof pill.scrollIntoView === 'function') {
           pill.scrollIntoView({ inline: 'nearest', block: 'nearest' });
         }
       };
 
-      // Strzałki, Home i End przenoszą fokus między widocznymi pigułkami, z zawijaniem
+      // Strzałki, Home i End przenoszą fokus między widocznymi pigułkami, z zawijaniem.
+      // Reagujemy wyłącznie na zdarzenia pochodzące z pigułki: klawisze na innym elemencie
+      // (np. przycisku „Dodaj nowy folder”) nie mogą kraść fokusu ani blokować domyślnej akcji.
       container.addEventListener('keydown', (event) => {
-        if (event.altKey || event.ctrlKey || event.metaKey) return;
+        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+
+        const targetPill = event.target;
+        if (!targetPill || !targetPill.classList || !targetPill.classList.contains('mf-folder-pill')) {
+          return;
+        }
 
         const pills = visibleFolderPills(container);
-        if (!pills.length) return;
-
-        const targetPill =
-          event.target && event.target.classList && event.target.classList.contains('mf-folder-pill')
-            ? event.target
-            : rovingPill;
         const currentIdx = pills.indexOf(targetPill);
+        if (currentIdx === -1) return;
 
         let nextIdx = null;
         if (event.key === 'ArrowRight') {
-          nextIdx = currentIdx === -1 ? 0 : (currentIdx + 1) % pills.length;
+          nextIdx = (currentIdx + 1) % pills.length;
         } else if (event.key === 'ArrowLeft') {
-          nextIdx = currentIdx === -1 ? pills.length - 1 : (currentIdx - 1 + pills.length) % pills.length;
+          nextIdx = (currentIdx - 1 + pills.length) % pills.length;
         } else if (event.key === 'Home') {
           nextIdx = 0;
         } else if (event.key === 'End') {
@@ -519,8 +535,9 @@
             pill.style.removeProperty('display');
           }
         });
-        // Przystanek Tab nie może zostać na pigułce ukrytej filtrem
-        applyRoving();
+        // Przystanek Tab nie może zostać na pigułce ukrytej filtrem — jeśli nią był,
+        // applyRovingTabindex przenosi go na pigułkę aktywną (albo pierwszą widoczną)
+        applyRovingTabindex(container);
         updateScrollButtons();
       };
 
@@ -544,9 +561,7 @@
           applyFolderFilter();
         } else if (event.key === 'Enter') {
           event.preventDefault();
-          const firstVisiblePill = Array.from(container.querySelectorAll('.mf-folder-pill')).find(
-            (p) => !p.classList.contains('mf-pill-hidden') && p.style.display !== 'none'
-          );
+          const firstVisiblePill = visibleFolderPills(container)[0];
           if (firstVisiblePill) {
             if (typeof firstVisiblePill.click === 'function') {
               firstVisiblePill.click();
@@ -569,7 +584,7 @@
         pill.setAttribute('data-mf-pill', 'true');
         pill.setAttribute('role', 'tab');
         pill.setAttribute('aria-selected', isActive ? 'true' : 'false');
-        // Roving tabindex: tylko pigułka aktywna jest przystankiem Tab (applyRoving na końcu)
+        // Roving tabindex: tylko pigułka aktywna jest przystankiem Tab (applyRovingTabindex na końcu)
         pill.setAttribute('tabindex', isActive ? '0' : '-1');
         const unreadVal = Number(resolvedUnreadCounts[folder.id]) || 0;
         pill.title =
@@ -604,7 +619,7 @@
 
         // Fokus z klawiatury lub myszy przenosi przystanek Tab na tę pigułkę
         pill.addEventListener('focus', () => {
-          applyRoving(pill);
+          applyRovingTabindex(container, pill);
         });
 
         // Wybór folderu z natychmiastową reakcją wizualną i filtrowaniem
@@ -614,7 +629,7 @@
             p.classList.toggle('mf-active', isMatch);
             p.setAttribute('aria-selected', isMatch ? 'true' : 'false');
           });
-          applyRoving(pill);
+          applyRovingTabindex(container, pill);
 
           if (this.ui && this.ui.storage) {
             const currentThreads = this.ui.storage._threads || {};
@@ -632,22 +647,23 @@
       });
 
       // Dokładnie jedna pigułka (aktywna) jest przystankiem Tab
-      applyRoving();
+      applyRovingTabindex(container);
 
       if (searchInput.value) {
         applyFolderFilter();
       }
 
-      // Przycisk dodawania nowego folderu na końcu listy pigułek
+      // Przycisk dodawania nowego folderu — rodzeństwo tablisty w rzędzie pigułek,
+      // nigdy wewnątrz role="tablist" (tablist zawiera wyłącznie role="tab")
+      let addBtn = null;
       if (addHandler) {
-        const addBtn = document.createElement('button');
+        addBtn = document.createElement('button');
         addBtn.type = 'button';
         addBtn.className = 'mf-folder-add-btn';
         addBtn.title = 'Dodaj nowy folder';
         addBtn.setAttribute('aria-label', 'Dodaj nowy folder');
         this._setIcon(addBtn, 'plus');
         addBtn.addEventListener('click', () => addHandler());
-        container.appendChild(addBtn);
       }
 
       // Obsługa kliknięć w przyciski przewijania
@@ -677,6 +693,7 @@
       // Składanie struktury
       pillsRow.appendChild(btnLeft);
       pillsRow.appendChild(container);
+      if (addBtn) pillsRow.appendChild(addBtn);
       pillsRow.appendChild(btnRight);
 
       bar.appendChild(topBar);

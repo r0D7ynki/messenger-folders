@@ -746,6 +746,21 @@ assert.deepStrictEqual(idsOf(pillsOf()), ['all', 'work', 'friends'], 'Pigułki w
 Array.from(pillsOf()).forEach((pill) => {
   assert.strictEqual(pill.getAttribute('role'), 'tab', 'Każda pigułka musi mieć role="tab"');
 });
+
+// Tablist zawiera wyłącznie karty — przycisk „Dodaj nowy folder” jest rodzeństwem kontenera
+const pillsRowOf = () => a11yBar.querySelector('.mf-folder-pills-row');
+const a11yAddBtn = pillsRowOf().querySelector('.mf-folder-add-btn');
+assert.ok(a11yAddBtn, 'Przycisk „Dodaj nowy folder” powinien istnieć w rzędzie pigułek');
+assert.strictEqual(
+  tablistOf().querySelector('.mf-folder-add-btn'),
+  null,
+  'Przycisk „Dodaj nowy folder” nie może znajdować się wewnątrz role="tablist"'
+);
+assert.strictEqual(
+  tablistOf().children.filter((child) => child.getAttribute('role') !== 'tab').length,
+  0,
+  'Tablist nie może zawierać elementów innych niż role="tab"'
+);
 assert.strictEqual(tabbablePills().length, 1, 'Dokładnie jedna pigułka jest przystankiem Tab');
 assert.strictEqual(tabbablePills()[0].dataset.folderId, 'work', 'Przystankiem Tab jest pigułka aktywna');
 assert.deepStrictEqual(
@@ -755,12 +770,17 @@ assert.deepStrictEqual(
 );
 
 // Symulacja klawisza na tabliście (w przeglądarce zdarzenie bąbelkuje z pigułki z fokusem)
-const pressKey = (key, target) => {
+const pressKey = (key, target, modifiers = {}) => {
   let prevented = false;
   tablistOf().dispatchEvent({
     type: 'keydown',
     key,
     target: target || null,
+    altKey: false,
+    ctrlKey: false,
+    metaKey: false,
+    shiftKey: false,
+    ...modifiers,
     preventDefault() {
       prevented = true;
     },
@@ -768,6 +788,9 @@ const pressKey = (key, target) => {
   });
   return prevented;
 };
+
+// W przeglądarce `event.target` to pigułka z fokusem
+const pressFromFocus = (key, modifiers) => pressKey(key, global.document.activeElement, modifiers);
 
 // ArrowRight: następna pigułka, bez zmiany aktywnego folderu
 assert.strictEqual(pressKey('ArrowRight', pillsOf()[1]), true, 'ArrowRight jest przechwytywana przez tablist');
@@ -777,20 +800,20 @@ assert.ok(!pillsOf()[2].classList.contains('mf-active'), 'Sam ruch fokusu nie ak
 assert.ok(pillsOf()[1].classList.contains('mf-active'), 'Aktywny folder pozostaje bez zmian');
 
 // Zawijanie w obie strony
-assert.strictEqual(pressKey('ArrowRight'), true, 'ArrowRight jest obsługiwana');
+assert.strictEqual(pressFromFocus('ArrowRight'), true, 'ArrowRight jest obsługiwana');
 assert.strictEqual(focusedId(), 'all', 'ArrowRight z ostatniej pigułki zawija do pierwszej');
-assert.strictEqual(pressKey('ArrowLeft'), true, 'ArrowLeft jest obsługiwana');
+assert.strictEqual(pressFromFocus('ArrowLeft'), true, 'ArrowLeft jest obsługiwana');
 assert.strictEqual(focusedId(), 'friends', 'ArrowLeft z pierwszej pigułki zawija do ostatniej');
 
 // Home i End
-assert.strictEqual(pressKey('End'), true, 'End jest obsługiwana');
+assert.strictEqual(pressFromFocus('End'), true, 'End jest obsługiwana');
 assert.strictEqual(focusedId(), 'friends', 'End przenosi fokus na ostatnią pigułkę');
-assert.strictEqual(pressKey('Home'), true, 'Home jest obsługiwana');
+assert.strictEqual(pressFromFocus('Home'), true, 'Home jest obsługiwana');
 assert.strictEqual(focusedId(), 'all', 'Home przenosi fokus na pierwszą pigułkę');
 
 // Pigułka z fokusem jest przewijana do widoku
 pillsOf()[2].lastScrollIntoView = null;
-pressKey('Home');
+pressFromFocus('Home');
 assert.deepStrictEqual(
   pillsOf()[0].lastScrollIntoView,
   { inline: 'nearest', block: 'nearest' },
@@ -801,6 +824,45 @@ assert.deepStrictEqual(
 global.document.activeElement = null;
 assert.strictEqual(pressKey('a', pillsOf()[0]), false, 'Zwykły klawisz nie jest przechwytywany');
 assert.strictEqual(focusedId(), null, 'Zwykły klawisz nie przenosi fokusu');
+
+// Zdarzenia z elementów innych niż pigułka nie kradną fokusu paskowi folderów
+assert.strictEqual(
+  pressKey('ArrowRight', tablistOf()),
+  false,
+  'Strzałka na samym kontenerze tablisty nie jest przechwytywana'
+);
+assert.strictEqual(focusedId(), null, 'Strzałka na kontenerze tablisty nie przenosi fokusu');
+const nestedInPill = pillsOf()[0].querySelector('.mf-folder-icon');
+assert.strictEqual(
+  pressKey('ArrowLeft', nestedInPill),
+  false,
+  'Zdarzenie z elementu zagnieżdżonego w pigułce nie jest przechwytywane'
+);
+assert.strictEqual(pressKey('End', a11yAddBtn), false, 'End na przycisku „Dodaj nowy folder” nie jest przechwytywany');
+assert.strictEqual(
+  pressKey('Home', a11yAddBtn),
+  false,
+  'Home na przycisku „Dodaj nowy folder” nie jest przechwytywany'
+);
+assert.strictEqual(focusedId(), null, 'Klawisze na obcych elementach nie przenoszą fokusu');
+assert.strictEqual(tabbablePills().length, 1, 'Klawisze na obcych elementach nie psują przystanku Tab');
+assert.strictEqual(tabbablePills()[0].dataset.folderId, 'all', 'Przystanek Tab zostaje na dotychczasowej pigułce');
+
+// Kombinacje z modyfikatorem (Alt/Ctrl/Meta/Shift) są pomijane
+assert.strictEqual(
+  pressKey('ArrowRight', pillsOf()[0], { shiftKey: true }),
+  false,
+  'Shift+ArrowRight nie jest przechwytywany'
+);
+assert.strictEqual(
+  pressKey('ArrowLeft', pillsOf()[0], { altKey: true }),
+  false,
+  'Alt+ArrowLeft nie jest przechwytywany'
+);
+assert.strictEqual(pressKey('End', pillsOf()[0], { ctrlKey: true }), false, 'Ctrl+End nie jest przechwytywany');
+assert.strictEqual(pressKey('Home', pillsOf()[0], { metaKey: true }), false, 'Meta+Home nie jest przechwytywany');
+assert.strictEqual(focusedId(), null, 'Klawisze z modyfikatorem nie przenoszą fokusu');
+assert.strictEqual(tabbablePills()[0].dataset.folderId, 'all', 'Klawisze z modyfikatorem nie zmieniają przystanku Tab');
 
 // Pigułki ukryte filtrem wyszukiwania są pomijane
 const a11ySearch = a11yBar.querySelector('.mf-folder-search-input');
@@ -813,11 +875,11 @@ assert.strictEqual(tabbablePills()[0].dataset.folderId, 'work', 'Ukryta pigułka
 global.document.activeElement = null;
 assert.strictEqual(pressKey('ArrowRight', pillsOf()[1]), true, 'ArrowRight działa przy aktywnym filtrze');
 assert.strictEqual(focusedId(), 'friends', 'Fokus przechodzi na następną widoczną pigułkę');
-assert.strictEqual(pressKey('ArrowRight'), true, 'ArrowRight działa przy aktywnym filtrze');
+assert.strictEqual(pressFromFocus('ArrowRight'), true, 'ArrowRight działa przy aktywnym filtrze');
 assert.strictEqual(focusedId(), 'work', 'Zawijanie pomija pigułki ukryte filtrem');
-assert.strictEqual(pressKey('End'), true, 'End działa przy aktywnym filtrze');
+assert.strictEqual(pressFromFocus('End'), true, 'End działa przy aktywnym filtrze');
 assert.strictEqual(focusedId(), 'friends', 'End trafia na ostatnią widoczną pigułkę');
-assert.strictEqual(pressKey('Home'), true, 'Home działa przy aktywnym filtrze');
+assert.strictEqual(pressFromFocus('Home'), true, 'Home działa przy aktywnym filtrze');
 assert.strictEqual(focusedId(), 'work', 'Home trafia na pierwszą widoczną pigułkę');
 
 a11ySearch.value = '';
@@ -829,14 +891,58 @@ pillsOf()[0].focus();
 assert.strictEqual(tabbablePills().length, 1, 'Nadal dokładnie jedna pigułka na przystanku Tab');
 assert.strictEqual(tabbablePills()[0].dataset.folderId, 'all', 'Fokus z zewnątrz przenosi przystanek Tab');
 
-// Niezmiennik po updateFolderCounts()
+// Niezmiennik po updateFolderCounts(): przystanek Tab zostaje tam, gdzie jest w DOM —
+// aktualizacja liczników nie może cofać go na pigułkę aktywną
 a11yComp.updateFolderCounts({ work: 4 }, { work: 5 });
 assert.strictEqual(tabbablePills().length, 1, 'Po updateFolderCounts() nadal dokładnie jeden przystanek Tab');
 assert.strictEqual(
   tabbablePills()[0].dataset.folderId,
-  'work',
-  'Po updateFolderCounts() przystanek Tab wraca na pigułkę aktywną'
+  'all',
+  'updateFolderCounts() nie cofa przystanku Tab na pigułkę aktywną'
 );
+
+// Jedno źródło prawdy (tabindex w DOM): strzałka → updateFolderCounts() → filtr wyszukiwania
+// nie rozjeżdżają przystanku Tab z pigułką wskazaną strzałkami
+global.document.activeElement = null;
+assert.strictEqual(pressKey('ArrowRight', pillsOf()[0]), true, 'ArrowRight przenosi fokus na kolejną pigułkę');
+assert.strictEqual(focusedId(), 'work', 'Fokus na pigułce "work"');
+assert.strictEqual(tabbablePills().length, 1, 'Dokładnie jedna pigułka z tabindex="0" po strzałce');
+assert.strictEqual(tabbablePills()[0].dataset.folderId, 'work', 'Przystanek Tab na pigułce wskazanej strzałką');
+
+assert.strictEqual(pressKey('ArrowRight', pillsOf()[1]), true, 'ArrowRight działa na pigułce nieaktywnej');
+assert.strictEqual(focusedId(), 'friends', 'Fokus na nieaktywnej pigułce "friends"');
+a11yComp.updateFolderCounts({ work: 4 }, { work: 2 });
+assert.strictEqual(tabbablePills().length, 1, 'Dokładnie jedna pigułka z tabindex="0" po updateFolderCounts()');
+assert.strictEqual(
+  tabbablePills()[0].dataset.folderId,
+  'friends',
+  'updateFolderCounts() zachowuje przystanek Tab na pigułce wskazanej strzałkami'
+);
+
+a11ySearch.value = 'a';
+a11ySearch.dispatchEvent({ type: 'input' });
+assert.deepStrictEqual(visibleIdsOf(), ['work', 'friends'], 'Filtr "a" ukrywa folder "Wszystkie"');
+assert.strictEqual(tabbablePills().length, 1, 'Dokładnie jedna pigułka z tabindex="0" po filtrze');
+assert.strictEqual(
+  tabbablePills()[0].dataset.folderId,
+  'friends',
+  'Filtr zachowuje przystanek Tab na widocznej pigułce wskazanej strzałkami'
+);
+
+// Gdy pigułka z przystankiem Tab wypada z puli widocznych, przystanek przechodzi na aktywną
+a11ySearch.value = 'Praca';
+a11ySearch.dispatchEvent({ type: 'input' });
+assert.deepStrictEqual(visibleIdsOf(), ['work'], 'Filtr "Praca" zostawia wyłącznie folder "work"');
+assert.strictEqual(tabbablePills().length, 1, 'Dokładnie jedna pigułka z tabindex="0" po filtrze ukrywającym');
+assert.strictEqual(
+  tabbablePills()[0].dataset.folderId,
+  'work',
+  'Ukrycie pigułki z przystankiem Tab przenosi go na pigułkę aktywną'
+);
+
+a11ySearch.value = '';
+a11ySearch.dispatchEvent({ type: 'input' });
+assert.deepStrictEqual(visibleIdsOf(), ['all', 'work', 'friends'], 'Wyczyszczenie filtra pokazuje wszystkie pigułki');
 
 // Niezmiennik po ponownym renderze bez zmiany struktury (aktualizacja w miejscu)
 a11yComp.render(sampleFolders, 'friends', { work: 4 });
