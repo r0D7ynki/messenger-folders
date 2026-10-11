@@ -244,15 +244,44 @@ przy starcie, po mutacjach listy czatów, po nawigacji SPA, po zapisie w edytorz
 
 ### Ochrona wyrażeń regularnych
 
-Operator `regex` wykonuje wzorzec użytkownika w skrypcie zawartości, więc źle zbudowany wzorzec
-mógłby zablokować kartę Messengera (ReDoS). `matchCondition` odrzuca wzorzec, gdy:
+Operator `regex` wykonuje wzorzec użytkownika w skrypcie zawartości, a JavaScript nie pozwala
+przerwać trwającego dopasowania. Źle zbudowany wzorzec mógłby więc zablokować kartę Messengera
+(ReDoS). Ochronę daje `validateRegexPattern()` w `src/rules.js`, a dokładniej analiza struktury
+wzorca w `analyzeRegexPattern()`. Funkcja zwraca komunikat po polsku albo `null` i odrzuca wzorzec,
+gdy:
 - jest dłuższy niż `MAX_REGEX_PATTERN_LENGTH` (250 znaków),
-- pasuje do heurystyki `DANGEROUS_REGEX_PATTERN` (zagnieżdżone lub sąsiadujące kwantyfikatory,
-  np. `(a+)+`, `(a*)*`, `a++`),
+- powtarza zmienną liczbę razy grupę z alternatywą albo zmiennym kwantyfikatorem, np. `(a|a)*$`,
+  `(a|ab)*c`, `(a+)+`, `((a*)b)*`, `(?:a|b)+` (nawrót wykładniczy przy każdej długości tekstu),
+- ma kwantyfikator tuż po kwantyfikatorze, np. `a++` (leniwe `*?`, `+?`, `??`, `{n,m}?` są poprawne),
+- przekracza budżet kosztu dla nazwy długości `REGEX_REFERENCE_TEXT_LENGTH` (100 znaków),
 - nie kompiluje się (`SyntaxError` jest przechwytywany).
 
-Odrzucony wzorzec zwraca `false` — reguła po prostu nie pasuje. Heurystyka nie rozpoznaje
-powtórzeń grup z alternatywą (np. `(a|a)*$`); wzmocnienie ochrony opisuje karta MF-020.
+**Budżet kosztu** nie opiera się na liście znanych złych wzorców. `analyzeRegexPattern()` liczy
+dwie wartości. Pierwsza to „punkty wyboru”: każdy `?` i każdy `|` podwaja liczbę ścieżek, a
+skończone `{n,m}` dodaje log2(m−n+1). Grupa powtórzona stałą liczbę razy, np. `(\d{1,3}\.){3}`,
+mnoży swoje punkty. Druga wartość to liczba nieograniczonych powtórzeń `*`, `+`, `{n,}`.
+`estimateRegexCostLog2()` szacuje koszt jako
+`2^punkty × C(n + u, u + 1)` (≈ n^(u+1) / (u+1)!) dla tekstu długości n i u powtórzeń.
+Kotwica `^` bez `|` na najwyższym poziomie zdejmuje jeden czynnik n, bo dopasowanie ma jedną
+pozycję startu. Koszt nie może przekroczyć `MAX_REGEX_COST_LOG2` (2·10⁶ kroków; w V8 to najwyżej
+ok. 50 ms w najgorszym przypadku). Przykłady:
+- `a?`×40+`b` i `(a|aa)`×41+`b` są odrzucane,
+- `.*foo.*bar.*` jest odrzucany (3 powtórzenia), a równoważne przy `test()` `foo.*bar` jest przyjmowane,
+- `^\d+-\d+-\d+$` (zakotwiczony) jest przyjmowany.
+
+`matchCondition` nie obcina tekstu. Dla wzorca, który przeszedł walidację, sprawdza koszt dla
+rzeczywistej długości tekstu i zwraca `false` tylko wtedy, gdy tekst jest dłuższy, niż budżet
+przewiduje. Dla jednego powtórzenia (np. `ticket-\d+$`) granica to ok. 2000 znaków, dla dwóch
+ok. 230 znaków. Nazwy wątków są znacznie krótsze. Analizy wzorców są przechowywane w pamięci
+podręcznej, bo `matchCondition` jest wywoływane dla każdego wątku przy każdym skanie.
+
+Walidacja działa w trzech miejscach:
+- edytor reguł (`src/ui/settings-modal.js`) pokazuje komunikat pod warunkiem (`role="alert"`,
+  `textContent`) i nie zapisuje reguły,
+- `saveRule()` rzuca wyjątek dla każdego niepoprawnego wzorca w zapisywanej regule,
+- `saveRules()` rzuca wyjątek dla nowych i zmienionych wzorców. Wzorzec zapisany wcześniej (ta sama
+  reguła i wartość) nie blokuje przełączania ani usuwania innych reguł, a `matchCondition` i tak
+  go nie wykona.
 
 ---
 

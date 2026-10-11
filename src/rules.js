@@ -19,49 +19,78 @@
 
   // Zabezpieczenie przed ReDoS (catastrophic backtracking) i zbyt złożonymi wzorcami
   const MAX_REGEX_PATTERN_LENGTH = 250;
-  // Nazwy wątków i identyfikatory są krótkie — dłuższy tekst przycinamy, by ograniczyć koszt dopasowania
-  const MAX_REGEX_TEXT_LENGTH = 100;
-  // Kilka sąsiednich powtórzeń (np. \w*\w*\w*\w*!) daje nawrót wielomianowy — ograniczamy ich liczbę
-  const MAX_REGEX_REPEATS = 3;
+  // Budżet szacowanej liczby kroków nawrotu dla jednego dopasowania (pomiar w V8: 6–23 ns na krok,
+  // czyli najwyżej ok. 50 ms w najgorszym przypadku)
+  const MAX_REGEX_COST_LOG2 = Math.log2(2e6);
+  // Długość tekstu, dla której wzorzec musi zmieścić się w budżecie, by dało się go zapisać
+  const REGEX_REFERENCE_TEXT_LENGTH = 100;
+  // Pamięć podręczna analiz wzorców (matchCondition wołane jest dla każdego wątku przy każdym skanie)
+  const MAX_REGEX_ANALYSIS_CACHE = 200;
+  const regexAnalysisCache = new Map();
 
   /**
    * Odczytuje kwantyfikator zaczynający się na pozycji `index` (`*`, `+`, `?`, `{n}`, `{n,}`, `{n,m}`).
    * @param {string} pattern Wzorzec wyrażenia regularnego.
    * @param {number} index Pozycja w wzorcu.
-   * @returns {{length: number, repeats: boolean, varies: boolean}|null} Opis kwantyfikatora albo null:
-   *   `repeats` — atom może wystąpić więcej niż raz, `varies` — liczba powtórzeń nie jest stała.
+   * @returns {{length: number, min: number, max: number, repeats: boolean, varies: boolean}|null}
+   *   Opis kwantyfikatora albo null: `repeats` — atom może wystąpić więcej niż raz,
+   *   `varies` — liczba powtórzeń nie jest stała.
    */
   function readQuantifier(pattern, index) {
     const ch = pattern[index];
-    if (ch === '*' || ch === '+') return { length: 1, repeats: true, varies: true };
-    if (ch === '?') return { length: 1, repeats: false, varies: true };
-    if (ch !== '{') return null;
-    const m = /^\{(\d+)(,(\d*))?\}/.exec(pattern.slice(index));
-    if (!m) return null;
-    const min = Number(m[1]);
-    const max = m[2] ? (m[3] === '' ? Infinity : Number(m[3])) : min;
-    return { length: m[0].length, repeats: max > 1, varies: max !== min };
+    let min;
+    let max;
+    let length = 1;
+    if (ch === '*') [min, max] = [0, Infinity];
+    else if (ch === '+') [min, max] = [1, Infinity];
+    else if (ch === '?') [min, max] = [0, 1];
+    else if (ch === '{') {
+      const m = /^\{(\d+)(,(\d*))?\}/.exec(pattern.slice(index));
+      if (!m) return null;
+      min = Number(m[1]);
+      max = m[2] ? (m[3] === '' ? Infinity : Number(m[3])) : min;
+      length = m[0].length;
+    } else {
+      return null;
+    }
+    return { length, min, max, repeats: max > 1, varies: max !== min };
   }
 
   /**
-   * Szuka we wzorcu konstrukcji grożących wykładniczym nawrotem (ReDoS):
-   * kwantyfikatora tuż po kwantyfikatorze (`a++`) oraz powtarzanej grupy, która zawiera
-   * alternatywę albo zmienny kwantyfikator (`(a|a)*`, `(a|ab)*`, `(a+)+`, `((a*)b)*`),
-   * a także więcej niż MAX_REGEX_REPEATS zmiennych powtórzeń (`*`, `+`, `{n,m}`) w całym wzorcu.
-   * Klasy znaków `[...]` i sekwencje ucieczki traktuje jak pojedynczy atom.
+   * Analizuje strukturę wzorca pod kątem nawrotów (ReDoS).
+   *
+   * Zwraca `hazard` dla konstrukcji wykładniczych niezależnie od długości tekstu: kwantyfikatora tuż
+   * po kwantyfikatorze (`a++`) i grupy powtarzanej zmienną liczbę razy, która zawiera alternatywę albo
+   * zmienny kwantyfikator (`(a|a)*`, `(a|ab)*c`, `(a+)+`, `((a*)b)*`).
+   *
+   * Pozostałe wzorce opisuje „punktami wyboru”, z których liczy się koszt dopasowania
+   * (estimateRegexCostLog2): `bits` — log2 liczby wariantów z `?`, `|` i skończonych `{n,m}`
+   * (każdy `?` i każdy `|` podwaja liczbę ścieżek), `unbounded` — liczba powtórzeń `*`, `+`, `{n,}`
+   * (każde mnoży koszt przez długość tekstu). Grupa powtórzona stałą liczbę razy (`(\d{1,3}\.){3}`)
+   * mnoży swoje punkty wyboru. Klasy znaków `[...]` i sekwencje ucieczki są pojedynczym atomem.
+   * `anchored` — wzorzec zaczyna się od `^` i nie ma `|` na najwyższym poziomie (jedna pozycja startu).
+   *
    * @param {string} pattern Wzorzec wyrażenia regularnego.
-   * @returns {string|null} Opis zagrożenia albo null, gdy wzorzec jest bezpieczny.
+   * @returns {{hazard: string|null, bits: number, unbounded: number, anchored: boolean}} Wynik analizy.
    */
-  function findRegexHazard(pattern) {
-    // Ramka na każdy poziom grupy: czy zawiera `|` albo zmienny kwantyfikator
-    const stack = [{ hasAlt: false, hasQuant: false }];
+  function analyzeRegexPattern(pattern) {
+    const newFrame = () => ({ hasAlt: false, hasQuant: false, bits: 0, unbounded: 0 });
+    // Ramka na każdy poziom grupy: alternatywa, zmienny kwantyfikator i punkty wyboru wewnątrz
+    const stack = [newFrame()];
     // Ostatni element: null (brak atomu), 'atom', 'quant' albo ramka zamkniętej grupy
     let last = null;
-    let repeats = 0;
+    let topLevelAlt = false;
     let i = 0;
+    const result = (hazard) => ({
+      hazard,
+      bits: stack[0].bits,
+      unbounded: stack[0].unbounded,
+      anchored: pattern.startsWith('^') && !topLevelAlt
+    });
 
     while (i < pattern.length) {
       const ch = pattern[i];
+      const top = stack[stack.length - 1];
 
       if (ch === '\\') {
         last = 'atom';
@@ -83,7 +112,7 @@
       }
 
       if (ch === '(') {
-        stack.push({ hasAlt: false, hasQuant: false });
+        stack.push(newFrame());
         i++;
         if (pattern[i] === '?') {
           // Grupy specjalne: (?: (?= (?! (?<= (?<! (?<nazwa>
@@ -100,17 +129,21 @@
       }
 
       if (ch === ')') {
-        const frame = stack.length > 1 ? stack.pop() : stack[0];
+        const frame = stack.length > 1 ? stack.pop() : newFrame();
         const parent = stack[stack.length - 1];
         parent.hasAlt = parent.hasAlt || frame.hasAlt;
         parent.hasQuant = parent.hasQuant || frame.hasQuant;
+        parent.bits += frame.bits;
+        parent.unbounded += frame.unbounded;
         last = frame;
         i++;
         continue;
       }
 
       if (ch === '|') {
-        stack[stack.length - 1].hasAlt = true;
+        if (stack.length === 1) topLevelAlt = true;
+        top.hasAlt = true;
+        top.bits += 1;
         last = null;
         i++;
         continue;
@@ -119,22 +152,29 @@
       const quant = readQuantifier(pattern, i);
       if (quant) {
         if (last === 'quant') {
-          return 'Kwantyfikator tuż po kwantyfikatorze (np. a++).';
+          return result('Kwantyfikator tuż po kwantyfikatorze (np. a++).');
         }
-        if (quant.repeats && last && typeof last === 'object' && (last.hasAlt || last.hasQuant)) {
-          return last.hasAlt
-            ? 'Powtarzana grupa z alternatywą „|” (np. (a|b)*) może zawiesić stronę.'
-            : 'Zagnieżdżone kwantyfikatory (np. (a+)+) mogą zawiesić stronę.';
+        if (last && typeof last === 'object' && quant.repeats) {
+          if (quant.varies && (last.hasAlt || last.hasQuant)) {
+            return result(
+              last.hasAlt
+                ? 'Powtarzana grupa z alternatywą „|” (np. (a|b)*) może zawiesić stronę.'
+                : 'Zagnieżdżone kwantyfikatory (np. (a+)+) mogą zawiesić stronę.'
+            );
+          }
+          // Grupa powtórzona stałą liczbę razy: jej punkty wyboru występują `min` razy
+          const extra = Math.min(quant.min, MAX_REGEX_PATTERN_LENGTH) - 1;
+          top.bits += last.bits * extra;
+          top.unbounded += last.unbounded * extra;
         }
         if (quant.varies) {
-          stack[stack.length - 1].hasQuant = true;
-        }
-        if (quant.repeats && quant.varies && ++repeats > MAX_REGEX_REPEATS) {
-          return `Za dużo powtórzeń (*, +, {n,m}) — dozwolone są najwyżej ${MAX_REGEX_REPEATS}.`;
+          top.hasQuant = true;
+          if (quant.max === Infinity) top.unbounded += 1;
+          else top.bits += Math.log2(quant.max - quant.min + 1);
         }
         i += quant.length;
-        // Modyfikator leniwy (*?, +?, {n,m}?) nie jest osobnym kwantyfikatorem
-        if (pattern[i] === '?' && quant.length > 0 && ch !== '?') i++;
+        // Modyfikator leniwy (*?, +?, ??, {n,m}?) nie jest osobnym kwantyfikatorem
+        if (pattern[i] === '?') i++;
         last = 'quant';
         continue;
       }
@@ -143,7 +183,65 @@
       i++;
     }
 
-    return null;
+    return result(null);
+  }
+
+  /**
+   * Zwraca (z pamięci podręcznej) wynik analyzeRegexPattern dla wzorca.
+   * @param {string} pattern Wzorzec wyrażenia regularnego.
+   * @returns {{hazard: string|null, bits: number, unbounded: number, anchored: boolean}} Wynik analizy.
+   */
+  function getRegexAnalysis(pattern) {
+    let analysis = regexAnalysisCache.get(pattern);
+    if (!analysis) {
+      analysis = analyzeRegexPattern(pattern);
+      if (regexAnalysisCache.size >= MAX_REGEX_ANALYSIS_CACHE) {
+        regexAnalysisCache.delete(regexAnalysisCache.keys().next().value);
+      }
+      regexAnalysisCache.set(pattern, analysis);
+    }
+    return analysis;
+  }
+
+  /**
+   * Szacuje log2 liczby kroków nawrotu dla tekstu długości `textLength`: każde z `unbounded`
+   * powtórzeń (i pozycja startu, chyba że wzorzec jest zakotwiczony `^`) wybiera punkt podziału
+   * tekstu — C(n + u, u + 1) ≈ n^(u+1) / (u+1)! — a każdy bit punktów wyboru podwaja liczbę ścieżek.
+   * @param {{bits: number, unbounded: number, anchored: boolean}} analysis Wynik analyzeRegexPattern.
+   * @param {number} textLength Długość dopasowywanego tekstu.
+   * @returns {number} log2 szacowanego kosztu.
+   */
+  function estimateRegexCostLog2(analysis, textLength) {
+    const n = textLength + 1;
+    let log2Cost = analysis.bits;
+    const splitPoints = analysis.unbounded + (analysis.anchored ? 0 : 1);
+    for (let k = 1; k <= splitPoints; k++) {
+      log2Cost += Math.log2((n + k - 1) / k);
+    }
+    return log2Cost;
+  }
+
+  /**
+   * Rzuca błąd, gdy któraś reguła ma niebezpieczny lub błędny wzorzec RegEx (validateRegexPattern).
+   * Wzorce zapisane już wcześniej (ta sama reguła i wartość w `storedRules`) są pomijane, by starsza
+   * reguła nie blokowała usuwania ani przełączania innych — matchCondition i tak ich nie wykona.
+   * @param {Array<Object>} rules Znormalizowane reguły do zapisu.
+   * @param {Array<Object>} [storedRules] Reguły obecnie zapisane w magazynie.
+   */
+  function assertSafeRegexConditions(rules, storedRules = []) {
+    const storedPatterns = new Set();
+    for (const r of storedRules || []) {
+      for (const c of r.conditions || []) {
+        if (c.operator === 'regex') storedPatterns.add(`${r.id}\u0000${c.value}`);
+      }
+    }
+    for (const rule of rules) {
+      for (const cond of rule.conditions || []) {
+        if (cond.operator !== 'regex' || storedPatterns.has(`${rule.id}\u0000${cond.value}`)) continue;
+        const regexError = validateRegexPattern(cond.value);
+        if (regexError) throw new Error(regexError);
+      }
+    }
   }
 
   /**
@@ -156,9 +254,12 @@
     if (valStr.length > MAX_REGEX_PATTERN_LENGTH) {
       return `Wyrażenie jest za długie (maks. ${MAX_REGEX_PATTERN_LENGTH} znaków).`;
     }
-    const hazard = findRegexHazard(valStr);
-    if (hazard) {
-      return hazard;
+    const analysis = getRegexAnalysis(valStr);
+    if (analysis.hazard) {
+      return analysis.hazard;
+    }
+    if (estimateRegexCostLog2(analysis, REGEX_REFERENCE_TEXT_LENGTH) > MAX_REGEX_COST_LOG2) {
+      return 'Wyrażenie ma zbyt wiele możliwości dopasowania (?, *, +, |, {n,m}) — uprość je.';
     }
     try {
       new RegExp(valStr, 'i');
@@ -303,6 +404,7 @@
       }
 
       const normalized = rules.map((r, i) => normalizeRule(r, i)).filter(Boolean);
+      assertSafeRegexConditions(normalized, this._cachedRules);
 
       if (this._storageArea && typeof this._storageArea.set === 'function') {
         await new Promise((resolve, reject) => {
@@ -333,10 +435,7 @@
       const current = await this.getRules();
       const normalized = normalizeRule(rule);
       if (!normalized) throw new Error('Nieprawidłowy obiekt reguły.');
-      for (const cond of normalized.conditions || []) {
-        const regexError = cond.operator === 'regex' ? validateRegexPattern(cond.value) : null;
-        if (regexError) throw new Error(regexError);
-      }
+      assertSafeRegexConditions([normalized]);
 
       const existingIndex = current.findIndex((r) => r.id === normalized.id);
       if (existingIndex >= 0) {
@@ -437,9 +536,13 @@
           if (validateRegexPattern(valStr) !== null) {
             return false;
           }
+          // Tekst dłuższy niż budżet przewiduje dla tego wzorca nie jest dopasowywany (bez obcinania)
+          if (estimateRegexCostLog2(getRegexAnalysis(valStr), textStr.length) > MAX_REGEX_COST_LOG2) {
+            return false;
+          }
           try {
             const re = new RegExp(valStr, 'i');
-            return re.test(textStr.slice(0, MAX_REGEX_TEXT_LENGTH));
+            return re.test(textStr);
           } catch (_) {
             // Bezpieczne wyłapanie błędu składniowego wyrażenia regularnego
             return false;
