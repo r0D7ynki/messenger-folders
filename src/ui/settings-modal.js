@@ -939,7 +939,16 @@
         editorModal.appendChild(editorFooter);
         editorOverlay.appendChild(editorModal);
         document.body.appendChild(editorOverlay);
-        setTimeout(() => nameInput.focus(), 50);
+        setTimeout(() => {
+          if (
+            typeof document !== 'undefined' &&
+            (document.activeElement === overlay ||
+              document.activeElement === modal ||
+              !modal.contains(document.activeElement))
+          ) {
+            nameInput.focus();
+          }
+        }, 50);
       };
 
       const renderRulesTab = async () => {

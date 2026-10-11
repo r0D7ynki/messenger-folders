@@ -364,6 +364,7 @@ test.describe('Messenger Folders E2E Test Suite (MF-006)', () => {
     await opSelect.selectOption('contains');
 
     const valInput = ruleEditor.locator('.mf-rule-condition-val').first();
+    await valInput.click();
     await valInput.fill('Projekt');
 
     // Weryfikacja podglądu na żywo

@@ -59,7 +59,14 @@
       typeof rule.name === 'string' && rule.name.trim() ? rule.name.trim().slice(0, 50) : `Reguła ${index + 1}`;
 
     const enabled = rule.enabled !== false;
-    const priority = Number.isFinite(Number(rule.priority)) ? Number(rule.priority) : 10;
+    const priority =
+      rule &&
+      rule.priority !== null &&
+      rule.priority !== undefined &&
+      rule.priority !== '' &&
+      Number.isFinite(Number(rule.priority))
+        ? Number(rule.priority)
+        : 10;
     const folderId = typeof rule.folderId === 'string' ? rule.folderId.trim() : '';
     const matchMode = rule.matchMode === 'any' ? 'any' : 'all';
 
@@ -303,11 +310,25 @@
             Array.isArray(r.conditions) &&
             r.conditions.some((c) => c && typeof c === 'object')
         )
-        .sort(
-          (a, b) =>
-            (Number.isFinite(Number(a?.priority)) ? Number(a.priority) : 10) -
-            (Number.isFinite(Number(b?.priority)) ? Number(b.priority) : 10)
-        );
+        .sort((a, b) => {
+          const prioA =
+            a &&
+            a.priority !== null &&
+            a.priority !== undefined &&
+            a.priority !== '' &&
+            Number.isFinite(Number(a.priority))
+              ? Number(a.priority)
+              : 10;
+          const prioB =
+            b &&
+            b.priority !== null &&
+            b.priority !== undefined &&
+            b.priority !== '' &&
+            Number.isFinite(Number(b.priority))
+              ? Number(b.priority)
+              : 10;
+          return prioA - prioB;
+        });
 
       for (const rule of activeRules) {
         if (!rule.folderId || rule.folderId === 'all') {
