@@ -541,7 +541,7 @@ class Board:
             for name, error in self.load_errors.items():
                 result[name] = [error]
         cycle = dependency_cycle(cards)
-        config_warnings = wip_warnings(self.config.get("wip"))
+        config_warnings = wip_warnings(self.config.get("wip")) + checks.column_warnings(self.config)
         if config_warnings and not card_id:
             self.check_warnings["kanban/config.json"] = config_warnings
         for c in targets:

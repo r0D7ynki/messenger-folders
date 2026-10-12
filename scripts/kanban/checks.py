@@ -36,8 +36,31 @@ def wip_units(cards: list[Any], status: str, card: Any, model: str | None = None
 
 
 def board_columns(config: dict) -> list[str]:
-    """Kolumny tablicy: domyślne albo z kolumną `test` przed `done`."""
-    return ALL_COLUMNS if config.get("test_column") is True else COLUMNS
+    """
+    Kolumny tablicy: domyślne albo z kolumną `test` przed `done` — `"test_column": true` albo
+    `"test"` w liście `columns` (tam właściciel jej szuka; SB-084).
+    """
+    listed = config.get("columns") if isinstance(config.get("columns"), list) else []
+    return ALL_COLUMNS if config.get("test_column") is True or "test" in listed else COLUMNS
+
+
+def test_column_line(config: dict) -> str:
+    """`sb doctor`: czy kolumna `test` jest włączona i jak ją włączyć."""
+    if "test" in board_columns(config):
+        return f"✓ {tr('cli.doctor.test_column_on')}"
+    return f"· {tr('cli.doctor.test_column_off')}"
+
+
+def column_warnings(config: dict) -> list[str]:
+    """Lista `columns` niezgodna z `test_column` — widoczna kolumna różni się od opisanej."""
+    listed = config.get("columns")
+    if not isinstance(listed, list):
+        return []
+    if config.get("test_column") is True and "test" not in listed:
+        return [tr("kanban.warn.columns_without_test")]
+    if config.get("test_column") is False and "test" in listed:  # columns wygrywa — widoczna
+        return [tr("kanban.warn.columns_with_test")]
+    return []
 
 
 # Znaczniki w sekcji Files: plik powstaje w zadaniu (`(new)`/`(nowy)`) albo znika — usunięty
@@ -191,6 +214,7 @@ def card_summary(card: Any) -> dict[str, object]:
         "batch": meta.get("batch") or None,
         "tested_by": meta.get("tested_by") or None,
         "human_review": needs_human(card),
+        "review_fail": meta.get("review_fail") or None,  # ✗ FAIL — decyzja człowieka (SB-081)
         "path": str(card.path),
     }
 
@@ -229,6 +253,8 @@ def board_line(card: Any, column: str) -> str:
     batch = f"  [{meta['batch']}]" if meta.get("batch") else ""
     agent = f"  {agent_marker(card)}" if column == "in-progress" and agent_marker(card) else ""
     human = f"  {human_marker(card, column)}" if human_marker(card, column) else ""
+    if column == "review" and meta.get("review_fail"):  # przegląd FAIL po limicie prób (SB-081)
+        human += f"  {tr('kanban.board.review_fail')}"
     return (
         f"  {card.id}  [{meta.get('size', '?')}] {meta.get('priority', ''):<3} "
         f"{meta.get('model', ''):<8} {meta.get('title', '')}{batch}{human}{agent}{extra}"
