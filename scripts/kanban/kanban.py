@@ -76,6 +76,7 @@ SECTION_ALIASES = {
     "Out of scope": ("Poza zakresem",),
     "DoD": (),
     "Evidence": ("Dowód",),
+    "To report": ("Do zgłoszenia",),  # tematy spoza zakresu → nowe karty po scaleniu (#31)
     "Log": (),
 }
 
@@ -646,7 +647,7 @@ def cmd_board(board: Board, args: argparse.Namespace) -> int:
 
 
 def cmd_new(board: Board, args: argparse.Namespace) -> int:
-    card = board.create(args.title, args.model, args.size, args.priority)
+    card = load_workflow().create_card(board, args)
     print(tr("kanban.cli.created", path=card.path.relative_to(board.root)))
     return EXIT_OK
 
@@ -743,9 +744,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true", help=tr("kanban.cli.json_help"))
     p = sub.add_parser("new", help=tr("kanban.cli.new_help"))
     p.add_argument("title")
-    p.add_argument("--model", default="claude")
-    p.add_argument("--size", default="M", choices=SIZE_ORDER)
-    p.add_argument("--priority", default="P2")
+    p.add_argument("--model")  # domyślnie claude albo model karty z --from
+    p.add_argument("--size", choices=SIZE_ORDER)
+    p.add_argument("--priority")
+    p.add_argument("--from", dest="source")  # temat z karty: model, priorytet, paczka (#31)
     p = sub.add_parser("move", help=tr("kanban.cli.move_help"))
     p.add_argument("id")
     p.add_argument("to", choices=checks.ALL_COLUMNS)

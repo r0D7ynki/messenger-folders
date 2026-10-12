@@ -96,8 +96,8 @@ AUTOMATIC_KEYS = (
     "bridge.log.requeued",
 )
 # Metadane zmieniane `kanban.py set` (także w done) — wpis „klucz: stara → nowa” nie jest pracą
-META_KEYS = ("branch", "priority", "batch", "tested_by")
-MANUAL_META = re.compile(rf"^(?:{'|'.join(META_KEYS)}): \S+ → \S+")
+META_KEYS = ("branch", "priority", "batch", "tested_by", "question")
+MANUAL_META = re.compile(rf"^(?:{'|'.join(META_KEYS)}): .* → ")  # wartości ze spacjami (question)
 
 
 def automatic_entry(line: str) -> bool:
@@ -227,6 +227,7 @@ def card_summary(card: Any) -> dict[str, object]:
         "tested_by": meta.get("tested_by") or None,
         "human_review": needs_human(card),
         "human_test": needs_human_test(card),
+        "question": card.meta.get("question") or None,
         "review_fail": meta.get("review_fail") or None,  # ✗ FAIL — decyzja człowieka (SB-081)
         "path": str(card.path),
     }
@@ -259,8 +260,8 @@ def human_flag(card: Any, key: str) -> tuple[bool, str]:
 
 def needs_human(card: Any) -> bool:
     """Decyzja człowieka wymagana przez kartę — rój nie przenosi jej sam do done."""
-    if human_flag(card, "human_review")[0]:
-        return True
+    if human_flag(card, "human_review")[0] or str(card.meta.get("question") or "").strip():
+        return True  # `question:` — pytanie do właściciela (#31)
     return bool(MANUAL_CRITERION.search(card.section("Acceptance criteria")))
 
 

@@ -248,14 +248,43 @@ META_VALUES = {
     "priority": re.compile(r"^[Pp]\d+$"),
     "batch": re.compile(r"^[\w.-]+$"),  # paczka kart (SB-064); pusta wartość = bez paczki
     "tested_by": re.compile(r"^[\w.@-]+$"),  # kto przetestował (#29)
+    "question": re.compile(r"^\S.*$"),  # pytanie do właściciela — karta czeka na człowieka (#31)
 }
+
+
+def followup_batch(source: Any) -> str:
+    """
+    Paczka karty z tematu (#31): `<paczka źródła>-followup` — ten sam moduł, ale bez dołączania
+    do paczki w toku (start i `batch move` paczki źródła nie czekają na nową kartę); bez — `none`.
+    """
+    batch = batch_of(source)
+    return f"{batch}-followup" if batch else NO_BATCH
+
+
+def create_card(board: Any, args: Any) -> Any:
+    """
+    `new` (#31): z `--from <ID>` karta dziedziczy model, priorytet i paczkę karty źródłowej,
+    rozmiar S, `source:` i wpis w Logu; bez — model claude, rozmiar M, priorytet P2.
+    """
+    source = board.card(args.source) if getattr(args, "source", None) else None
+    meta = source.meta if source else {}
+    model = args.model or meta.get("model") or "claude"
+    size = args.size or ("S" if source else "M")
+    card = board.create(args.title, model, size, args.priority or meta.get("priority") or "P2")
+    if source:
+        card.meta["batch"] = followup_batch(source)
+        card.meta["source"] = f"{source.id} manual -"
+        card.append_log(tr("kanban.log.created_from", card_id=source.id))
+        card.save()
+    return card
 
 
 def set_meta(board: Any, card_id: str, key: str, value: str, reason: str = "") -> list[str]:
     """Zmiana metadanej karty z wpisem administracyjnym w Logu (bez bramek; także po done)."""
     if key not in META_VALUES:
         return [tr("kanban.set.bad_key", name=key, keys=", ".join(META_VALUES))]
-    if (value or key != "batch") and not META_VALUES[key].match(value) or "\n" in reason:
+    clearable = key in ("batch", "question")  # pusta wartość = bez paczki / pytanie zamknięte
+    if (value or not clearable) and not META_VALUES[key].match(value) or "\n" in reason:
         return [tr("kanban.set.bad_value", name=key, value=value)]
     card = board.card(card_id)
     old = card.meta.get(key, "")
