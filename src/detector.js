@@ -213,11 +213,24 @@
     }
 
     /**
+     * Sprawdza, czy etykieta elementu (aria-label, data-testid) opisuje akcję
+     * „Oznacz … jako nieprzeczytane” / „Mark as unread” — nie stan wątku.
+     * @private
+     * @param {Element} element Badany element.
+     * @returns {boolean} Czy etykieta wskazuje akcję.
+     */
+    _hasActionLabel(element) {
+      const label = `${element.getAttribute?.('aria-label') || ''} ${element.getAttribute?.('data-testid') || ''}`;
+      return ACTION_LABEL_PATTERN.test(label);
+    }
+
+    /**
      * Sprawdza, czy element jest akcją (przycisk, pozycja menu, „Oznacz … jako nieprzeczytane”),
      * a nie wskaźnikiem stanu wątku.
      * Wspinaczka po przodkach kończy się na wierszu: akcją jest tylko przycisk leżący wewnątrz
      * wiersza (np. menu wątku). Sam wiersz ani jego przodkowie — gdy Messenger opakuje cały wiersz
-     * w `[role="button"]` — nie wyłączają heurystyki wskaźników.
+     * w `[role="button"]` — nie wyłączają heurystyki wskaźników, bo klikalny wiersz to nie akcja
+     * „Oznacz…”. Dla samego wiersza liczy się więc wyłącznie etykieta akcji.
      * @param {Element} element Badany element.
      * @param {Element|null} [rowElement=null] Element wiersza czatu — granica wspinaczki.
      * @returns {boolean} Czy element należy pominąć jako akcję.
@@ -228,8 +241,7 @@
           return true;
         }
       }
-      const label = `${element.getAttribute?.('aria-label') || ''} ${element.getAttribute?.('data-testid') || ''}`;
-      return ACTION_LABEL_PATTERN.test(label);
+      return this._hasActionLabel(element);
     }
 
     /**
@@ -295,9 +307,11 @@
       }
 
       // 1. Atrybut testowy nieprzeczytania (bez klas CSS — zasada 4 AGENTS.md)
+      // Sam wiersz nie jest akcją, nawet gdy jest klikalny albo leży w przycisku — akcje są
+      // wyłącznie wewnątrz wiersza. Wyklucza go tylko etykieta „Oznacz … jako nieprzeczytane”.
       const testIdSelector = '[data-testid*="unread" i]';
       if (
-        (rowElement.matches?.(testIdSelector) && !this._isActionElement(rowElement, rowElement)) ||
+        (rowElement.matches?.(testIdSelector) && !this._hasActionLabel(rowElement)) ||
         this._hasIndicator(rowElement, testIdSelector)
       ) {
         return true;

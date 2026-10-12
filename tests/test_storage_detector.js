@@ -682,6 +682,22 @@ function runDetectorTests() {
     'Wiersz opakowany w [role="button"] z potomkiem unread nadal jest nieprzeczytany'
   );
 
+  // MF-027 pkt 3b: sam klikalny wiersz też nie jest akcją — liczy się tylko etykieta „Oznacz…”
+  assert.strictEqual(
+    detector.isThreadUnread(mockElement('div', { role: 'button', 'data-testid': 'unread_row' }, [threadLink()])),
+    true,
+    'Wiersz sam będący [role="button"] z data-testid unread to nieprzeczytany wątek'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(
+      mockElement('div', { role: 'button', 'data-testid': 'unread_row', 'aria-label': 'Oznacz jako nieprzeczytane' }, [
+        threadLink()
+      ])
+    ),
+    false,
+    'Etykieta akcji „Oznacz…” na wierszu nadal wyklucza nieprzeczytanie'
+  );
+
   // Pkt 3: etykieta stanu „Oznaczony…” to stan, nie akcja „Oznacz…”
   assert.strictEqual(
     detector.isThreadUnread(row(mockElement('span', { 'aria-label': 'Oznaczony jako nieprzeczytany' }))),
