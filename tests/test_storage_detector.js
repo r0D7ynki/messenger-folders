@@ -653,6 +653,34 @@ function runDetectorTests() {
     true,
     'Zwykła niebieska kropka nadal działa'
   );
+  assert.strictEqual(
+    detector.isThreadUnread(row(mockElement('svg', { style: 'border: 2px solid #0084ff' }))),
+    false,
+    'Element <svg> w ramce #0084ff nie jest kropką'
+  );
+
+  // MF-027 pkt 2: url() poza właściwością tła nie czyni elementu awatarem
+  assert.strictEqual(
+    detector.isThreadUnread(row(mockElement('div', { style: 'mask-image: url(dot.png); border: 2px solid #0084ff' }))),
+    true,
+    'Kropka z url() poza właściwością tła nadal jest kropką'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(
+      row(mockElement('div', { style: 'background-image: url(avatar.png); border: 2px solid #0084ff' }))
+    ),
+    false,
+    'Awatar-div z background-image: url() dalej nie jest kropką'
+  );
+
+  // MF-027 pkt 3: przycisk wokół całego wiersza nie wyłącza heurystyki wskaźników
+  const wrappedRow = row(threadLink({}, [mockElement('span', { 'data-testid': 'unread-dot' })]));
+  mockElement('div', { role: 'button' }, [wrappedRow]);
+  assert.strictEqual(
+    detector.isThreadUnread(wrappedRow),
+    true,
+    'Wiersz opakowany w [role="button"] z potomkiem unread nadal jest nieprzeczytany'
+  );
 
   // Pkt 3: etykieta stanu „Oznaczony…” to stan, nie akcja „Oznacz…”
   assert.strictEqual(
