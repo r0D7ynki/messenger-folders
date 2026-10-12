@@ -48,6 +48,7 @@ COLUMNS, TRANSITION, TRANSITIONS_SINCE = checks.COLUMNS, checks.TRANSITION, chec
 PATH_MARKERS, NEW_FILE_MARKERS = checks.PATH_MARKERS, checks.NEW_FILE_MARKERS
 REMOVED_FILE_MARKERS, FILE_EXTENSIONS = checks.REMOVED_FILE_MARKERS, checks.FILE_EXTENSIONS
 section_paths, missing_files = checks.section_paths, checks.missing_files
+card_summary = checks.card_summary
 dependency_cycle = checks.dependency_cycle
 
 # ID karty: prefiks i numer (SB-035) — trafia do ścieżek worktree, raportów i refów gita
@@ -56,8 +57,8 @@ PREFIX = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_]*$")
 SIZE_ORDER = ["S", "M", "L"]
 # Zależność „zaplanowana” (wystarcza do ready) i „dostępna w kodzie” (wymagana do ręcznego startu).
 # Kolejność wykonania zależnych kart pilnuje rój (DAG) albo ta bramka przy `in-progress`.
-DEPS_PLANNED = {"ready", "in-progress", "review", "done"}
-DEPS_AVAILABLE = {"review", "done"}
+DEPS_PLANNED = {"ready", "in-progress", "review", "test", "done"}
+DEPS_AVAILABLE = {"review", "test", "done"}  # `test` — kod już scalony (SB-071)
 
 # Kanoniczne nagłówki sekcji → polskie nagłówki (starsze polskie karty nadal działają)
 SECTION_ALIASES = {
@@ -320,18 +321,14 @@ class Board:
         ręcznej — karty roju (`worker:`) mają własny limit: liczbę workerów.
         """
         limits = self.config.get("wip", {})
-        active = [c for c in cards if c.status == "in-progress" and c.id != card.id]
         errors = []
         total = wip_limit(limits, "in-progress")
-        if total and len(active) >= total:
+        if total and checks.wip_units(cards, "in-progress", card) >= total:
             errors.append(tr("kanban.wip.total", limit=total))
         per_model = wip_limit(limits, "in-progress-per-model")
-        manual = [c for c in active if not c.meta.get("worker")]
-        if (
-            per_model
-            and sum(c.meta.get("model") == card.meta.get("model") for c in manual) >= per_model
-        ):
-            errors.append(tr("kanban.wip.per_model", model=card.meta.get("model"), limit=per_model))
+        model = card.meta.get("model", "")
+        if per_model and checks.wip_units(cards, "in-progress", card, model) >= per_model:
+            errors.append(tr("kanban.wip.per_model", model=model, limit=per_model))
         return errors
 
     def review_errors(self, card: Card, cards: list[Card], check_wip: bool = True) -> list[str]:
@@ -342,11 +339,7 @@ class Board:
         if not card.section("Evidence"):
             errors.append(tr("kanban.review.no_evidence", section=self.heading("Evidence")))
         limit = wip_limit(self.config.get("wip", {}), "review")
-        if (
-            check_wip
-            and limit
-            and sum(c.status == "review" and c.id != card.id for c in cards) >= limit
-        ):
+        if check_wip and limit and checks.wip_units(cards, "review", card) >= limit:
             errors.append(tr("kanban.review.wip", limit=limit))
         return errors
 
@@ -354,16 +347,28 @@ class Board:
         total, open_items = card.checkboxes("DoD")
         errors = [tr("kanban.dod.missing")] if total == 0 else []
         errors += [tr("kanban.dod.open_item", item=i) for i in open_items]
-        reviewer = card.meta.get("reviewer", "")
-        if not reviewer:
-            errors.append(tr("kanban.dod.no_reviewer"))
-        elif reviewer == card.meta.get("model"):
-            errors.append(tr("kanban.dod.self_review"))
-        elif reviewer == card.meta.get("executor"):  # faktyczny wykonawca (SB-046)
-            errors.append(tr("kanban.dod.self_review_executor", executor=reviewer))
+        errors += self.reviewer_errors(card)
+        if "test" in self.columns and not card.meta.get("tested_by"):  # SB-071
+            errors.append(tr("kanban.dod.no_tested_by"))
         if run_gate and not errors:
             errors += self.run_gate(tail_lines=8)
         return errors
+
+    def reviewer_errors(self, card: Card) -> list[str]:
+        """Przegląd niezależny: reviewer wpisany i różny od `model:` i `executor:` (SB-046)."""
+        reviewer = card.meta.get("reviewer", "")
+        if not reviewer:
+            return [tr("kanban.dod.no_reviewer")]
+        if reviewer == card.meta.get("model"):
+            return [tr("kanban.dod.self_review")]
+        if reviewer == card.meta.get("executor"):
+            return [tr("kanban.dod.self_review_executor", executor=reviewer)]
+        return []
+
+    @property
+    def columns(self) -> list[str]:
+        """Kolumny tablicy (z opcjonalną `test`, SB-071)."""
+        return checks.board_columns(self.config)
 
     def transition_errors(self, card: Card) -> list[str]:
         since = str(self.config.get("transitions_since", TRANSITIONS_SINCE))
@@ -391,23 +396,28 @@ class Board:
                 errors.append(tr("kanban.dod.gate_failed", cmd=cmd, code=res.returncode, tail=tail))
         return errors
 
-    def gate_errors(self, card: Card, to: str, cards: list[Card]) -> list[str]:
+    def gate_errors(
+        self, card: Card, to: str, cards: list[Card], run_gate: bool = True
+    ) -> list[str]:
         """
         Błędy blokujące przejście karty do kolumny `to`. Skok o kilka kolumn przechodzi przez
         bramki wszystkich kolumn pośrednich; ruch w lewo — bez bramki.
         """
-        if to not in COLUMNS:
+        columns = self.columns
+        if to not in columns:
             raise KanbanError(
-                tr("kanban.error.unknown_column", column=to, columns=", ".join(COLUMNS))
+                tr("kanban.error.unknown_column", column=to, columns=", ".join(columns))
             )
-        start = COLUMNS.index(card.status) if card.status in COLUMNS else 0
-        target = COLUMNS.index(to)
+        start = columns.index(card.status) if card.status in columns else 0
         errors: list[str] = []
-        for column in COLUMNS[start + 1 : target + 1]:
-            errors += [e for e in self._column_gate(card, column, cards) if e not in errors]
+        for column in columns[start + 1 : columns.index(to) + 1]:
+            gate = self._column_gate(card, column, cards, run_gate, final=column == to)
+            errors += [e for e in gate if e not in errors]
         return errors
 
-    def _column_gate(self, card: Card, to: str, cards: list[Card]) -> list[str]:
+    def _column_gate(
+        self, card: Card, to: str, cards: list[Card], run_gate: bool, final: bool = True
+    ) -> list[str]:
         if to == "ready":
             return self.ready_errors(card, cards)
         if to == "in-progress":
@@ -418,12 +428,20 @@ class Board:
             )
         if to == "review":
             return self.review_errors(card, cards)
+        others = [c for c in cards if c is not card]
+        if to == "test":  # przegląd zaliczony, miejsce w WIP testu (SB-071)
+            limit = wip_limit(self.config.get("wip", {}), "test")
+            # WIP testu tylko dla karty, która w `test` zostaje — nie przy przejściu do done
+            full = final and limit and checks.wip_units(cards, "test", card) >= limit
+            wip = [tr("kanban.test.wip", limit=limit)] if full else []
+            return (
+                self.review_errors(card, others, check_wip=False) + self.reviewer_errors(card) + wip
+            )
         if to == "done":
-            others = [c for c in cards if c is not card]
             return (
                 self.review_errors(card, others, check_wip=False)
                 + self.transition_errors(card)
-                + self.done_errors(card, True)
+                + self.done_errors(card, run_gate)
             )
         return []
 
@@ -495,9 +513,13 @@ class Board:
         reopen = card.status == "done" and to != "done"
         if reopen and not reason.strip():  # ponowne otwarcie tylko jawnie (SB-041)
             return [tr("kanban.error.reopen_reason", card_id=card_id)]
+        skip = to == "done" and card.meta.get("tested_by") == "skip"
+        if skip and not reason.strip():  # akceptacja bez testu — decyzja zapisana (SB-071)
+            return [tr("kanban.error.skip_test_reason", card_id=card_id)]
         errors = self.gate_errors(card, to, cards)
         if not errors:
-            card.move(to, tr("kanban.log.reopened", reason=reason.strip()) if reopen else "")
+            note = tr("kanban.log.reopened", reason=reason.strip()) if reopen else reason.strip()
+            card.move(to, note)
             card.save()
         return errors
 
@@ -526,7 +548,7 @@ class Board:
             for key in ("id", "title", "status", "model", "size")
             if not c.meta.get(key)
         ]
-        if c.status not in COLUMNS:
+        if c.status not in self.columns:
             errors.append(tr("kanban.check.unknown_status", status=c.status))
         if c.path.name != f"{c.id}.md":
             errors.append(tr("kanban.check.filename"))
@@ -557,18 +579,11 @@ class Board:
 
     def print_board(self) -> None:
         cards = self.cards()
-        for column in COLUMNS:
+        for column in self.columns:
             items = [c for c in cards if c.status == column]
             print(f"\n■ {column.upper()} ({len(items)})")
             for c in items:
-                deps = c.dependencies()
-                extra = f"  ⇠ {','.join(deps)}" if deps else ""
-                on_worker = c.meta.get("worker") and column == "in-progress"
-                worker = f" @{c.meta['worker']}" if on_worker else ""
-                print(
-                    f"  {c.id}  [{c.meta.get('size', '?')}] {c.meta.get('priority', ''):<3} "
-                    f"{c.meta.get('model', ''):<8} {c.meta.get('title', '')}{worker}{extra}"
-                )
+                print(checks.board_line(c, column))
         print()
 
 
@@ -581,23 +596,6 @@ def priority_rank(priority: str) -> int:
     """P1 < P2 < … < P10 (liczbowo); brak albo inny zapis → na koniec."""
     m = re.fullmatch(r"[Pp](\d+)", priority.strip())
     return int(m.group(1)) if m else 99
-
-
-def card_summary(card: Card) -> dict[str, object]:
-    """Karta jako słownik dla `--json` (stabilne pola dla agentów)."""
-    meta = card.meta
-    return {
-        "id": card.id,
-        "title": meta.get("title", ""),
-        "status": card.status,
-        "model": meta.get("model", ""),
-        "size": meta.get("size", ""),
-        "priority": meta.get("priority", ""),
-        "depends": card.dependencies(),
-        "worker": meta.get("worker") or None,
-        "branch": meta.get("branch") or None,
-        "path": str(card.path),
-    }
 
 
 def print_json(data: object) -> None:
@@ -630,7 +628,9 @@ def print_errors(header: str, errors: list[str]) -> None:
 def cmd_board(board: Board, args: argparse.Namespace) -> int:
     if getattr(args, "json", False):
         cards = board.cards()
-        columns = {col: [card_summary(c) for c in cards if c.status == col] for col in COLUMNS}
+        columns = {
+            col: [card_summary(c) for c in cards if c.status == col] for col in board.columns
+        }
         print_json({"columns": columns, "unreadable": board.load_errors})
     else:
         board.print_board()
@@ -740,13 +740,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--priority", default="P2")
     p = sub.add_parser("move", help=tr("kanban.cli.move_help"))
     p.add_argument("id")
-    p.add_argument("to", choices=COLUMNS)
+    p.add_argument("to", choices=checks.ALL_COLUMNS)
     p.add_argument("--reason", help=tr("kanban.cli.reason_help"))
     p = sub.add_parser("set", help=tr("kanban.cli.set_help"))
     p.add_argument("id")
     p.add_argument("key")
     p.add_argument("value")
     p.add_argument("--reason", help=tr("kanban.cli.reason_help"))
+    load_workflow().add_batch_parser(sub)  # paczki kart (SB-064)
     p = sub.add_parser("check", help=tr("kanban.cli.check_help"))
     p.add_argument("id", nargs="?")
     p.add_argument("--json", action="store_true", help=tr("kanban.cli.json_help"))
@@ -767,6 +768,7 @@ COMMANDS = {
     "move": cmd_move,
     "check": cmd_check,
     "set": cmd_set,
+    "batch": lambda board, args: load_workflow().batch_main(board, args),
     "next": cmd_next,
     "submit": cmd_submit,
 }

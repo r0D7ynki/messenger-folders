@@ -16,16 +16,38 @@ except ImportError:  # kopia w projekcie — katalog skryptu jest już w sys.pat
     from i18n import tr  # type: ignore[no-redef]
 
 COLUMNS = ["backlog", "ready", "in-progress", "review", "done"]
+# Opcjonalna kolumna `test` (SB-071, `"test_column": true`): test/akceptacja po przeglądzie kodu
+ALL_COLUMNS = ["backlog", "ready", "in-progress", "review", "test", "done"]
+
+
+def wip_units(cards: list[Any], status: str, card: Any, model: str | None = None) -> int:
+    """
+    Zajęte pozycje WIP w kolumnie (SB-064): paczka (`batch:`) liczy się raz, a paczka samej karty
+    nie zajmuje drugiego miejsca. `model` — tylko praca ręczna tego modelu (bez kart roju).
+    """
+    units = {
+        c.meta.get("batch") or c.id
+        for c in cards
+        if c.status == status
+        and (model is None or (c.meta.get("model") == model and not c.meta.get("worker")))
+    }
+    units.discard(card.meta.get("batch") or card.id)
+    return len(units)
+
+
+def board_columns(config: dict) -> list[str]:
+    """Kolumny tablicy: domyślne albo z kolumną `test` przed `done`."""
+    return ALL_COLUMNS if config.get("test_column") is True else COLUMNS
+
+
 # Znaczniki w sekcji Files: plik powstaje w zadaniu (`(new)`/`(nowy)`) albo znika — usunięty
 # lub przeniesiony (`(removed)`/`(usunięty)`); takiego pliku DoR nie wymaga na dysku
 NEW_FILE_MARKERS = ("(new)", "(nowy)")
 REMOVED_FILE_MARKERS = ("(removed)", "(usunięty)")
 PATH_MARKERS = NEW_FILE_MARKERS + REMOVED_FILE_MARKERS
 # Przejście w Logu: `- RRRR-MM-DD GG:MM <z> → <do>` (Card.move); inne wpisy z „→” się nie liczą
-TRANSITION = re.compile(
-    rf"^- \d{{4}}-\d\d-\d\d \d\d:\d\d ({'|'.join(COLUMNS)}) → ({'|'.join(COLUMNS)})(?![\w-])",
-    re.M,
-)
+_STATUS = "|".join(ALL_COLUMNS)
+TRANSITION = re.compile(rf"^- \d{{4}}-\d\d-\d\d \d\d:\d\d ({_STATUS}) → ({_STATUS})(?![\w-])", re.M)
 # Ciągłość Logu (SB-039) sprawdzana dla kart założonych od tego dnia (`transitions_since` w
 # konfiguracji) — starsze karty mogą nie mieć pełnego Logu przejść
 TRANSITIONS_SINCE = "2026-10-12"
@@ -39,7 +61,7 @@ AUTOMATIC_KEYS = (
     "bridge.log.requeued",
 )
 # Metadane zmieniane `kanban.py set` (także w done) — wpis „klucz: stara → nowa” nie jest pracą
-META_KEYS = ("branch", "priority")
+META_KEYS = ("branch", "priority", "batch")
 MANUAL_META = re.compile(rf"^(?:{'|'.join(META_KEYS)}): \S+ → \S+")
 
 
@@ -150,3 +172,64 @@ def dependency_cycle(cards: list[Any]) -> str | None:
             if found:
                 return found
     return None
+
+
+def card_summary(card: Any) -> dict[str, object]:
+    """Karta jako słownik dla `--json` (stabilne pola dla agentów)."""
+    meta = card.meta
+    return {
+        "id": card.id,
+        "title": meta.get("title", ""),
+        "status": card.status,
+        "model": meta.get("model", ""),
+        "size": meta.get("size", ""),
+        "priority": meta.get("priority", ""),
+        "depends": card.dependencies(),
+        "worker": meta.get("worker") or None,
+        "branch": meta.get("branch") or None,
+        "executor": meta.get("executor") or None,
+        "batch": meta.get("batch") or None,
+        "tested_by": meta.get("tested_by") or None,
+        "human_review": needs_human(card),
+        "path": str(card.path),
+    }
+
+
+# Karta wymaga człowieka (SB-076): nagłówek `human_review: true` albo kryterium „(ręcznie)”
+MANUAL_CRITERION = re.compile(r"^- \[[ xX]\] .*\((?:ręcznie|manual)\)", re.M | re.I)
+
+
+def needs_human(card: Any) -> bool:
+    """Decyzja człowieka wymagana przez kartę — rój nie przenosi jej sam do done."""
+    if str(card.meta.get("human_review", "")).strip().lower() in ("true", "yes", "1"):
+        return True
+    return bool(MANUAL_CRITERION.search(card.section("Acceptance criteria")))
+
+
+def human_marker(card: Any, column: str) -> str:
+    """Oznaczenie na tablicy: 👤 (karta dla człowieka); w review/test — czeka na człowieka."""
+    if not needs_human(card):
+        return ""
+    return tr("kanban.board.waits_human") if column in ("review", "test") else "👤"
+
+
+def agent_marker(card: Any) -> str:
+    """Kto realizuje kartę w toku (SB-073): worker roju (i model) albo wykonawca pracy ręcznej."""
+    worker, executor = card.meta.get("worker"), card.meta.get("executor")
+    if worker:
+        return f"▶ @{worker}" + (f" ({executor})" if executor else "")
+    return f"▶ {executor}" if executor else ""
+
+
+def board_line(card: Any, column: str) -> str:
+    """Linia karty w `board`: rozmiar, priorytet, model, tytuł, paczka, wykonawca, zależności."""
+    meta = card.meta
+    deps = card.dependencies()
+    extra = f"  ⇠ {','.join(deps)}" if deps else ""
+    batch = f"  [{meta['batch']}]" if meta.get("batch") else ""
+    agent = f"  {agent_marker(card)}" if column == "in-progress" and agent_marker(card) else ""
+    human = f"  {human_marker(card, column)}" if human_marker(card, column) else ""
+    return (
+        f"  {card.id}  [{meta.get('size', '?')}] {meta.get('priority', ''):<3} "
+        f"{meta.get('model', ''):<8} {meta.get('title', '')}{batch}{human}{agent}{extra}"
+    )

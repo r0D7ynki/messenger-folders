@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -85,9 +86,14 @@ def start_base(board: Any, card: Any, cards: list[Any], main: str) -> str:
 
 def commit_card(board: Any, card: Any, message: str) -> str | None:
     """Commit samego pliku karty; zwraca błąd albo None."""
-    rel = str(card.path.relative_to(board.root))
-    git_run(board.root, "add", "--", rel)
-    res = git_run(board.root, "commit", "-q", "-m", message, "--", rel)
+    return commit_cards(board, [card], message)
+
+
+def commit_cards(board: Any, cards: list[Any], message: str) -> str | None:
+    """Commit samych plików kart (np. całej paczki jednym commitem); zwraca błąd albo None."""
+    rels = [str(card.path.relative_to(board.root)) for card in cards]
+    git_run(board.root, "add", "--", *rels)
+    res = git_run(board.root, "commit", "-q", "-m", message, "--", *rels)
     return None if res.returncode == 0 else (res.stderr or res.stdout).strip()
 
 
@@ -117,7 +123,7 @@ def pick_startable(board: Any, model: str, cards: list[Any]) -> tuple[Any, list[
         errors = board.gate_errors(card, "in-progress", cards)
         # Gałąź karty bywa przed gałęzią główną (np. `review` czeka na scalenie) — SB-057
         on_branch = None if errors else status_on_branch(board, card)
-        if on_branch in ("review", "done"):
+        if on_branch in ("review", "test", "done"):
             errors = [tr("kanban.start.branch_ahead", branch=card_branch(card), status=on_branch)]
         if not errors:
             return card, []
@@ -234,14 +240,18 @@ def scope_base(board: Any, card: Any, main: str | None) -> str | None:
 
 
 # Wartości metadanych (SB-066): bez nowej linii — inaczej dopisałaby klucze nagłówka (status)
-META_VALUES = {"branch": re.compile(r"^[\w./-]+$"), "priority": re.compile(r"^[Pp]\d+$")}
+META_VALUES = {
+    "branch": re.compile(r"^[\w./-]+$"),
+    "priority": re.compile(r"^[Pp]\d+$"),
+    "batch": re.compile(r"^[\w.-]+$"),  # paczka kart (SB-064); pusta wartość = bez paczki
+}
 
 
 def set_meta(board: Any, card_id: str, key: str, value: str, reason: str = "") -> list[str]:
     """Zmiana metadanej karty z wpisem administracyjnym w Logu (bez bramek; także po done)."""
     if key not in META_VALUES:
         return [tr("kanban.set.bad_key", name=key, keys=", ".join(META_VALUES))]
-    if not META_VALUES[key].match(value) or "\n" in reason:
+    if (value or key != "batch") and not META_VALUES[key].match(value) or "\n" in reason:
         return [tr("kanban.set.bad_value", name=key, value=value)]
     card = board.card(card_id)
     old = card.meta.get(key, "")
@@ -256,15 +266,181 @@ def files_outside_scope(board: Any, card: Any, base: str | None) -> list[str]:
     """
     Pliki zmienione na gałęzi karty (od rozwidlenia z bazą) spoza sekcji Files — poza plikiem
     samej karty; wpis zakończony `/` obejmuje katalog (SB-040). Ścieżki względem tablicy.
+    Paczka (lista kart): zakres = suma sekcji Files i plików kart (SB-064).
     """
+    cards = card if isinstance(card, list) else [card]
     if not base:
         return []
     res = git_run(board.root, "diff", "--name-only", "--relative", f"{base}...HEAD")
     if res.returncode != 0:
         return []
-    allowed = {path for path, _ in board.section_paths(card.section("Files"), any_name=True)}
-    allowed.add(card.path.relative_to(board.root).as_posix())
+    allowed = {
+        path for c in cards for path, _ in board.section_paths(c.section("Files"), any_name=True)
+    }
+    allowed |= {c.path.relative_to(board.root).as_posix() for c in cards}
     folders = tuple(a if a.endswith("/") else a + "/" for a in allowed)
     return [
         f for f in res.stdout.split("\n") if f and f not in allowed and not f.startswith(folders)
     ]
+
+
+# --- Paczki kart (SB-064): wspólna gałąź, sesja, bramka i Dowód ---
+
+
+def module_of(paths: list[str]) -> str:
+    """Moduł karty do grupowania: najczęstszy katalog plików kodu z sekcji Files."""
+    code = [p for p in paths if not p.startswith(("tests/", "docs/", "kanban/"))] or paths
+    folders = [str(Path(p).parent) for p in code]
+    return max(set(folders), key=folders.count) if folders else "."
+
+
+def plan_batches(board: Any, model: str) -> dict[str, list[Any]]:
+    """Propozycja paczek: karty ready modelu bez `batch:` z tego samego modułu (co najmniej 2)."""
+    groups: dict[str, list[Any]] = {}
+    for card in board.ready_cards(model):
+        if card.meta.get("batch"):
+            continue
+        paths = [p for p, _ in board.section_paths(card.section("Files"), any_name=True)]
+        groups.setdefault(slugify(module_of(paths)), []).append(card)
+    return {name: cards for name, cards in groups.items() if len(cards) > 1}
+
+
+def batch_branch(name: str) -> str:
+    return f"batch-{slugify(name)}"
+
+
+def start_batch(board: Any, name: str, model: str) -> list[str]:
+    """Karty ready paczki modelu → jedna gałąź `batch-<nazwa>` i in-progress, jeden commit."""
+    cards = board.cards()
+    ready = [
+        c
+        for c in cards
+        if c.meta.get("batch") == name and c.status == "ready" and c.meta.get("model") == model
+    ]
+    if not ready:
+        return [tr("kanban.batch.empty", batch=name, status="ready")]
+    errors = [f"{c.id}: {e}" for c in ready for e in board.gate_errors(c, "in-progress", cards)]
+    main = main_branch(board)
+    if main is None:
+        errors.append(tr("kanban.start.no_main_branch"))
+    elif watcher_running_here(board):
+        errors.append(tr("kanban.start.watcher_running"))
+    elif git_run(board.root, "status", "--porcelain", "--untracked-files=no").stdout.strip():
+        errors.append(tr("kanban.start.dirty"))
+    if errors:
+        return errors
+    branch = batch_branch(name)
+    exists = branch_exists(board.root, branch)
+    res = git_run(board.root, *(["switch", branch] if exists else ["switch", "-c", branch, main]))
+    if res.returncode != 0:
+        return [tr("kanban.start.branch_failed", error=res.stderr.strip())]
+    started = []
+    for card in ready:
+        card = board.card(card.id)  # treść z gałęzi paczki
+        card.meta.update(branch=branch, executor=model, base=main)
+        card.move("in-progress", tr("kanban.log.batch_started", batch=name, branch=branch))
+        card.save()
+        started.append(card)
+    failed = commit_cards(board, started, f"chore(kanban): paczka {name} → in-progress ({branch})")
+    return [tr("kanban.start.commit_failed", error=failed)] if failed else []
+
+
+def submit_batch(board: Any, name: str) -> list[str]:
+    """Paczka → review: kryteria i Dowód każdej karty, zakres = suma Files, JEDNA bramka."""
+    cards = board.cards()
+    batch = [c for c in cards if c.meta.get("batch") == name and c.status == "in-progress"]
+    refused = submit_refused(board, name, batch)
+    if refused:
+        return refused
+    outside = files_outside_scope(board, batch, scope_base(board, batch[0], main_branch(board)))
+    if outside and board.config.get("scope") == "strict":
+        return [tr("kanban.submit.scope_outside", files=", ".join(outside))]
+    errors = [f"{c.id}: {e}" for c in batch for e in board.review_errors(c, cards)]
+    errors = errors or board.run_gate(tail_lines=20)
+    if errors:
+        return errors
+    for card in batch:
+        if outside:
+            card.append_log(tr("kanban.log.scope_outside", files=", ".join(outside)))
+        card.move("review", tr("kanban.log.batch_submitted", batch=name, count=len(batch)))
+        card.save()
+    failed = commit_cards(board, batch, f"chore(kanban): paczka {name} → review")
+    return [tr("kanban.start.commit_failed", error=failed)] if failed else []
+
+
+def submit_refused(board: Any, name: str, batch: list[Any]) -> list[str]:
+    """Warunki oddania paczki: karty w toku, na gałęzi paczki, czyste drzewo, bez watchera obok."""
+    if not batch:
+        return [tr("kanban.batch.empty", batch=name, status="in-progress")]
+    current = git_run(board.root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    wrong = [c.id for c in batch if c.meta.get("branch") != current]
+    if wrong:
+        return [tr("kanban.batch.wrong_branch", cards=", ".join(wrong), current=current)]
+    if git_run(board.root, "status", "--porcelain").stdout.strip():
+        return [tr("kanban.submit.uncommitted")]
+    if watcher_running_here(board):
+        return [tr("kanban.start.watcher_running")]
+    return []
+
+
+def move_batch(board: Any, name: str, to: str, reason: str = "") -> list[str]:
+    """Wszystkie karty paczki do kolumny — bramki kart, a bramka projektu RAZ dla całej paczki."""
+    cards = board.cards()
+    batch = [c for c in cards if c.meta.get("batch") == name and c.status != to]
+    if not batch:
+        return [tr("kanban.batch.empty", batch=name, status="≠ " + to)]
+    errors = []
+    for card in batch:
+        if card.status == "done" and not reason.strip():
+            errors.append(tr("kanban.error.reopen_reason", card_id=card.id))
+        if to == "done" and card.meta.get("tested_by") == "skip" and not reason.strip():
+            errors.append(tr("kanban.error.skip_test_reason", card_id=card.id))
+        errors += [f"{card.id}: {e}" for e in board.gate_errors(card, to, cards, run_gate=False)]
+    if not errors and to == "done":  # bramka projektu raz dla całej paczki
+        errors = board.run_gate(tail_lines=8)
+    if errors:
+        return errors
+    for card in batch:
+        card.move(to, tr("kanban.log.batch_moved", batch=name, reason=reason.strip()).strip())
+        card.save()
+    return []
+
+
+def add_batch_parser(sub: Any) -> None:
+    """`kanban.py batch plan|start|submit|move` (polecenia paczek, SB-064)."""
+    batch = sub.add_parser("batch", help=tr("kanban.cli.batch_help")).add_subparsers(
+        dest="batch_cmd", required=True
+    )
+    plan = batch.add_parser("plan")
+    plan.add_argument("model")
+    plan.add_argument("--apply", action="store_true")
+    start_cmd = batch.add_parser("start")
+    start_cmd.add_argument("name")
+    start_cmd.add_argument("model")
+    batch.add_parser("submit").add_argument("name")
+    move = batch.add_parser("move")
+    move.add_argument("name")
+    move.add_argument("to")
+    move.add_argument("--reason", default="")
+
+
+def batch_main(board: Any, args: Any) -> int:
+    """Wykonanie polecenia paczki; kody wyjścia jak w kanban.py (0 ok, 1 bramka, 3 brak kart)."""
+    if args.batch_cmd == "plan":
+        groups = plan_batches(board, args.model)
+        for name, cards in groups.items():
+            print(tr("kanban.batch.proposal", batch=name, cards=", ".join(c.id for c in cards)))
+            for card in cards if args.apply else []:
+                set_meta(board, card.id, "batch", name, tr("kanban.batch.planned"))
+        return 0 if groups else 3
+    if args.batch_cmd == "start":
+        errors = start_batch(board, args.name, args.model)
+    elif args.batch_cmd == "submit":
+        errors = submit_batch(board, args.name)
+    else:
+        errors = move_batch(board, args.name, args.to, args.reason)
+    for error in errors:
+        print(f"  - {error}", file=sys.stderr)
+    if not errors:
+        print(tr("kanban.batch.done", batch=args.name, command=args.batch_cmd))
+    return 1 if errors else 0
