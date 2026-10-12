@@ -305,6 +305,20 @@ def plan_batches(board: Any, model: str) -> dict[str, list[Any]]:
     return {name: cards for name, cards in groups.items() if len(cards) > 1}
 
 
+def batch_start_errors(board: Any, ready: list[Any], cards: list[Any]) -> list[str]:
+    """Bramka in-progress kart paczki; startują razem — zależność w paczce jest już w toku (Z39)."""
+    ids = {c.id for c in ready}
+    view = [
+        type(c)(c.path, {**c.meta, "status": "in-progress"}, c.body) if c.id in ids else c
+        for c in cards
+    ]
+    return [
+        f"{c.id}: {e}"
+        for c in ready
+        for e in board.gate_errors(c, "in-progress", [c if k.id == c.id else k for k in view])
+    ]
+
+
 def batch_branch(name: str) -> str:
     return f"batch-{slugify(name)}"
 
@@ -319,7 +333,7 @@ def start_batch(board: Any, name: str, model: str) -> list[str]:
     ]
     if not ready:
         return [tr("kanban.batch.empty", batch=name, status="ready")]
-    errors = [f"{c.id}: {e}" for c in ready for e in board.gate_errors(c, "in-progress", cards)]
+    errors = batch_start_errors(board, ready, cards)
     main = main_branch(board)
     if main is None:
         errors.append(tr("kanban.start.no_main_branch"))

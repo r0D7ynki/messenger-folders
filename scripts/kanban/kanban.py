@@ -60,6 +60,12 @@ SIZE_ORDER = ["S", "M", "L"]
 DEPS_PLANNED = {"ready", "in-progress", "review", "test", "done"}
 DEPS_AVAILABLE = {"review", "test", "done"}  # `test` — kod już scalony (SB-071)
 
+
+def same_batch(card: Card, other: Card) -> bool:
+    """Obie karty w tej samej paczce (`batch:`)."""
+    return bool(card.meta.get("batch")) and card.meta.get("batch") == other.meta.get("batch")
+
+
 # Kanoniczne nagłówki sekcji → polskie nagłówki (starsze polskie karty nadal działają)
 SECTION_ALIASES = {
     "Goal": ("Cel",),
@@ -270,6 +276,8 @@ class Board:
         for dep in card.dependencies():
             if dep not in by_id:
                 errors.append(tr("kanban.dep.missing", dep=dep))
+            elif same_batch(card, by_id[dep]) and by_id[dep].status == "in-progress":
+                continue  # paczka w toku: wspólna gałąź i bramka — kolejność w paczce (Z39)
             elif by_id[dep].status not in allowed:
                 errors.append(
                     tr(
