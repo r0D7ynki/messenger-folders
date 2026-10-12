@@ -134,6 +134,16 @@
         font-size: 11px;
         font-weight: 700;
       }
+      /* Akcja „Oznacz jako nieprzeczytane” — nie jest wskaźnikiem nieprzeczytania */
+      .chat-row-action {
+        border: 0;
+        background: transparent;
+        color: #65676b;
+        font-size: 11px;
+        padding: 4px 8px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
       .main-panel {
         flex: 1;
         display: flex;
@@ -297,6 +307,38 @@
                 <span class="chat-unread-badge" aria-label="1 nieprzeczytana wiadomość">1</span>
               </div>
             </a>
+          </div>
+          <!--
+            Wątek 6: Kasia Nowa — przypadek fałszywie pozytywny z przeglądu MF-011.
+            Wiersz zawiera wyłącznie akcję „Oznacz jako nieprzeczytane” (przycisk z aria-label
+            i data-testid zawierającym „unread”), a nie wskaźnik nieprzeczytania. Detektor musi
+            pominąć ten element i nie zaliczyć wątku do liczników nieprzeczytanych.
+          -->
+          <div role="row" class="chat-row-item" aria-label="Kasia Nowa, Ostatnia wiadomość: Dzięki za pomoc!">
+            <a role="link" href="/t/100000000006" class="chat-row-link" aria-label="Kasia Nowa">
+              <img
+                class="chat-avatar"
+                src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='44' viewBox='0 0 44 44'><circle cx='22' cy='22' r='22' fill='%230ea5e9'/><text x='22' y='27' font-size='16' text-anchor='middle' fill='white' font-family='sans-serif'>KN</text></svg>"
+                width="44"
+                height="44"
+                alt="Kasia Nowa"
+              />
+              <div class="chat-content">
+                <span dir="auto" class="chat-name">Kasia Nowa</span>
+                <span class="chat-preview">Dzięki za pomoc! · 4 dni</span>
+              </div>
+              <div class="chat-meta">
+                <span class="chat-time">4 dni</span>
+              </div>
+            </a>
+            <button
+              type="button"
+              class="chat-row-action"
+              aria-label="Oznacz jako nieprzeczytane"
+              data-testid="unread-toggle"
+            >
+              Oznacz jako nieprzeczytane
+            </button>
           </div>
         </div>
       </div>

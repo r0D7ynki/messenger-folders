@@ -51,28 +51,43 @@ npm test                 # testy jednostkowe
 npm run check            # składnia wszystkich JS + poprawność manifest.json
 npm run lint             # ESLint z no-unsanitized (bezpieczny DOM)
 npm run format           # Prettier — formatuj TYLKO pliki, które zmieniasz w zadaniu
-npm run board            # tablica Kanban
-python3 scripts/kanban/kanban.py next <model>        # moje następne zadanie
-python3 scripts/kanban/kanban.py move MF-001 in-progress
-python3 scripts/kanban/kanban.py check               # walidacja wszystkich kart
+npm run board            # tablica Kanban (z swarmboard: `sb board`)
+python3 scripts/kanban/kanban.py next <model> --start   # weź kartę: gałąź + in-progress (DoR + WIP)
+python3 scripts/kanban/kanban.py submit MF-001          # oddaj: kryteria + Dowód + bramka → review
+python3 scripts/kanban/kanban.py check                  # walidacja wszystkich kart
+# --json przy board/check/next/submit; kody wyjścia: 0 ok, 1 bramka/walidacja, 2 użycie, 3 brak karty
 ```
 
 Ręczny test w przeglądarce: `chrome://extensions` → Tryb dewelopera → Załaduj rozpakowane → ten
 katalog → po każdej zmianie przycisk ↻ przy rozszerzeniu i odświeżenie karty Messengera.
 
-## Proces pracy (skrót — pełny opis: `docs/agents/WORKFLOW.md`)
+## Proces pracy (Kanban) — pełny opis: `docs/agents/WORKFLOW.md`
 
-Tablica to pliki `kanban/tasks/MF-XXX.md`. Kolumny: `backlog → ready → in-progress → review → done`.
-Przesuwaj **tylko** przez `python3 scripts/kanban/kanban.py move` — skrypt pilnuje bramek.
+Karty: `kanban/tasks/MF-XXX.md`. Kolumny: `backlog → ready → in-progress → review → done`.
+Przesuwaj **tylko** przez `scripts/kanban/kanban.py` (`next --start`, `submit`, `move`) — skrypt
+pilnuje bramek (DoR, WIP, kryteria + Dowód, DoD + bramka). **Nie edytuj ręcznie `status:`** w
+nagłówku karty — każde przejście ma wpis w Logu.
 
-1. Weź zadanie: `python3 scripts/kanban/kanban.py next <twój-model>`. Pracuj **tylko** nad zadaniami ze swoim
-   `model:`. Nie bierz zadań z `backlog` — nie spełniają DoR.
-2. `move <ID> in-progress`, utwórz gałąź `mf-XXX-...`.
-3. Zmieniaj **tylko pliki z sekcji Pliki**. Potrzebujesz innego pliku → dopisz to w Logu, cofnij
-   zadanie do `ready` i zatrzymaj się.
-4. Odhacz kryteria akceptacji, wypełnij sekcję **Dowód** (wynik `npm run verify`, opis weryfikacji).
-5. `move <ID> review`. **Nie przenoś własnego zadania do `done`** — robi to reviewer (inny model
-   lub człowiek), który odhacza DoD i wpisuje się w `reviewer:`.
-6. Coś niejasnego? Dopisz pytanie w Logu karty, zostaw zadanie w obecnej kolumnie, zakończ.
+1. Weź kartę: `python3 scripts/kanban/kanban.py next <twój-model> --start` — tworzy gałąź
+   `<id>-<tytuł>` (od `master` albo gałęzi niescalonej zależności) i przesuwa kartę do
+   `in-progress` przez bramkę. Pracuj tylko nad kartami ze swoim `model:`; nie bierz kart z `backlog`.
+2. Drzewo robocze musi być czyste przed startem (start odmawia przy niezacommitowanych zmianach).
+3. Zmieniaj **tylko pliki z sekcji Pliki**. Potrzebny inny plik → wpis w Logu, karta z powrotem do
+   `ready`, stop.
+4. Odhacz kryteria, wypełnij **Dowód** realnym wyjściem komend i kodem wyjścia bramki:
+   `npm run verify > /tmp/verify.log 2>&1; echo "exit=$?"` + ostatnie linie logu.
+5. Zacommituj pracę (tytuł z ID karty, np. `MF-012: …`, trailer agenta `Co-Authored-By: …`), potem
+   `python3 scripts/kanban/kanban.py submit <ID>` — bramka projektu musi przejść, inaczej karta
+   zostaje w `in-progress` z ostatnimi liniami wyjścia.
+6. **Nie przenoś własnej karty do `done`.** Robi to reviewer — inny model albo człowiek niż
+   **faktyczny wykonawca** (nie tylko inny niż pole `model:`). Reviewer odhacza DoD, wpisuje się
+   w `reviewer:` i zostawia w Logu wpis z przeglądem.
+7. **Po `done` karta jest zamknięta** — żadnych commitów ani wpisów pracy. Poprawki = nowa karta
+   z odwołaniem do starej. Kart `done` nie usuwaj z tablicy.
+8. Niejasność → pytanie w Logu karty, karta zostaje, koniec przebiegu.
+
+**Limit subskrypcji** (szczegóły: `docs/agents/WORKFLOW.md`, „Oszczędzanie limitu”): jedna karta =
+jeden wykonawca + jeden niezależny przegląd; bez cronów i heartbeatów; wyczerpana kwota → wpis w Logu
+karty i stop; nowa sesja agenta na każdą kartę; eksploracja repo tylko dla kart `L`.
 
 Identyfikatory modeli w kartach: `claude`, `gemini` (Antigravity), `deepseek`, `human`.

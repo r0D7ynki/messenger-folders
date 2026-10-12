@@ -147,12 +147,12 @@ async function runStorageTests() {
   // Test assignThread()
   const assigned = await storage.assignThread('100012345', newFolder.id, {
     name: 'Jan Kowalski',
-    avatar: 'https://example.com/avatar.jpg'
+    avatar: 'https://scontent.xx.fbcdn.net/avatar.jpg'
   });
   assert.strictEqual(assigned.threadId, '100012345');
   assert.strictEqual(assigned.folderId, newFolder.id);
   assert.strictEqual(assigned.name, 'Jan Kowalski');
-  assert.strictEqual(assigned.avatar, 'https://example.com/avatar.jpg');
+  assert.strictEqual(assigned.avatar, 'https://scontent.xx.fbcdn.net/avatar.jpg');
   console.log('✓ storage.assignThread() poprawnie przypisuje wątek do folderu');
 
   // Test getThreadFolder()
@@ -414,6 +414,74 @@ async function runStorageTests() {
 console.log('\n--- Test 3: MessengerDOMDetector ---');
 const MessengerDOMDetector = require('../src/detector.js');
 
+/**
+ * Sprawdza prosty selektor złożony (tag, .klasy, atrybuty z operatorami =, *= i flagą i) na elemencie mocka.
+ * @param {object} element Element mocka.
+ * @param {string} compound Selektor bez przecinków i kombinatorów.
+ * @returns {boolean} Czy element pasuje.
+ */
+function mockMatchesCompound(element, compound) {
+  const tagMatch = compound.match(/^[a-z]+/i);
+  if (tagMatch && tagMatch[0].toUpperCase() !== element.tagName) return false;
+  const classes = (element.attrs.class || '').split(/\s+/);
+  for (const [, className] of compound.replace(/\[[^\]]*\]/g, '').matchAll(/\.([\w-]+)/g)) {
+    if (!classes.includes(className)) return false;
+  }
+  const attrRe = /\[([\w-]+)(?:(\*?=)"([^"]*)"(?:\s+(i))?)?\]/g;
+  let m;
+  while ((m = attrRe.exec(compound))) {
+    const [, name, op, value, flag] = m;
+    if (!(name in element.attrs)) return false;
+    if (!op) continue;
+    let actual = element.attrs[name];
+    let expected = value;
+    if (flag) {
+      actual = actual.toLowerCase();
+      expected = expected.toLowerCase();
+    }
+    if (op === '=' ? actual !== expected : !actual.includes(expected)) return false;
+  }
+  return true;
+}
+
+/**
+ * Tworzy minimalny element DOM z querySelector(All), matches, closest i getAttribute.
+ * @param {string} tag Nazwa tagu.
+ * @param {Record<string, string>} attrs Atrybuty.
+ * @param {object[]} [children] Elementy potomne.
+ * @returns {object} Element mocka.
+ */
+function mockElement(tag, attrs, children = []) {
+  const element = {
+    tagName: tag.toUpperCase(),
+    attrs,
+    children,
+    parentElement: null,
+    getAttribute: (name) => (name in attrs ? attrs[name] : null),
+    matches: (selector) => selector.split(/,(?![^[]*\])/).some((part) => mockMatchesCompound(element, part.trim())),
+    closest: (selector) => {
+      for (let node = element; node; node = node.parentElement) {
+        if (node.matches(selector)) return node;
+      }
+      return null;
+    },
+    querySelectorAll: (selector) => {
+      const found = [];
+      const walk = (node) => {
+        for (const child of node.children) {
+          if (child.matches(selector)) found.push(child);
+          walk(child);
+        }
+      };
+      walk(element);
+      return found;
+    },
+    querySelector: (selector) => element.querySelectorAll(selector)[0] || null
+  };
+  children.forEach((child) => (child.parentElement = element));
+  return element;
+}
+
 function runDetectorTests() {
   const detector = new MessengerDOMDetector();
 
@@ -438,11 +506,441 @@ function runDetectorTests() {
   assert.strictEqual(detector._isTimeOrBadge('Jan Kowalski'), false);
   assert.strictEqual(detector._isTimeOrBadge('Zespół Projektowy'), false);
   console.log('✓ detector._isTimeOrBadge() poprawnie odróżnia nazwy od znaczników czasu');
+
+  // Testy isThreadUnread (MF-019) na minimalnym mocku DOM
+  const row = (...children) => mockElement('div', { role: 'row' }, children);
+  assert.strictEqual(
+    detector.isThreadUnread(
+      row(
+        mockElement('button', { 'aria-label': 'Oznacz jako nieprzeczytane' }),
+        mockElement('span', { 'aria-label': '2 nieprzeczytane wiadomości' })
+      )
+    ),
+    true,
+    'Przycisk „Oznacz jako nieprzeczytane” nie może przesłonić prawdziwej odznaki'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(
+      row(
+        mockElement('img', { class: 'chat-avatar', style: 'border: 2px solid rgb(0, 132, 255)' }),
+        mockElement('div', { style: 'background: rgb(0, 132, 255)' })
+      )
+    ),
+    true,
+    'Awatar z niebieską ramką nie może przesłonić niebieskiej kropki'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(
+      row(
+        mockElement('button', {
+          class: 'mark-as-unread-btn',
+          'data-testid': 'mark_as_unread_button',
+          'aria-label': 'Oznacz jako nieprzeczytane'
+        })
+      )
+    ),
+    false,
+    'Przycisk akcji z „unread” w klasie i data-testid nie oznacza nieprzeczytania'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(row(mockElement('button', { 'aria-label': 'Oznacz wątek jako nieprzeczytany' }))),
+    false,
+    'Etykieta „Oznacz wątek jako nieprzeczytany” to akcja, nie stan'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(
+      row(mockElement('div', { style: 'border: 2px solid #0084FF' }, [mockElement('img', { src: 'a.png' })]))
+    ),
+    false,
+    'Ramka wokół awatara nie jest kropką nieprzeczytania'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(row(mockElement('span', { 'data-testid': 'unread_badge' }))),
+    true,
+    'Atrybut data-testid odznaki oznacza nieprzeczytanie'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(row(mockElement('span', { class: 'chat-unread-badge' }))),
+    false,
+    'Sama klasa CSS nie jest podstawą detekcji'
+  );
+  assert.strictEqual(detector.isThreadUnread(row(mockElement('span', { 'data-unread': 'true' }))), true);
+  assert.strictEqual(detector.isThreadUnread(row(mockElement('span', {}))), false);
+  console.log('✓ detector.isThreadUnread() pomija akcje „Oznacz jako nieprzeczytane” i awatary, bez klas CSS');
+
+  // Testy isThreadUnread (MF-014): po jednym przypadku na każdy krok heurystyki i wiersz przeczytany
+  const threadLink = (attrs = {}, children = []) =>
+    mockElement('a', { href: '/t/123/', role: 'link', ...attrs }, children);
+  assert.strictEqual(
+    detector.isThreadUnread(mockElement('div', { role: 'row', 'data-testid': 'unread_row' }, [threadLink()])),
+    true,
+    'Krok 1: data-testid z „unread” na samym wierszu'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(row(threadLink({}, [mockElement('span', { 'aria-label': '1 unread message' })]))),
+    true,
+    'Krok 2: potomek z aria-label „unread”'
+  );
+  const labelledRow = mockElement('div', { role: 'row', 'aria-label': 'Jan Kowalski, nieprzeczytane' }, [threadLink()]);
+  assert.strictEqual(detector.isThreadUnread(labelledRow), true, 'Krok 3: aria-label wiersza');
+  const plainLink = threadLink({ 'aria-label': 'Anna Nowak — unread messages' });
+  assert.strictEqual(detector.isThreadUnread(row(plainLink), plainLink), true, 'Krok 3: aria-label linku');
+  const actionLink = threadLink({ 'aria-label': 'Mark as unread' });
+  assert.strictEqual(detector.isThreadUnread(row(), actionLink), false, 'Krok 3: etykieta akcji „Mark as unread”');
+  assert.strictEqual(
+    detector.isThreadUnread(row(threadLink({}, [mockElement('span', { style: 'background-color: #0084FF' })]))),
+    true,
+    'Krok 4: niebieska kropka #0084FF'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(mockElement('div', { role: 'row', 'data-unread': 'true' }, [threadLink()])),
+    true,
+    'Krok 5: data-unread="true" na wierszu'
+  );
+  const readRow = row(
+    threadLink({ 'aria-label': 'Jan Kowalski' }, [
+      mockElement('img', { src: 'avatar.jpg', style: 'border: 2px solid rgb(0, 132, 255)' }),
+      mockElement('span', { dir: 'auto' }),
+      mockElement('span', { 'data-unread': 'false' })
+    ]),
+    mockElement('div', { role: 'button', 'aria-label': 'Menu' })
+  );
+  assert.strictEqual(detector.isThreadUnread(readRow, readRow.children[0]), false, 'Wiersz przeczytany → false');
+  assert.strictEqual(detector.isThreadUnread(null), false, 'Brak wiersza → false');
+  console.log('✓ detector.isThreadUnread() ma test na każdy krok heurystyki i na wiersz przeczytany');
+
+  // MF-024: utwardzenie heurystyki (przeglądy MF-014 i MF-019)
+  // Pkt 1: potomek przycisku akcji nie jest wskaźnikiem — sprawdzana jest ścieżka przodków
+  const actionIcon = mockElement('span', { 'data-testid': 'unread_icon' });
+  mockElement('button', { 'aria-label': 'Menu' }, [actionIcon]);
+  assert.strictEqual(detector._isActionElement(actionIcon), true, 'Potomek <button> to element akcji');
+  assert.strictEqual(
+    detector.isThreadUnread(
+      row(
+        mockElement('div', { role: 'menuitem' }, [mockElement('span', { 'data-testid': 'mark_unread_icon' })]),
+        mockElement('div', { role: 'button' }, [mockElement('span', { 'aria-label': '1 unread' })])
+      )
+    ),
+    false,
+    'Wskaźniki wewnątrz przycisków i pozycji menu nie oznaczają nieprzeczytania'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(
+      row(
+        mockElement('button', {}, [mockElement('span', { 'data-testid': 'unread_icon' })]),
+        mockElement('span', { 'data-testid': 'unread_badge' })
+      )
+    ),
+    true,
+    'Prawdziwa odznaka poza przyciskiem nadal działa'
+  );
+
+  // Pkt 2: awatar bez <img> (div z obrazem w tle lub role="img") nie jest niebieską kropką
+  assert.strictEqual(
+    detector.isThreadUnread(
+      row(mockElement('div', { style: 'background: url(a.png); border: 2px solid rgb(0, 132, 255)' }))
+    ),
+    false,
+    'Awatar-div z tłem url() nie jest kropką'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(row(mockElement('div', { role: 'img', style: 'border: 2px solid #0084ff' }))),
+    false,
+    'Element role="img" nie jest kropką'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(row(mockElement('div', { style: 'background: rgb(0, 132, 255)' }))),
+    true,
+    'Zwykła niebieska kropka nadal działa'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(row(mockElement('svg', { style: 'border: 2px solid #0084ff' }))),
+    false,
+    'Element <svg> w ramce #0084ff nie jest kropką'
+  );
+
+  // MF-027 pkt 2: url() poza właściwością tła nie czyni elementu awatarem
+  assert.strictEqual(
+    detector.isThreadUnread(row(mockElement('div', { style: 'mask-image: url(dot.png); border: 2px solid #0084ff' }))),
+    true,
+    'Kropka z url() poza właściwością tła nadal jest kropką'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(
+      row(mockElement('div', { style: 'background-image: url(avatar.png); border: 2px solid #0084ff' }))
+    ),
+    false,
+    'Awatar-div z background-image: url() dalej nie jest kropką'
+  );
+
+  // MF-029 pkt 3: komentarz CSS przed deklaracją tła nie ukrywa awatara
+  assert.strictEqual(
+    detector.isThreadUnread(
+      row(mockElement('div', { style: '/*x*/background:url(a.png); border: 2px solid #0084ff' }))
+    ),
+    false,
+    'Awatar z komentarzem CSS przed background: url() nie jest kropką'
+  );
+
+  // MF-031 pkt 2: komentarz CSS wewnątrz adresu w url("…") nie psuje rozpoznania awatara
+  assert.strictEqual(
+    detector.isThreadUnread(
+      row(mockElement('div', { style: 'background: url("a/*b*/c.png"); border: 2px solid #0084ff' }))
+    ),
+    false,
+    'Awatar z komentarzem CSS wewnątrz url("…") nie jest kropką'
+  );
+
+  // MF-027 pkt 3: przycisk wokół całego wiersza nie wyłącza heurystyki wskaźników
+  const wrappedRow = row(threadLink({}, [mockElement('span', { 'data-testid': 'unread-dot' })]));
+  mockElement('div', { role: 'button' }, [wrappedRow]);
+  assert.strictEqual(
+    detector.isThreadUnread(wrappedRow),
+    true,
+    'Wiersz opakowany w [role="button"] z potomkiem unread nadal jest nieprzeczytany'
+  );
+
+  // MF-027 pkt 3b: sam klikalny wiersz też nie jest akcją — liczy się tylko etykieta „Oznacz…”
+  assert.strictEqual(
+    detector.isThreadUnread(mockElement('div', { role: 'button', 'data-testid': 'unread_row' }, [threadLink()])),
+    true,
+    'Wiersz sam będący [role="button"] z data-testid unread to nieprzeczytany wątek'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(
+      mockElement('div', { role: 'button', 'data-testid': 'unread_row', 'aria-label': 'Oznacz jako nieprzeczytane' }, [
+        threadLink()
+      ])
+    ),
+    false,
+    'Etykieta akcji „Oznacz…” na wierszu nadal wyklucza nieprzeczytanie'
+  );
+  // Bloker z raportu: także wiersz leżący w przycisku (a nie tylko on sam) — krok 1 patrzy
+  // wyłącznie na etykietę wiersza, więc przodek `[role="button"]` nie może wyłączyć wskaźnika.
+  const rowInButton = mockElement('div', { role: 'row', 'data-testid': 'unread_row' }, [threadLink()]);
+  mockElement('div', { role: 'button' }, [rowInButton]);
+  assert.strictEqual(
+    detector.isThreadUnread(rowInButton),
+    true,
+    'Wiersz z data-testid unread leżący w [role="button"] nadal jest nieprzeczytany'
+  );
+
+  // Pkt 3: etykieta stanu „Oznaczony…” to stan, nie akcja „Oznacz…”
+  assert.strictEqual(
+    detector.isThreadUnread(row(mockElement('span', { 'aria-label': 'Oznaczony jako nieprzeczytany' }))),
+    true,
+    'Krok 2: „Oznaczony jako nieprzeczytany” to stan'
+  );
+  const stateLink = threadLink({ 'aria-label': 'Oznaczony jako nieprzeczytany' });
+  assert.strictEqual(detector.isThreadUnread(row(stateLink), stateLink), true, 'Krok 3: etykieta stanu');
+  assert.strictEqual(
+    detector.isThreadUnread(row(mockElement('span', { 'aria-label': 'Oznacz jako nieprzeczytane' }))),
+    false,
+    'Etykieta akcji „Oznacz…” nadal pomijana'
+  );
+
+  // Pkt 4: krok 1 przez ścieżkę potomka, krok 5 osobno (bez innych gałęzi OR)
+  assert.strictEqual(
+    detector.isThreadUnread(row(threadLink({}, [mockElement('span', { 'data-testid': 'unread_dot' })]))),
+    true,
+    'Krok 1: data-testid z „unread” na potomku'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(mockElement('div', { role: 'row', 'data-unread': 'true' }, [threadLink()])),
+    true,
+    'Krok 5: data-unread="true" na wierszu'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(row(threadLink({}, [mockElement('span', { 'data-unread': 'true' })]))),
+    true,
+    'Krok 5: data-unread="true" na potomku'
+  );
+  assert.strictEqual(
+    detector.isThreadUnread(row(threadLink({}, [mockElement('span', { 'data-unread': 'false' })]))),
+    false,
+    'data-unread="false" → false'
+  );
+  console.log('✓ detector.isThreadUnread() (MF-024): przodkowie-akcje, awatary bez <img>, etykieta „Oznaczony…”');
+}
+
+/**
+ * Ładuje src/content.js w osobnym kontekście vm z atrapami modułów.
+ * document.readyState === 'loading', więc start() nie rusza — testujemy funkcje i callbacki modułu.
+ * @param {Object} [overrides] Dodatkowe lub podmienione obiekty globalne piaskownicy.
+ * @returns {Object} Kontekst piaskownicy po wykonaniu content.js.
+ */
+function loadContentScript(overrides = {}) {
+  const vm = require('vm');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'content.js'), 'utf8');
+  const sandbox = {
+    console: { log() {}, warn() {}, error() {} },
+    MessengerFoldersStorage: class {},
+    MessengerDOMDetector: class {},
+    MessengerFoldersUI: class {},
+    window: { location: { href: 'https://www.messenger.com/' } },
+    document: { readyState: 'loading', addEventListener() {} },
+    ...overrides
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(source, sandbox);
+  return sandbox;
+}
+
+/**
+ * Zwraca calculateUnreadCounts z content.js załadowanego w piaskownicy.
+ * @returns {Function} calculateUnreadCounts z content.js.
+ */
+function loadCalculateUnreadCounts() {
+  const sandbox = loadContentScript();
+  assert.strictEqual(typeof sandbox.calculateUnreadCounts, 'function', 'content.js eksportuje calculateUnreadCounts');
+  return sandbox.calculateUnreadCounts;
+}
+
+function runUnreadCountsTests() {
+  const calculateUnreadCounts = loadCalculateUnreadCounts();
+  const folders = [{ id: 'all' }, { id: 'work' }, { id: 'friends' }];
+  const threadsMap = { t1: { folderId: 'work' }, t2: { folderId: 'work' }, t3: { folderId: 'friends' } };
+  const detected = [
+    { threadId: 't1', isUnread: true },
+    { threadId: 't2', isUnread: true },
+    { threadId: 't3', isUnread: false },
+    { threadId: 't4', isUnread: true },
+    { threadId: 't1', isUnread: true },
+    { threadId: ' t2 ', isUnread: true }
+  ];
+  const counts = calculateUnreadCounts(detected, threadsMap, folders);
+  assert.strictEqual(counts.all, 3, "Suma dla 'all' to liczba unikalnych nieprzeczytanych wątków");
+  assert.strictEqual(counts.work, 2, 'Ten sam wątek dwa razy w DOM liczony raz');
+  assert.strictEqual(counts.friends, 0, 'Przeczytany wątek nie zwiększa licznika folderu');
+  assert.strictEqual(counts.uncategorized, 1, 'Wątek nieprzypisany trafia do uncategorized');
+  assert.strictEqual(
+    counts.all,
+    counts.work + counts.friends + counts.uncategorized,
+    "Suma 'all' równa sumie folderów"
+  );
+
+  const empty = calculateUnreadCounts([], threadsMap, folders);
+  assert.deepStrictEqual(
+    { ...empty },
+    { all: 0, work: 0, friends: 0, uncategorized: 0 },
+    'Brak wątków → same zera, także dla uncategorized'
+  );
+  // MF-024 pkt 4: folderId spoza listy folderów — wątek liczony w 'all' i pod własnym kluczem, bez wpływu na inne foldery
+  const orphan = calculateUnreadCounts([{ threadId: 'x1', isUnread: true }], { x1: { folderId: 'usuniety' } }, folders);
+  assert.strictEqual(orphan.all, 1, "Wątek z nieznanym folderId liczony w 'all'");
+  assert.strictEqual(orphan.usuniety, 1, 'Licznik pod kluczem nieznanego folderu');
+  assert.strictEqual(orphan.uncategorized, 0, 'Nieznany folderId nie trafia do uncategorized');
+  assert.strictEqual(orphan.work + orphan.friends, 0, 'Znane foldery bez zmian');
+  assert.strictEqual(calculateUnreadCounts(null, null, null).all, 0, 'Niepoprawne wejście → 0');
+  console.log("✓ calculateUnreadCounts(): suma dla 'all', nieprzypisane → uncategorized, duplikaty liczone raz");
+}
+
+/**
+ * Testy MF-021: wsadowe auto-przypisania przez publiczne API storage.
+ */
+async function runAutoAssignmentTests() {
+  console.log('\n--- Test 5: Auto-przypisania reguł (MF-021) ---');
+
+  // 1. applyAutoAssignments aktualizuje pamięć podręczną synchronicznie, jeszcze przed zapisem
+  const autoStorage = new MessengerFoldersStorage(new MockStorageArea());
+  await autoStorage.init();
+  await autoStorage.assignThread('t_manual', 'friends');
+
+  const pending = autoStorage.applyAutoAssignments([
+    { threadId: 't_new', folderId: 'work', expectedFolderId: null, metadata: { name: 'Projekt A' } },
+    // Wątek zmienił folder od ewaluacji (oczekiwano braku folderu) — przypisanie pominięte
+    { threadId: 't_manual', folderId: 'work', expectedFolderId: null, metadata: { name: 'Projekt B' } }
+  ]);
+  const syncThreads = autoStorage.getAllThreadsSync();
+  assert.strictEqual(syncThreads.t_new.folderId, 'work', 'Auto-przypisanie widoczne od razu w getAllThreadsSync()');
+  assert.strictEqual(syncThreads.t_new.autoAssigned, true, 'Auto-przypisanie oznaczone autoAssigned');
+  assert.strictEqual(syncThreads.t_manual.folderId, 'friends', 'Ręczne przypisanie nie zostaje nadpisane');
+
+  const applied = await pending;
+  assert.deepStrictEqual(applied, ['t_new'], 'Zwraca tylko faktycznie przypisane wątki');
+  assert.strictEqual(autoStorage._storage.store.mf_threads.t_new.folderId, 'work', 'Przypisanie trafia do pamięci');
+  assert.strictEqual(autoStorage._storage.store.mf_threads.t_manual.folderId, 'friends');
+  assert.deepStrictEqual(await autoStorage.applyAutoAssignments([]), [], 'Pusta lista → brak zapisu');
+
+  // Ręczne assignThread tuż po zapisie wsadowym nie gubi auto-przypisań (świeża pamięć podręczna)
+  await autoStorage.assignThread('t_other', 'groups');
+  assert.strictEqual(autoStorage._storage.store.mf_threads.t_new.folderId, 'work');
+  console.log('✓ storage.applyAutoAssignments() aktualizuje pamięć podręczną przed zapisem i pomija zmienione wątki');
+
+  // 2. content.js: ręczne przypisanie między porcjami ewaluacji nie jest nadpisane regułą
+  const { MessengerRulesEngine } = require('../src/rules.js');
+  const realEngine = new MessengerRulesEngine({ storageArea: {} });
+  const rules = [
+    {
+      id: 'r1',
+      name: 'Projekty',
+      enabled: true,
+      priority: 10,
+      folderId: 'work',
+      matchMode: 'all',
+      overwriteManual: false,
+      conditions: [{ field: 'name', operator: 'contains', value: 'Projekt' }]
+    }
+  ];
+
+  const evalStorage = new MessengerFoldersStorage(new MockStorageArea());
+  await evalStorage.init();
+  const detected = Array.from({ length: 25 }, (_, i) => ({ threadId: `t${i}`, name: `Projekt ${i}` }));
+
+  let yields = 0;
+  const uiStub = { filterChatRows() {}, updateFolderCounts() {} };
+  loadContentScript({
+    MessengerFoldersStorage: function () {
+      return evalStorage;
+    },
+    MessengerDOMDetector: function () {
+      return { scanChatList: () => detected };
+    },
+    MessengerFoldersUI: function () {
+      return uiStub;
+    },
+    MessengerRulesEngine: function () {
+      return {
+        getRules: async () => rules,
+        evaluateThread: (thread, r, folders) => realEngine.evaluateThread(thread, r, folders)
+      };
+    },
+    // Użytkownik przypisuje ręcznie wątek już ocenione (t3) i jeszcze nieocenione (t22) między porcjami
+    requestIdleCallback: (resolve) => {
+      yields++;
+      evalStorage
+        .assignThread('t3', 'friends')
+        .then(() => evalStorage.assignThread('t22', 'groups'))
+        .then(resolve);
+    }
+  });
+
+  // content.js podpina onRulesChanged do obiektu UI — wywołanie uruchamia ewaluację reguł
+  assert.strictEqual(typeof uiStub.onRulesChanged, 'function', 'content.js podpina ui.onRulesChanged');
+  await uiStub.onRulesChanged();
+
+  const stored = evalStorage._storage.store.mf_threads;
+  assert.strictEqual(stored.t3.folderId, 'friends', 'Zapisane ręczne przypisanie t3 nie jest nadpisane regułą');
+  assert.strictEqual(stored.t22.folderId, 'groups', 'Zapisane ręczne przypisanie t22 nie jest nadpisane regułą');
+
+  const after = evalStorage.getAllThreadsSync();
+  assert.ok(yields >= 1, 'Ewaluacja 25 wątków oddaje sterowanie między porcjami');
+  assert.strictEqual(after.t3.folderId, 'friends', 'Wątek oceniony przed ręcznym przypisaniem nie jest nadpisany');
+  assert.strictEqual(after.t3.autoAssigned, undefined, 'Ręczne przypisanie t3 nie jest oznaczone jako automatyczne');
+  assert.strictEqual(after.t22.folderId, 'groups', 'Wątek oceniany po ręcznym przypisaniu nie jest nadpisany');
+  assert.strictEqual(after.t0.folderId, 'work', 'Pozostałe wątki przypisane regułą');
+  assert.strictEqual(after.t24.folderId, 'work');
+  assert.strictEqual(after.t0.autoAssigned, true);
+  console.log(
+    '✓ content.js: ręczne przypisanie między porcjami ewaluacji nie jest nadpisane regułą bez overwriteManual'
+  );
 }
 
 (async () => {
   await runStorageTests();
+  await runAutoAssignmentTests();
   runDetectorTests();
+  runUnreadCountsTests();
   console.log('\n=============================================');
   console.log('WSZYSTKIE TESTY ZAKOŃCZYŁY SIĘ POWODZENIEM! ✓');
   console.log('=============================================');

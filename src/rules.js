@@ -18,9 +18,268 @@
   const VALID_FIELDS = ['name', 'threadId', 'threadName'];
 
   // Zabezpieczenie przed ReDoS (catastrophic backtracking) i zbyt złożonymi wzorcami
-  const DANGEROUS_REGEX_PATTERN =
-    /(?:[+*]|\{\d+,?\d*\})\s*(?:[+*]|\{\d+,?\d*\})|\([^(]*(?:[+*]|\{\d+,?\d*\})[^)]*\)+\s*(?:[+*]|\{\d+,?\d*\})/;
   const MAX_REGEX_PATTERN_LENGTH = 250;
+  // Budżet szacowanej liczby kroków nawrotu dla jednego dopasowania (pomiar w V8: 6–23 ns na krok,
+  // czyli najwyżej ok. 50 ms w najgorszym przypadku)
+  const MAX_REGEX_COST_LOG2 = Math.log2(2e6);
+  // Długość tekstu, dla której wzorzec musi zmieścić się w budżecie, by dało się go zapisać
+  const REGEX_REFERENCE_TEXT_LENGTH = 100;
+  // Pamięć podręczna analiz wzorców (matchCondition wołane jest dla każdego wątku przy każdym skanie)
+  const MAX_REGEX_ANALYSIS_CACHE = 200;
+  const regexAnalysisCache = new Map();
+  // Zakres priorytetu reguły (pole „Priorytet” w edytorze)
+  const MIN_PRIORITY = 0;
+  const MAX_PRIORITY = 100;
+
+  /**
+   * Zwraca chrome.runtime.lastError albo null — także gdy `chrome` nie jest zadeklarowane
+   * (`chrome?.runtime` rzuca wtedy ReferenceError).
+   * @returns {Object|null}
+   */
+  function getRuntimeLastError() {
+    return typeof chrome !== 'undefined' && chrome && chrome.runtime ? chrome.runtime.lastError || null : null;
+  }
+
+  /**
+   * Odczytuje kwantyfikator zaczynający się na pozycji `index` (`*`, `+`, `?`, `{n}`, `{n,}`, `{n,m}`).
+   * @param {string} pattern Wzorzec wyrażenia regularnego.
+   * @param {number} index Pozycja w wzorcu.
+   * @returns {{length: number, min: number, max: number, repeats: boolean, varies: boolean}|null}
+   *   Opis kwantyfikatora albo null: `repeats` — atom może wystąpić więcej niż raz,
+   *   `varies` — liczba powtórzeń nie jest stała.
+   */
+  function readQuantifier(pattern, index) {
+    const ch = pattern[index];
+    let min;
+    let max;
+    let length = 1;
+    if (ch === '*') [min, max] = [0, Infinity];
+    else if (ch === '+') [min, max] = [1, Infinity];
+    else if (ch === '?') [min, max] = [0, 1];
+    else if (ch === '{') {
+      const m = /^\{(\d+)(,(\d*))?\}/.exec(pattern.slice(index));
+      if (!m) return null;
+      min = Number(m[1]);
+      max = m[2] ? (m[3] === '' ? Infinity : Number(m[3])) : min;
+      length = m[0].length;
+    } else {
+      return null;
+    }
+    return { length, min, max, repeats: max > 1, varies: max !== min };
+  }
+
+  /**
+   * Analizuje strukturę wzorca pod kątem nawrotów (ReDoS).
+   *
+   * Zwraca `hazard` dla konstrukcji wykładniczych niezależnie od długości tekstu: kwantyfikatora tuż
+   * po kwantyfikatorze (`a++`) i grupy powtarzanej zmienną liczbę razy, która zawiera alternatywę albo
+   * zmienny kwantyfikator (`(a|a)*`, `(a|ab)*c`, `(a+)+`, `((a*)b)*`).
+   *
+   * Pozostałe wzorce opisuje „punktami wyboru”, z których liczy się koszt dopasowania
+   * (estimateRegexCostLog2): `bits` — log2 liczby wariantów z `?`, `|` i skończonych `{n,m}`
+   * (każdy `?` i każdy `|` podwaja liczbę ścieżek), `unbounded` — liczba powtórzeń `*`, `+`, `{n,}`
+   * (każde mnoży koszt przez długość tekstu). Grupa powtórzona stałą liczbę razy (`(\d{1,3}\.){3}`)
+   * mnoży swoje punkty wyboru. Klasy znaków `[...]` i sekwencje ucieczki są pojedynczym atomem.
+   * `anchored` — wzorzec zaczyna się od `^` i nie ma `|` na najwyższym poziomie (jedna pozycja startu).
+   *
+   * @param {string} pattern Wzorzec wyrażenia regularnego.
+   * @returns {{hazard: string|null, bits: number, unbounded: number, anchored: boolean}} Wynik analizy.
+   */
+  function analyzeRegexPattern(pattern) {
+    const newFrame = () => ({ hasAlt: false, hasQuant: false, bits: 0, unbounded: 0 });
+    // Ramka na każdy poziom grupy: alternatywa, zmienny kwantyfikator i punkty wyboru wewnątrz
+    const stack = [newFrame()];
+    // Ostatni element: null (brak atomu), 'atom', 'quant' albo ramka zamkniętej grupy
+    let last = null;
+    let topLevelAlt = false;
+    let i = 0;
+    const result = (hazard) => ({
+      hazard,
+      bits: stack[0].bits,
+      unbounded: stack[0].unbounded,
+      anchored: pattern.startsWith('^') && !topLevelAlt
+    });
+
+    while (i < pattern.length) {
+      const ch = pattern[i];
+      const top = stack[stack.length - 1];
+
+      if (ch === '\\') {
+        last = 'atom';
+        i += 2;
+        continue;
+      }
+
+      if (ch === '[') {
+        i++;
+        if (pattern[i] === '^') i++;
+        if (pattern[i] === ']') i++;
+        while (i < pattern.length && pattern[i] !== ']') {
+          if (pattern[i] === '\\') i++;
+          i++;
+        }
+        i++;
+        last = 'atom';
+        continue;
+      }
+
+      if (ch === '(') {
+        stack.push(newFrame());
+        i++;
+        if (pattern[i] === '?') {
+          // Grupy specjalne: (?: (?= (?! (?<= (?<! (?<nazwa>
+          i++;
+          if (pattern[i] === '<' && pattern[i + 1] !== '=' && pattern[i + 1] !== '!') {
+            const end = pattern.indexOf('>', i);
+            i = end === -1 ? pattern.length : end + 1;
+          } else {
+            i += pattern[i] === '<' ? 2 : 1;
+          }
+        }
+        last = null;
+        continue;
+      }
+
+      if (ch === ')') {
+        const frame = stack.length > 1 ? stack.pop() : newFrame();
+        const parent = stack[stack.length - 1];
+        parent.hasAlt = parent.hasAlt || frame.hasAlt;
+        parent.hasQuant = parent.hasQuant || frame.hasQuant;
+        parent.bits += frame.bits;
+        parent.unbounded += frame.unbounded;
+        last = frame;
+        i++;
+        continue;
+      }
+
+      if (ch === '|') {
+        if (stack.length === 1) topLevelAlt = true;
+        top.hasAlt = true;
+        top.bits += 1;
+        last = null;
+        i++;
+        continue;
+      }
+
+      const quant = readQuantifier(pattern, i);
+      if (quant) {
+        if (last === 'quant') {
+          return result('Kwantyfikator tuż po kwantyfikatorze (np. a++).');
+        }
+        if (last && typeof last === 'object' && quant.repeats) {
+          if (quant.varies && (last.hasAlt || last.hasQuant)) {
+            return result(
+              last.hasAlt
+                ? 'Powtarzana grupa z alternatywą „|” (np. (a|b)*) może zawiesić stronę.'
+                : 'Zagnieżdżone kwantyfikatory (np. (a+)+) mogą zawiesić stronę.'
+            );
+          }
+          // Grupa powtórzona stałą liczbę razy: jej punkty wyboru występują `min` razy
+          const extra = Math.min(quant.min, MAX_REGEX_PATTERN_LENGTH) - 1;
+          top.bits += last.bits * extra;
+          top.unbounded += last.unbounded * extra;
+        }
+        if (quant.varies) {
+          top.hasQuant = true;
+          if (quant.max === Infinity) top.unbounded += 1;
+          else top.bits += Math.log2(quant.max - quant.min + 1);
+        }
+        i += quant.length;
+        // Modyfikator leniwy (*?, +?, ??, {n,m}?) nie jest osobnym kwantyfikatorem
+        if (pattern[i] === '?') i++;
+        last = 'quant';
+        continue;
+      }
+
+      last = 'atom';
+      i++;
+    }
+
+    return result(null);
+  }
+
+  /**
+   * Zwraca (z pamięci podręcznej) wynik analyzeRegexPattern dla wzorca.
+   * @param {string} pattern Wzorzec wyrażenia regularnego.
+   * @returns {{hazard: string|null, bits: number, unbounded: number, anchored: boolean}} Wynik analizy.
+   */
+  function getRegexAnalysis(pattern) {
+    let analysis = regexAnalysisCache.get(pattern);
+    if (!analysis) {
+      analysis = analyzeRegexPattern(pattern);
+      if (regexAnalysisCache.size >= MAX_REGEX_ANALYSIS_CACHE) {
+        regexAnalysisCache.delete(regexAnalysisCache.keys().next().value);
+      }
+      regexAnalysisCache.set(pattern, analysis);
+    }
+    return analysis;
+  }
+
+  /**
+   * Szacuje log2 liczby kroków nawrotu dla tekstu długości `textLength`: każde z `unbounded`
+   * powtórzeń (i pozycja startu, chyba że wzorzec jest zakotwiczony `^`) wybiera punkt podziału
+   * tekstu — C(n + u, u + 1) ≈ n^(u+1) / (u+1)! — a każdy bit punktów wyboru podwaja liczbę ścieżek.
+   * @param {{bits: number, unbounded: number, anchored: boolean}} analysis Wynik analyzeRegexPattern.
+   * @param {number} textLength Długość dopasowywanego tekstu.
+   * @returns {number} log2 szacowanego kosztu.
+   */
+  function estimateRegexCostLog2(analysis, textLength) {
+    const n = textLength + 1;
+    let log2Cost = analysis.bits;
+    const splitPoints = analysis.unbounded + (analysis.anchored ? 0 : 1);
+    for (let k = 1; k <= splitPoints; k++) {
+      log2Cost += Math.log2((n + k - 1) / k);
+    }
+    return log2Cost;
+  }
+
+  /**
+   * Rzuca błąd, gdy któraś reguła ma niebezpieczny lub błędny wzorzec RegEx (validateRegexPattern).
+   * Wzorce zapisane już wcześniej (ta sama reguła i wartość w `storedRules`) są pomijane, by starsza
+   * reguła nie blokowała usuwania ani przełączania innych — matchCondition i tak ich nie wykona.
+   * @param {Array<Object>} rules Znormalizowane reguły do zapisu.
+   * @param {Array<Object>} [storedRules] Reguły obecnie zapisane w magazynie.
+   */
+  function assertSafeRegexConditions(rules, storedRules = []) {
+    const storedPatterns = new Set();
+    for (const r of storedRules || []) {
+      for (const c of r.conditions || []) {
+        if (c.operator === 'regex') storedPatterns.add(`${r.id}\u0000${c.value}`);
+      }
+    }
+    for (const rule of rules) {
+      for (const cond of rule.conditions || []) {
+        if (cond.operator !== 'regex' || storedPatterns.has(`${rule.id}\u0000${cond.value}`)) continue;
+        const regexError = validateRegexPattern(cond.value);
+        if (regexError) throw new Error(regexError);
+      }
+    }
+  }
+
+  /**
+   * Sprawdza, czy wzorzec RegEx nadaje się do reguły: długość, składnia i ryzyko ReDoS.
+   * @param {string} pattern Wzorzec wyrażenia regularnego.
+   * @returns {string|null} Komunikat błędu po polsku albo null, gdy wzorzec jest poprawny.
+   */
+  function validateRegexPattern(pattern) {
+    const valStr = String(pattern ?? '');
+    if (valStr.length > MAX_REGEX_PATTERN_LENGTH) {
+      return `Wyrażenie jest za długie (maks. ${MAX_REGEX_PATTERN_LENGTH} znaków).`;
+    }
+    const analysis = getRegexAnalysis(valStr);
+    if (analysis.hazard) {
+      return analysis.hazard;
+    }
+    if (estimateRegexCostLog2(analysis, REGEX_REFERENCE_TEXT_LENGTH) > MAX_REGEX_COST_LOG2) {
+      return 'Wyrażenie ma zbyt wiele możliwości dopasowania (?, *, +, |, {n,m}) — uprość je.';
+    }
+    try {
+      new RegExp(valStr, 'i');
+    } catch (_) {
+      return 'Nieprawidłowa składnia wyrażenia regularnego.';
+    }
+    return null;
+  }
 
   /**
    * Normalizuje pojedynczy warunek reguły.
@@ -62,6 +321,26 @@
   }
 
   /**
+   * Parsuje priorytet (parsePriority) i ogranicza go do zakresu 0–100 z edytora reguł.
+   * @param {*} rawPriority
+   * @param {number} [defaultPriority=10]
+   * @returns {number}
+   */
+  function normalizePriority(rawPriority, defaultPriority = 10) {
+    return Math.min(MAX_PRIORITY, Math.max(MIN_PRIORITY, parsePriority(rawPriority, defaultPriority)));
+  }
+
+  /**
+   * Zwraca znacznik czasu (liczba > 0) albo null — `null`, `''` i `false` nie są zamieniane na 0.
+   * @param {*} value
+   * @returns {number|null}
+   */
+  function parseTimestamp(value) {
+    const num = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN;
+    return Number.isFinite(num) && num > 0 ? num : null;
+  }
+
+  /**
    * Normalizuje i waliduje pojedynczy obiekt reguły.
    * @param {Object} rule
    * @param {number} [index=0]
@@ -79,15 +358,15 @@
       typeof rule.name === 'string' && rule.name.trim() ? rule.name.trim().slice(0, 50) : `Reguła ${index + 1}`;
 
     const enabled = rule.enabled !== false;
-    const priority = parsePriority(rule ? rule.priority : undefined, 10);
+    const priority = normalizePriority(rule.priority, 10);
     const folderId = typeof rule.folderId === 'string' ? rule.folderId.trim() : '';
     const matchMode = rule.matchMode === 'any' ? 'any' : 'all';
 
     const conditions = Array.isArray(rule.conditions) ? rule.conditions.map(normalizeCondition).filter(Boolean) : [];
 
     const overwriteManual = Boolean(rule.overwriteManual);
-    const createdAt = Number.isFinite(Number(rule.createdAt)) ? Number(rule.createdAt) : Date.now();
-    const updatedAt = Number.isFinite(Number(rule.updatedAt)) ? Number(rule.updatedAt) : Date.now();
+    const createdAt = parseTimestamp(rule.createdAt) || Date.now();
+    const updatedAt = parseTimestamp(rule.updatedAt) || createdAt;
 
     return {
       id,
@@ -101,6 +380,31 @@
       createdAt,
       updatedAt
     };
+  }
+
+  /**
+   * Opisuje, dlaczego włączona reguła nie jest wykonywana: wzorzec RegEx odrzucony przez
+   * validateRegexPattern (np. reguła zapisana przed wprowadzeniem budżetu nawrotów) albo folder
+   * docelowy, którego nie ma na liście `folders`.
+   * @param {Object} rule Reguła.
+   * @param {Array<Object|string>} [folders] Istniejące foldery (bez listy — folder nie jest sprawdzany).
+   * @returns {string|null} Powód po polsku albo null, gdy reguła może działać.
+   */
+  function describeRuleProblem(rule, folders = null) {
+    if (!rule || typeof rule !== 'object') return null;
+    for (const cond of Array.isArray(rule.conditions) ? rule.conditions : []) {
+      if (cond && cond.operator === 'regex') {
+        const regexError = validateRegexPattern(cond.value);
+        if (regexError) return `Wyrażenie „${String(cond.value ?? '')}” nie jest wykonywane: ${regexError}`;
+      }
+    }
+    if (Array.isArray(folders)) {
+      const folderIds = folders.map((f) => (typeof f === 'string' ? f : f?.id));
+      if (!rule.folderId || rule.folderId === 'all' || !folderIds.includes(rule.folderId)) {
+        return 'Folder docelowy nie istnieje — wybierz inny folder.';
+      }
+    }
+    return null;
   }
 
   class MessengerRulesEngine {
@@ -128,7 +432,7 @@
         return new Promise((resolve) => {
           try {
             this._storageArea.get(STORAGE_KEYS.RULES, (items) => {
-              if (chrome?.runtime?.lastError) {
+              if (getRuntimeLastError()) {
                 resolve(this._cachedRules.map((r) => ({ ...r })));
               } else {
                 const raw = items && items[STORAGE_KEYS.RULES];
@@ -157,13 +461,15 @@
       }
 
       const normalized = rules.map((r, i) => normalizeRule(r, i)).filter(Boolean);
+      assertSafeRegexConditions(normalized, this._cachedRules);
 
       if (this._storageArea && typeof this._storageArea.set === 'function') {
         await new Promise((resolve, reject) => {
           try {
             this._storageArea.set({ [STORAGE_KEYS.RULES]: normalized }, () => {
-              if (chrome?.runtime?.lastError) {
-                reject(new Error(chrome.runtime.lastError.message));
+              const lastError = getRuntimeLastError();
+              if (lastError) {
+                reject(new Error(lastError.message));
               } else {
                 resolve();
               }
@@ -187,16 +493,23 @@
       const current = await this.getRules();
       const normalized = normalizeRule(rule);
       if (!normalized) throw new Error('Nieprawidłowy obiekt reguły.');
+      assertSafeRegexConditions([normalized]);
 
+      // Edycja zachowuje datę utworzenia zapisanej reguły; każdy zapis dostaje nowy updatedAt
       const existingIndex = current.findIndex((r) => r.id === normalized.id);
+      const saved = {
+        ...normalized,
+        createdAt: existingIndex >= 0 ? current[existingIndex].createdAt : normalized.createdAt,
+        updatedAt: Date.now()
+      };
       if (existingIndex >= 0) {
-        current[existingIndex] = { ...normalized, updatedAt: Date.now() };
+        current[existingIndex] = saved;
       } else {
-        current.push(normalized);
+        current.push(saved);
       }
 
       await this.saveRules(current);
-      return normalized;
+      return { ...saved };
     }
 
     /**
@@ -229,6 +542,15 @@
       target.updatedAt = Date.now();
       await this.saveRules(current);
       return { ...target };
+    }
+
+    /**
+     * Sprawdza wzorzec RegEx warunku (długość, składnia, ryzyko ReDoS).
+     * @param {string} pattern Wzorzec wyrażenia regularnego.
+     * @returns {string|null} Komunikat błędu albo null, gdy wzorzec jest poprawny.
+     */
+    validateRegexPattern(pattern) {
+      return validateRegexPattern(pattern);
     }
 
     /**
@@ -275,10 +597,11 @@
         }
 
         case 'regex': {
-          if (valStr.length > MAX_REGEX_PATTERN_LENGTH) {
+          if (validateRegexPattern(valStr) !== null) {
             return false;
           }
-          if (DANGEROUS_REGEX_PATTERN.test(valStr)) {
+          // Tekst dłuższy niż budżet przewiduje dla tego wzorca nie jest dopasowywany (bez obcinania)
+          if (estimateRegexCostLog2(getRegexAnalysis(valStr), textStr.length) > MAX_REGEX_COST_LOG2) {
             return false;
           }
           try {
@@ -412,7 +735,11 @@
   }
 
   MessengerRulesEngine.parsePriority = parsePriority;
-  MessengerRulesEngine.normalizePriority = parsePriority;
+  MessengerRulesEngine.validateRegexPattern = validateRegexPattern;
+  MessengerRulesEngine.normalizePriority = normalizePriority;
+  MessengerRulesEngine.describeRuleProblem = describeRuleProblem;
+  MessengerRulesEngine.MIN_PRIORITY = MIN_PRIORITY;
+  MessengerRulesEngine.MAX_PRIORITY = MAX_PRIORITY;
 
   // Udostępnienie w zasięgu globalnym oraz jako moduł CommonJS
   if (typeof global !== 'undefined') {
@@ -426,7 +753,10 @@
     module.exports = {
       MessengerRulesEngine,
       STORAGE_KEYS,
-      parsePriority
+      parsePriority,
+      normalizePriority,
+      validateRegexPattern,
+      describeRuleProblem
     };
     module.exports.default = MessengerRulesEngine;
   }

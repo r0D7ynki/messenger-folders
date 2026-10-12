@@ -12,6 +12,30 @@
     (typeof global !== 'undefined' && global.MessengerUICore) ||
     (typeof require === 'function' ? require('./core.js') : null);
 
+  /**
+   * Zwraca adres awatara dopuszczony przez MessengerFoldersStorage.sanitizeAvatarUrl
+   * (host CDN Messengera/Facebooka albo data:image). Bez modułu pamięci — pusty tekst.
+   * @param {*} url Adres awatara z pamięci lub DOM.
+   * @returns {string}
+   */
+  function safeAvatarUrl(url) {
+    const StorageClass = typeof globalThis !== 'undefined' ? globalThis.MessengerFoldersStorage : null;
+    return StorageClass && typeof StorageClass.sanitizeAvatarUrl === 'function'
+      ? StorageClass.sanitizeAvatarUrl(url)
+      : '';
+  }
+
+  /**
+   * Priorytet reguły w zakresie 0–100 (MessengerRulesEngine.normalizePriority), domyślnie 10.
+   * @param {*} rawPriority Wartość z reguły albo pola formularza.
+   * @returns {number}
+   */
+  function rulePriority(rawPriority) {
+    return typeof MessengerRulesEngine !== 'undefined' && typeof MessengerRulesEngine.normalizePriority === 'function'
+      ? MessengerRulesEngine.normalizePriority(rawPriority, 10)
+      : 10;
+  }
+
   class SettingsModalComponent {
     /**
      * @param {Object} [ui] Instancja fasady MessengerUI
@@ -420,10 +444,11 @@
             const left = document.createElement('div');
             left.className = 'mf-settings-thread-left';
 
-            if (thread.avatar) {
+            const avatarUrl = safeAvatarUrl(thread.avatar);
+            if (avatarUrl) {
               const img = document.createElement('img');
               img.className = 'mf-settings-thread-avatar';
-              img.src = thread.avatar;
+              img.src = avatarUrl;
               img.alt = '';
               left.appendChild(img);
             } else {
@@ -569,18 +594,26 @@
         folderSelect.id = 'mf-rule-folder-select';
         folderSelect.className = 'mf-modal-input';
 
+        // „Wszystkie” i „Inne” nie są folderami docelowymi: wątek bez folderu i tak trafia do „Inne”
         const folders = this.ui && this.ui.storage ? this.ui.storage.getFoldersSync() : [];
-        folders
-          .filter((f) => f.id !== 'all')
-          .forEach((f) => {
-            const opt = document.createElement('option');
-            opt.value = f.id;
-            opt.textContent = `${f.icon || '📁'} ${f.name}`;
-            if (ruleToEdit && ruleToEdit.folderId === f.id) {
-              opt.selected = true;
-            }
-            folderSelect.appendChild(opt);
-          });
+        const targetFolders = folders.filter((f) => f.id !== 'all' && f.id !== 'uncategorized');
+        // Reguła z usuniętym folderem nie dostaje po cichu pierwszej opcji — trzeba wybrać folder
+        if (ruleToEdit && !targetFolders.some((f) => f.id === ruleToEdit.folderId)) {
+          const optMissing = document.createElement('option');
+          optMissing.value = '';
+          optMissing.textContent = '— wybierz folder (poprzedni nie istnieje) —';
+          optMissing.selected = true;
+          folderSelect.appendChild(optMissing);
+        }
+        targetFolders.forEach((f) => {
+          const opt = document.createElement('option');
+          opt.value = f.id;
+          opt.textContent = `${f.icon || '📁'} ${f.name}`;
+          if (ruleToEdit && ruleToEdit.folderId === f.id) {
+            opt.selected = true;
+          }
+          folderSelect.appendChild(opt);
+        });
         folderGroup.appendChild(folderLabel);
         folderGroup.appendChild(folderSelect);
         editorBody.appendChild(folderGroup);
@@ -606,15 +639,7 @@
         priorityInput.className = 'mf-modal-input';
         priorityInput.min = '0';
         priorityInput.max = '100';
-        priorityInput.value =
-          ruleToEdit && typeof ruleToEdit.priority === 'number' && Number.isFinite(ruleToEdit.priority)
-            ? ruleToEdit.priority
-            : ruleToEdit &&
-                typeof ruleToEdit.priority === 'string' &&
-                ruleToEdit.priority.trim() !== '' &&
-                Number.isFinite(Number(ruleToEdit.priority))
-              ? Number(ruleToEdit.priority)
-              : 10;
+        priorityInput.value = String(rulePriority(ruleToEdit ? ruleToEdit.priority : undefined));
 
         priorityCol.appendChild(priorityLabel);
         priorityCol.appendChild(priorityInput);
@@ -729,17 +754,13 @@
             return;
           }
 
+          const savedThreads = (this.ui && this.ui.storage && this.ui.storage._threads) || {};
           let threadsToCheck = [];
           if (this.ui && this.ui.detector && typeof this.ui.detector.scanChatList === 'function') {
             threadsToCheck = this.ui.detector.scanChatList() || [];
           }
-          if (
-            (!threadsToCheck || threadsToCheck.length === 0) &&
-            this.ui &&
-            this.ui.storage &&
-            this.ui.storage._threads
-          ) {
-            threadsToCheck = Object.entries(this.ui.storage._threads).map(([tId, tData]) => ({
+          if (!threadsToCheck || threadsToCheck.length === 0) {
+            threadsToCheck = Object.entries(savedThreads).map(([tId, tData]) => ({
               threadId: tId,
               name: tData.name || '',
               avatar: tData.avatar || ''
@@ -754,21 +775,68 @@
             return;
           }
 
-          const matchMode = modeSelect.value || 'all';
+          // Podgląd liczy jak silnik (evaluateThread), łącznie z ochroną ręcznych przypisań (overwriteManual)
+          const previewRule = {
+            enabled: true,
+            folderId: folderSelect.value || 'mf_preview',
+            matchMode: modeSelect.value || 'all',
+            conditions: currentConditions,
+            overwriteManual: Boolean(owCheckbox.checked)
+          };
           let matchesCount = 0;
           for (const th of threadsToCheck) {
-            const isMatch =
-              matchMode === 'any'
-                ? currentConditions.some((c) =>
-                    engine.matchCondition(c.field === 'threadId' ? th.threadId : th.name, c)
-                  )
-                : currentConditions.every((c) =>
-                    engine.matchCondition(c.field === 'threadId' ? th.threadId : th.name, c)
-                  );
-            if (isMatch) matchesCount++;
+            if (!th || !th.threadId) continue;
+            const existing = savedThreads[th.threadId];
+            const threadToEval = {
+              ...th,
+              folderId: existing ? existing.folderId : undefined,
+              isManual: Boolean(
+                existing && existing.folderId && existing.folderId !== 'uncategorized' && !existing.autoAssigned
+              )
+            };
+            if (engine.evaluateThread(threadToEval, [previewRule])) matchesCount++;
           }
 
           previewBox.textContent = `Liczba pasujących czatów: ${matchesCount}`;
+        };
+
+        /**
+         * Sprawdza wzorzec RegEx silnikiem reguł (składnia, ryzyko ReDoS).
+         * @param {string} pattern Wzorzec z pola warunku.
+         * @returns {string|null} Komunikat błędu albo null.
+         */
+        const validateRegex = (pattern) => {
+          const engine = this.ui && this.ui.rulesEngine;
+          if (engine && typeof engine.validateRegexPattern === 'function') {
+            return engine.validateRegexPattern(pattern);
+          }
+          if (typeof MessengerRulesEngine !== 'undefined' && MessengerRulesEngine.validateRegexPattern) {
+            return MessengerRulesEngine.validateRegexPattern(pattern);
+          }
+          return null;
+        };
+
+        // Komunikat błędu warunku wyświetlany bezpośrednio pod jego wierszem
+        const clearConditionError = (row) => {
+          if (row.mfErrorEl) {
+            row.mfErrorEl.remove();
+            row.mfErrorEl = null;
+          }
+        };
+        const showConditionError = (row, message) => {
+          const errorEl = document.createElement('div');
+          errorEl.className = 'mf-rule-condition-error';
+          errorEl.setAttribute('role', 'alert');
+          errorEl.style.color = 'var(--mf-danger)';
+          errorEl.style.fontSize = '12px';
+          errorEl.style.margin = '-4px 0 8px';
+          errorEl.textContent = message;
+          if (typeof row.after === 'function') {
+            row.after(errorEl);
+          } else {
+            condContainer.appendChild(errorEl);
+          }
+          row.mfErrorEl = errorEl;
         };
 
         // Funkcja dodawania wiersza warunku
@@ -830,14 +898,23 @@
           this._setIcon(removeBtn, 'trash');
           removeBtn.onclick = () => {
             if (condContainer.querySelectorAll('.mf-rule-condition-row').length > 1) {
+              clearConditionError(row);
               row.remove();
               updateDryRun();
             }
           };
 
           fieldSel.onchange = updateDryRun;
-          opSel.onchange = updateDryRun;
-          valInp.oninput = updateDryRun;
+          opSel.onchange = () => {
+            clearConditionError(row);
+            valInp.style.borderColor = '';
+            updateDryRun();
+          };
+          valInp.oninput = () => {
+            clearConditionError(row);
+            valInp.style.borderColor = '';
+            updateDryRun();
+          };
 
           row.appendChild(fieldSel);
           row.appendChild(opSel);
@@ -857,6 +934,7 @@
 
         modeSelect.onchange = updateDryRun;
         folderSelect.onchange = updateDryRun;
+        owCheckbox.onchange = updateDryRun;
 
         // Stopka
         const editorFooter = document.createElement('div');
@@ -879,7 +957,7 @@
           if (e.target === editorOverlay) closeEditor();
         };
 
-        saveBtn.onclick = async () => {
+        const saveRule = async () => {
           const ruleName = nameInput.value.trim();
           if (!ruleName) {
             nameInput.style.borderColor = 'var(--mf-danger)';
@@ -895,14 +973,29 @@
           }
 
           const conditions = [];
+          let invalidRegexInput = null;
           condContainer.querySelectorAll('.mf-rule-condition-row').forEach((r) => {
             const f = r.querySelector('.mf-rule-condition-field')?.value || 'name';
             const o = r.querySelector('.mf-rule-condition-op')?.value || 'contains';
-            const v = r.querySelector('.mf-rule-condition-val')?.value || '';
+            const valEl = r.querySelector('.mf-rule-condition-val');
+            const v = valEl?.value || '';
+            clearConditionError(r);
             if (v.trim()) {
               conditions.push({ field: f, operator: o, value: v });
+              const regexError = o === 'regex' ? validateRegex(v) : null;
+              if (regexError) {
+                showConditionError(r, `Wyrażenie RegEx odrzucone: ${regexError}`);
+                if (valEl) valEl.style.borderColor = 'var(--mf-danger)';
+                invalidRegexInput = invalidRegexInput || valEl;
+              }
             }
           });
+
+          // Wzorce grożące zawieszeniem karty (ReDoS) lub błędne składniowo — nie zapisujemy reguły
+          if (invalidRegexInput) {
+            invalidRegexInput.focus();
+            return;
+          }
 
           if (conditions.length === 0) {
             const firstVal = condContainer.querySelector('.mf-rule-condition-val');
@@ -917,11 +1010,7 @@
             id: ruleToEdit ? ruleToEdit.id : undefined,
             name: ruleName,
             folderId: targetFolderId,
-            priority:
-              priorityInput.value.trim() !== '' && Number.isFinite(Number(priorityInput.value))
-                ? Number(priorityInput.value)
-                : 10,
-
+            priority: rulePriority(priorityInput.value),
             matchMode: modeSelect.value || 'all',
             conditions,
             overwriteManual: Boolean(owCheckbox.checked),
@@ -929,7 +1018,14 @@
           };
 
           if (this.ui && this.ui.rulesEngine) {
-            await this.ui.rulesEngine.saveRule(ruleData);
+            try {
+              await this.ui.rulesEngine.saveRule(ruleData);
+            } catch (err) {
+              if (typeof this.ui.showToast === 'function') {
+                this.ui.showToast(`Nie zapisano reguły: ${err && err.message ? err.message : err}`);
+              }
+              return;
+            }
             if (typeof this.ui.onRulesChanged === 'function') {
               await this.ui.onRulesChanged();
             }
@@ -940,6 +1036,17 @@
             this.ui.showToast(ruleToEdit ? 'Zaktualizowano regułę' : 'Utworzono nową regułę');
           }
           renderRulesTab();
+        };
+
+        saveBtn.onclick = async () => {
+          try {
+            await saveRule();
+          } catch (err) {
+            console.error('Błąd podczas zapisywania reguły:', err);
+            if (this.ui && typeof this.ui.showToast === 'function') {
+              this.ui.showToast(`Błąd podczas zapisywania reguły: ${err && err.message ? err.message : err}`);
+            }
+          }
         };
 
         editorModal.appendChild(editorHeader);
@@ -1058,6 +1165,22 @@
 
           details.appendChild(titleSpan);
           details.appendChild(descSpan);
+
+          // Reguła, której silnik nie wykona (np. RegEx sprzed budżetu nawrotów), dostaje widoczny powód
+          const problem =
+            typeof MessengerRulesEngine !== 'undefined' &&
+            typeof MessengerRulesEngine.describeRuleProblem === 'function'
+              ? MessengerRulesEngine.describeRuleProblem(rule, folders)
+              : null;
+          if (problem) {
+            item.classList.add('mf-rule-inactive');
+            const problemSpan = document.createElement('span');
+            problemSpan.className = 'mf-rule-problem';
+            problemSpan.style.color = 'var(--mf-danger)';
+            problemSpan.style.fontSize = '12px';
+            problemSpan.textContent = `Nieaktywna: ${problem}`;
+            details.appendChild(problemSpan);
+          }
           info.appendChild(details);
           item.appendChild(info);
 

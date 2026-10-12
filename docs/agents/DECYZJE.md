@@ -28,12 +28,13 @@ requeście. Narzędzia i zmiany kodu w osobnych PR.
 **Alternatywy:** reguły jako `warn` (nikt nie czyta ostrzeżeń); poprawienie wszystkiego od razu
 (duży, ryzykowny diff w UI bez testów E2E).
 
-## D-004 · 2026-10-10 · przyjęta — web-ext lint poza `verify`
+## D-004 · 2026-10-10 · przyjęta — Wsparcie Firefoksa (Gecko MV3) i web-ext lint w `verify`
 
-**Decyzja:** `web-ext lint` jest dostępny jako `npm run lint:firefox`, ale nie blokuje CI.
-**Powód:** jego błędy (`ADDON_ID_REQUIRED`, `BACKGROUND_SERVICE_WORKER_NOFALLBACK`) dotyczą wyłącznie
-Firefoksa, a rozszerzenie celuje w Chromium; ostrzeżenia o `innerHTML` dublują ESLint.
-Wraca do `verify`, jeśli zapadnie decyzja o wsparciu Firefoksa (MF-009).
+**Decyzja:** rozszerzenie oficjalnie wspiera przeglądarkę Mozilla Firefox w standardzie Manifest V3 (Gecko MV3). W `manifest.json` dodano sekcję `browser_specific_settings.gecko` z ID (`messenger-folders@local`), minimalną wersją (`strict_min_version: "109.0"`) i deklaracją `data_collection_permissions: { required: ["none"] }` oraz fallback `background.scripts: ["background/background.js"]` dla silnika Gecko. Polecenie `npm run lint:firefox` (`web-ext lint`) zostało włączone do głównego łańcucha weryfikacji projektu `npm run verify` w `package.json`.
+**Powód:** realizacja zadania MF-009 i wymagania R1. Kod źródłowy używa uniwersalnego API `chrome.*`, w pełni wspieranego przez Firefoksa, a konfiguracja Gecko MV3 eliminuje błędy `ADDON_ID_REQUIRED` i `BACKGROUND_SERVICE_WORKER_NOFALLBACK`. Włączenie `web-ext lint` do `verify` trwale zapobiega regresjom kompatybilności wieloplatformowej w CI.
+
+**Aktualizacja MF-025 (2026-10-11):** minimalna wersja to `strict_min_version: "140.0"`, a dla `gecko_android` — `"142.0"` (wartość `"109.0"` z pierwotnej decyzji jest nieaktualna).
+**Powód:** klucz `data_collection_permissions`, którego manifest używa, istnieje dopiero od Firefoksa 140 (Firefox for Android 142) — przy niższej wartości `npm run lint:firefox` zgłasza ostrzeżenia `KEY_FIREFOX_UNSUPPORTED_BY_MIN_VERSION` i `KEY_FIREFOX_ANDROID_UNSUPPORTED_BY_MIN_VERSION`, czyli deklaruje wsparcie dla wersji, w których manifest nie jest w pełni obsługiwany. Dodatkowo w MV3 przed Firefoksem 127 uprawnienia z `host_permissions` nie są nadawane przy instalacji, więc rozszerzenie nie działałoby bez ręcznej zgody użytkownika.
 
 ## D-005 · 2026-10-10 · przyjęta — Issues jako wejście, karty jako źródło prawdy
 
@@ -60,4 +61,26 @@ używa `"headings": "pl"`, `"tool_dir": "scripts/kanban"`, `"gate": ["npm run ve
 i `"swarmboard_version": "0.3.0"`.
 **Powód:** ujednolicenie silnika tablicy z ekosystemem swarmboard (obsługa roju, niezależny reviewer,
 wielojęzyczność, lepsza diagnostyka przez `sb doctor`).
+
+
+## D-008 · 2026-10-11 · przyjęta — Koniec trybu zespołowego Antigravity, tablica jako jedyne źródło stanu
+
+**Decyzja:** praca toczy się wyłącznie na kartach `kanban/tasks/` (swarmboard). Nie używamy trybu
+zespołowego Antigravity (`/teamwork-preview`: sentinel, orkiestrator, roje subagentów, crony).
+Jedna karta = jeden wykonawca + jeden niezależny przegląd; zasady oszczędzania limitu w
+`docs/agents/WORKFLOW.md`. Stan zespołu (`.agents/teamwork/`) zarchiwizowano poza repo.
+**Powód:** tryb zespołowy wyczerpał tygodniowy limit subskrypcji; około 3/4 tokenów poszło na
+koordynację i weryfikację. Stan pracy był w dwóch miejscach (tablica i `.agents/`), karty zmieniano
+ręcznie, a Gemini przyjmował pracę Gemini (audyt swarmboard 2026-10-11).
+**Alternatywy:** „Lean Swarm” Antigravity (1–2 subagentów) — nadal koordynacja i crony poza tablicą;
+rój swarmboard (`sb swarm`) — możliwy później, decyzja właściciela.
+
+## D-009 · 2026-10-11 · zamknięta — WIP `review` 6 na czas porządków po audycie (powrót do 4 po zamknięciu kart P1)
+
+**Decyzja:** limit WIP kolumny `review` podniesiony z 4 do 6. Karty krytyczne z listy kontrolnej
+audytu (MF-014, MF-017, MF-019) wykonuje rój Claude; ich przegląd może zrobić tylko inny model albo
+człowiek, a w `review` czekają już MF-009 i MF-011.
+**Powód:** przy limicie 4 rój zatrzymałby się po dwóch kartach, zanim człowiek zdąży przejrzeć resztę.
+**Alternatywy:** limit 4 i przegląd po każdej parze kart (wolniej); `--auto-review` przez `claude -p`
+(ten sam model co wykonawca — niezależność pozorna). Powrót do 4 po zamknięciu kart P1.
 

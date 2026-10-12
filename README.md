@@ -16,6 +16,7 @@ Szanuje Twoją prywatność i chroni historię rozmów.
 
 - [Kluczowe możliwości](#kluczowe-możliwości)
 - [Instalacja na komputerze](#instalacja-na-komputerze)
+- [Instalacja w Firefoksie](#instalacja-w-firefoksie)
 - [Instalacja na telefonie](#instalacja-na-telefonie)
 - [Podręcznik użytkowania krok po kroku](#podręcznik-użytkowania-krok-po-kroku)
 - [Prywatność i bezpieczeństwo](#prywatność-i-bezpieczeństwo)
@@ -33,16 +34,21 @@ Szanuje Twoją prywatność i chroni historię rozmów.
 - **Dedykowane centrum ustawień**: Otwieraj okno zarządzania folderami przyciskiem przypiętym obok wyszukiwarki.
 - **Czysty widok czatów**: Lista wiadomości pozostaje uporządkowana i czytelna bez zbędnych etykiet.
 - **Wskaźnik w otwartym czacie**: Pigułka w nagłówku aktywnej rozmowy pokazuje jej aktualny folder.
+- **Reguły automatycznego przypisywania**: Nowe rozmowy same trafiają do folderów według nazwy czatu lub identyfikatora wątku.
 - **Kopia zapasowa JSON**: Eksportuj całą konfigurację do pliku. Bez trudu przenieś dane na inny komputer.
+- **Odznaki nieprzeczytanych**: Pigułki folderów pokazują, ile rozmów czeka na przeczytanie.
+- **Skróty klawiszowe**: `Alt+1…9` i `Alt+0` przełączają foldery, strzałki przesuwają fokus po pasku.
+- **Chromium i Firefox**: Jedna paczka działa w Chrome, Brave, Edge, Operze, Vivaldi oraz Firefoksie.
 - **Wsparcie dla trybu ciemnego**: Interfejs automatycznie dopasowuje kolory do jasnego i ciemnego motywu Messengera.
-- **Pełna zgodność z Manifest V3**: Rozszerzenie wykorzystuje najnowszy standard bezpieczeństwa i wydajności Chrome.
+- **Pełna zgodność z Manifest V3**: Rozszerzenie wykorzystuje najnowszy standard bezpieczeństwa i wydajności przeglądarek.
 
 ---
 
 ## Instalacja na komputerze
 
 Rozszerzenie działa we wszystkich nowoczesnych przeglądarkach opartych na silniku Chromium:
-Google Chrome, Brave, Microsoft Edge, Opera oraz Vivaldi.
+Google Chrome, Brave, Microsoft Edge, Opera oraz Vivaldi. Działa też w **Firefoksie**
+(opis w sekcji [Instalacja w Firefoksie](#instalacja-w-firefoksie)).
 
 ### Krok 1: Pobierz pliki rozszerzenia
 
@@ -83,6 +89,23 @@ Rozszerzenie automatycznie doda pasek folderów bezpośrednio pod polem wyszukiw
 > [!TIP]
 > Przypnij ikonę rozszerzenia na pasku przeglądarki.
 > Kliknij ikonę puzzla obok paska adresu, a potem kliknij symbol pinezki przy Messenger Folders.
+
+---
+
+## Instalacja w Firefoksie
+
+Wymagany jest **Firefox 140 lub nowszy** (na Androidzie **Firefox 142 lub nowszy**) — wartości
+`strict_min_version` w [manifest.json](manifest.json). Wtyczka ładuje się jako dodatek tymczasowy:
+
+1. Pobierz pliki rozszerzenia tak jak w kroku 1 instalacji na komputerze.
+2. Wpisz w pasku adresu `about:debugging#/runtime/this-firefox` i naciśnij Enter.
+3. Kliknij **Załaduj tymczasowy dodatek…** (Load Temporary Add-on…).
+4. Wskaż plik [manifest.json](manifest.json) w pobranym katalogu.
+5. Otwórz [messenger.com](https://www.messenger.com) lub [facebook.com/messages](https://www.facebook.com/messages).
+
+> [!NOTE]
+> Dodatek tymczasowy znika po zamknięciu Firefoksa — przy kolejnym uruchomieniu załaduj go ponownie.
+> Dane folderów zostają w pamięci lokalnej przeglądarki (`storage.local`) i nie wychodzą poza komputer.
 
 ---
 
@@ -167,6 +190,82 @@ Rozmowę możesz przypisać na trzy proste sposoby:
 4. Na nowym urządzeniu kliknij **Importuj z pliku** i wskaż pobrany wcześniej plik.
 5. Wtyczka natychmiast odtworzy Twoje foldery i wszystkie przypisania.
 
+Kopia zapasowa nie obejmuje reguł automatycznego przypisywania. Po przeniesieniu danych na nowe
+urządzenie utwórz reguły ponownie.
+
+### 6. Reguły automatycznego przypisywania
+
+Reguła sama przypisuje rozmowę do folderu, gdy nazwa czatu lub identyfikator wątku spełnia
+podane warunki. Wtyczka sprawdza reguły przy otwarciu Messengera, podczas przewijania listy czatów
+i po każdej zmianie reguł.
+
+**Jak dodać regułę:**
+1. Kliknij przycisk zębatki `⚙️` na pasku folderów.
+2. Przejdź do zakładki **⚡ Reguły** i kliknij **Nowa reguła**.
+3. Wpisz nazwę reguły i wybierz **Folder docelowy**.
+4. Ustaw **Priorytet** i tryb dopasowania: wszystkie warunki muszą pasować albo wystarczy jeden.
+5. Dodaj warunki. Każdy warunek ma pole (**Nazwa czatu** albo **ID wątku**), operator i wartość.
+6. Sprawdź licznik **Liczba pasujących czatów** pod formularzem.
+7. Kliknij **Zapisz regułę**.
+
+Na liście reguł możesz regułę włączyć lub wyłączyć przełącznikiem, edytować ołówkiem albo usunąć.
+
+**Operatory:**
+
+| Operator | Znaczenie |
+| :--- | :--- |
+| Zawiera | Tekst zawiera wartość. Kilka wartości po przecinku oznacza „którakolwiek z nich”, np. `projekt, budowa`. |
+| Zaczyna się od | Tekst zaczyna się od wartości. |
+| Kończy się na | Tekst kończy się na wartości. |
+| Dokładne | Tekst jest identyczny z wartością. |
+| Wyrażenie (RegEx) | Tekst pasuje do wyrażenia regularnego, np. `^Zespół \d+$`. |
+
+Wielkość liter nie ma znaczenia. W operatorach innych niż RegEx wtyczka pomija spacje na początku
+i końcu wartości.
+
+**Priorytet:** każda rozmowa trafia do folderu pierwszej pasującej reguły. Wtyczka sprawdza reguły
+od najniższego priorytetu, więc reguła z priorytetem `0` wygrywa z regułą z priorytetem `5`.
+Domyślny priorytet to `10`.
+
+**Ręczne przypisania:** reguła domyślnie pomija rozmowy, które są już w folderze innym niż
+**Inne**. Zaznacz **Nadpisuj wcześniejsze ręczne przypisania**, jeśli reguła ma przenosić także
+takie rozmowy. Usunięcie lub wyłączenie reguły nie cofa przypisań, które już wykonała.
+
+**Wyrażenia regularne i ich ograniczenia:**
+- Wtyczka odrzuca wzorce dłuższe niż 250 znaków.
+- Wtyczka odrzuca wzorce z zagnieżdżonymi powtórzeniami, np. `(a+)+` albo `(\d*)*`. Takie wzorce
+  mogą zawiesić kartę przeglądarki.
+- Odrzucony albo niepoprawny wzorzec nie zgłasza błędu. Nie pasuje wtedy do żadnej rozmowy.
+  Licznik **Liczba pasujących czatów** pokaże `0`.
+- Używaj prostych wzorców i unikaj powtórzeń grup z alternatywą, np. `(a|ab)*`.
+
+### 7. Odznaki nieprzeczytanych
+
+Przy nazwie folderu na pasku pojawia się kolorowa **odznaka** z liczbą rozmów, które mają
+nieprzeczytane wiadomości (powyżej 99 widać `99+`). Odznaka znika, gdy w folderze nie ma
+nieprzeczytanych rozmów. Pigułka **Wszystkie** sumuje wszystkie foldery, a rozmowy bez folderu
+liczą się do **Inne**. Liczba rozmów w folderze (szara odznaka) to osobna wartość.
+
+> [!NOTE]
+> Liczniki obejmują tylko rozmowy aktualnie **wyrenderowane** na liście czatów. Messenger ładuje
+> starsze rozmowy dopiero po przewinięciu listy, więc nieprzeczytane rozmowy poza ekranem pojawią się
+> w licznikach po ich załadowaniu.
+
+### 8. Skróty klawiszowe
+
+| Skrót | Działanie |
+|---|---|
+| `Alt+1` … `Alt+9` | włącza N-ty folder użytkownika (w kolejności paska) |
+| `Alt+0` | włącza folder **Wszystkie** |
+| `←` / `→` | przenosi fokus na poprzednią / następną pigułkę (z zawijaniem) |
+| `Home` / `End` | przenosi fokus na pierwszą / ostatnią pigułkę |
+| `Esc` | zamyka otwarte menu lub okno; w polu wyszukiwarki folderów czyści wpisany tekst |
+| `Enter` / `Spacja` | na pigułce włącza folder; w wyszukiwarce folderów włącza pierwszą widoczną pigułkę |
+
+Skróty `Alt+cyfra` nie działają podczas pisania w polu tekstowym (np. w wiadomości), przy
+otwartym oknie dialogowym ani z dodatkowymi klawiszami `Ctrl`, `Shift` i `Meta`.
+Na macOS używaj klawisza `Option`.
+
 ---
 
 ## Prywatność i bezpieczeństwo
@@ -191,7 +290,14 @@ messenger-folders/
 ├── src/
 │   ├── storage.js             # Pamięć lokalna i synchronizacja danych
 │   ├── detector.js            # Wykrywanie elementów DOM i odporność na zmiany klas
-│   ├── ui.js                  # Pasek folderów, plakietki, menu i okna modalne
+│   ├── rules.js               # Silnik reguł automatycznego przypisywania
+│   ├── ui.js                  # Fasada interfejsu łącząca moduły z katalogu ui/
+│   ├── ui/
+│   │   ├── core.js            # Stałe, ikony SVG, bezpieczny DOM i powiadomienia
+│   │   ├── folder-bar.js      # Pasek folderów z wyszukiwarką i licznikami
+│   │   ├── folder-modal.js    # Okno tworzenia i edycji folderu
+│   │   ├── thread-menu.js     # Menu przypisania, plakietki i pigułka w nagłówku
+│   │   └── settings-modal.js  # Okno ustawień z zakładkami i edytorem reguł
 │   ├── content.js             # Główny skrypt integrujący moduły na stronie
 │   └── content.css            # Style interfejsu z obsługą motywu jasnego i ciemnego
 ├── popup/
@@ -200,7 +306,11 @@ messenger-folders/
 │   └── popup.js               # Logika zarządzania folderami i kopią zapasową
 ├── icons/                     # Ikony rozszerzenia w różnych formatach
 ├── tests/
-│   └── test_storage_detector.js # Zestaw automatycznych testów jednostkowych
+│   ├── test_storage_detector.js # Testy pamięci, detektora i koordynatora
+│   ├── test_ui.js             # Testy warstwy interfejsu
+│   ├── test_rules.js          # Testy silnika reguł
+│   ├── fixtures/              # Statyczna kopia DOM Messengera dla testów E2E
+│   └── e2e/                   # Testy E2E Playwright
 └── docs/
     ├── INSTALL_MOBILE.md      # Instrukcja uruchomienia na smartfonie
     └── ARCHITECTURE.md        # Szczegółowa dokumentacja techniczna

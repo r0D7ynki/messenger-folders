@@ -90,6 +90,11 @@
         }
       });
 
+      // Skróty Alt+1…9 i Alt+0 przełączające foldery
+      document.addEventListener('keydown', (event) => {
+        this._handleFolderShortcut(event);
+      });
+
       // Obsługa kliknięcia poza elementem (Click Outside)
       document.addEventListener('click', (event) => {
         if (this.activeDropdown) {
@@ -115,6 +120,34 @@
     }
 
     /**
+     * Obsługuje skrót Alt+1…9 / Alt+0: klika pigułkę wskazanego folderu.
+     * Nic nie robi przy otwartym modalu ani podczas pisania w polu tekstowym.
+     * @param {KeyboardEvent} event
+     * @returns {boolean} `true`, gdy skrót przełączył folder
+     * @private
+     */
+    _handleFolderShortcut(event) {
+      if (!Core || typeof document === 'undefined' || this.activeModal) return false;
+      if (Core.isTypingTarget(event.target) || Core.isTypingTarget(document.activeElement)) return false;
+
+      const bar = document.getElementById('mf-folder-bar');
+      if (!bar) return false;
+      const pills = Array.from(bar.querySelectorAll('.mf-folder-pill'));
+      const folderId = Core.resolveFolderShortcut(
+        event,
+        pills.map((pill) => pill.dataset.folderId)
+      );
+      if (!folderId) return false;
+
+      const pill = pills.find((p) => p.dataset.folderId === folderId);
+      if (!pill) return false;
+
+      event.preventDefault();
+      pill.click();
+      return true;
+    }
+
+    /**
      * Bezpieczne generowanie identyfikatora folderu.
      * @returns {string}
      */
@@ -132,6 +165,7 @@
      * @param {Array<Object>} folders - Lista folderów użytkownika
      * @param {string} activeFolderId - ID aktywnego folderu ('all' dla wszystkich)
      * @param {Object} counts - Mapa liczników lub obiekt z wątkami: { [folderId]: number }
+     * @param {Object|Function} [unreadCounts] - Mapa liczników nieprzeczytanych wiadomości lub callback onSelectFolder
      * @param {Function} [onSelectFolder] - Callback po wyborze folderu (folderId)
      * @param {Function} [onAddFolder] - Callback po kliknięciu dodawania folderu
      * @param {Function} [onEditFolder] - Callback po kliknięciu edycji folderu (folder)
@@ -142,6 +176,7 @@
       folders = [],
       activeFolderId = 'all',
       counts = {},
+      unreadCounts = {},
       onSelectFolder,
       onAddFolder,
       onEditFolder,
@@ -152,11 +187,25 @@
           folders,
           activeFolderId,
           counts,
+          unreadCounts,
           onSelectFolder,
           onAddFolder,
           onEditFolder,
           onOpenSettings
         );
+      }
+      return null;
+    }
+
+    /**
+     * Aktualizuje liczniki wątków oraz odznaki nieprzeczytanych wiadomości na pasku folderów.
+     * @param {Object} counts - Mapa liczników wszystkich wątków
+     * @param {Object} unreadCounts - Mapa liczników nieprzeczytanych wiadomości
+     * @returns {HTMLElement|null}
+     */
+    updateFolderCounts(counts = {}, unreadCounts = {}) {
+      if (this.folderBar && typeof this.folderBar.updateFolderCounts === 'function') {
+        return this.folderBar.updateFolderCounts(counts, unreadCounts);
       }
       return null;
     }

@@ -35,18 +35,36 @@ from dataclasses import dataclass
 from pathlib import Path
 
 try:  # w pakiecie swarmboard
+    from . import checks
     from .i18n import tr
 except ImportError:  # kopia w projekcie (scripts/kanban/), bez pakietu
     # i18n.py leży obok; dopisujemy katalog jawnie, bo `python3 -I` go pomija
     sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import checks  # type: ignore[no-redef]
     from i18n import tr  # type: ignore[no-redef]
 
-COLUMNS = ["backlog", "ready", "in-progress", "review", "done"]
+# Reguły kontroli kart w checks.py (limit rozmiaru pliku); nazwy zostają dostępne jak dotąd
+COLUMNS, TRANSITION, TRANSITIONS_SINCE = checks.COLUMNS, checks.TRANSITION, checks.TRANSITIONS_SINCE
+PATH_MARKERS, NEW_FILE_MARKERS = checks.PATH_MARKERS, checks.NEW_FILE_MARKERS
+REMOVED_FILE_MARKERS, FILE_EXTENSIONS = checks.REMOVED_FILE_MARKERS, checks.FILE_EXTENSIONS
+section_paths, missing_files = checks.section_paths, checks.missing_files
+card_summary = checks.card_summary
+dependency_cycle = checks.dependency_cycle
+
+# ID karty: prefiks i numer (SB-035) — trafia do ścieżek worktree, raportów i refów gita
+CARD_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_]*-\d+$")
+PREFIX = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_]*$")
 SIZE_ORDER = ["S", "M", "L"]
 # Zależność „zaplanowana” (wystarcza do ready) i „dostępna w kodzie” (wymagana do ręcznego startu).
 # Kolejność wykonania zależnych kart pilnuje rój (DAG) albo ta bramka przy `in-progress`.
-DEPS_PLANNED = {"ready", "in-progress", "review", "done"}
-DEPS_AVAILABLE = {"review", "done"}
+DEPS_PLANNED = {"ready", "in-progress", "review", "test", "done"}
+DEPS_AVAILABLE = {"review", "test", "done"}  # `test` — kod już scalony (SB-071)
+
+
+def same_batch(card: Card, other: Card) -> bool:
+    """Obie karty w tej samej paczce (`batch:`)."""
+    return bool(checks.batch_of(card)) and checks.batch_of(card) == checks.batch_of(other)
+
 
 # Kanoniczne nagłówki sekcji → polskie nagłówki (starsze polskie karty nadal działają)
 SECTION_ALIASES = {
@@ -58,14 +76,10 @@ SECTION_ALIASES = {
     "Out of scope": ("Poza zakresem",),
     "DoD": (),
     "Evidence": ("Dowód",),
+    "To report": ("Do zgłoszenia",),  # tematy spoza zakresu → nowe karty po scaleniu (#31)
     "Log": (),
 }
 
-# Znaczniki w sekcji Files: plik powstaje w zadaniu (`(new)`/`(nowy)`) albo znika — usunięty
-# lub przeniesiony (`(removed)`/`(usunięty)`); takiego pliku DoR nie wymaga na dysku
-NEW_FILE_MARKERS = ("(new)", "(nowy)")
-REMOVED_FILE_MARKERS = ("(removed)", "(usunięty)")
-PATH_MARKERS = NEW_FILE_MARKERS + REMOVED_FILE_MARKERS
 # Sekcje nowej karty; podpowiedzi w komentarzach HTML pochodzą ze słownika (kanban.template.*)
 TEMPLATE_SECTIONS = [
     ("Goal", "goal"),
@@ -104,6 +118,26 @@ def card_template(dod_checklist: str, headings: str = "en") -> str:
     return "\n" + "\n".join(parts)
 
 
+def wip_limit(wip: object, key: str) -> int | None:
+    """
+    Limit WIP (SB-034) — jedna interpretacja dla tablicy, mostu i panelu: tylko dodatnia liczba
+    całkowita; 0, tekst („3”), wartość logiczna i brak = bez limitu (`check` ostrzega o błędnych).
+    """
+    limit = wip.get(key) if isinstance(wip, dict) else None
+    return limit if isinstance(limit, int) and not isinstance(limit, bool) and limit > 0 else None
+
+
+def wip_warnings(wip: object) -> list[str]:
+    """Wartości `wip` w konfiguracji, które nie są limitem (np. "3", 0) — traktowane jak brak."""
+    if not isinstance(wip, dict):
+        return [] if wip is None else [tr("kanban.warn.wip_invalid", name="wip", value=wip)]
+    return [
+        tr("kanban.warn.wip_invalid", name=key, value=value)
+        for key, value in wip.items()
+        if wip_limit(wip, key) is None
+    ]
+
+
 class KanbanError(Exception):
     """Błąd użycia tablicy (brak karty, zła kolumna, błędny plik)."""
 
@@ -135,6 +169,9 @@ class Card:
             kv = re.match(r"^(\w[\w-]*):\s*(.*)$", line)
             if kv:
                 meta[kv.group(1)] = kv.group(2).strip()
+        card_id = meta.get("id", "")
+        if card_id and not CARD_ID.match(card_id):
+            raise KanbanError(tr("kanban.error.bad_id", name=path.name, card_id=card_id))
         return cls(path, meta, match.group(2))
 
     def save(self) -> None:
@@ -163,6 +200,10 @@ class Card:
     def dependencies(self) -> list[str]:
         raw = re.sub(r"[\[\]]", "", self.meta.get("depends", ""))
         return [d.strip() for d in raw.split(",") if d.strip()]
+
+    def transitions(self) -> list[tuple[str, str]]:
+        """Przejścia między kolumnami zapisane w Logu, w kolejności wpisów."""
+        return TRANSITION.findall(self.section("Log"))
 
     def append_log(self, text: str) -> None:
         self.body = self.body.rstrip() + f"\n- {timestamp()} {text}\n"
@@ -196,6 +237,12 @@ class Board:
                 tr("kanban.error.bad_headings", value=self.headings, allowed=", ".join(HEADINGS))
             )
         self.load_errors: dict[str, str] = {}  # plik → błąd; uzupełnia cards()
+        self.check_warnings: dict[str, list[str]] = {}  # karta → ostrzeżenia; uzupełnia check()
+
+    @staticmethod
+    def section_paths(files_section: str, any_name: bool = False) -> list[tuple[str, bool]]:
+        """Ścieżki z sekcji Files (dla workflow.py, który nie importuje kanban.py)."""
+        return section_paths(files_section, any_name)
 
     def heading(self, name: str) -> str:
         """Nagłówek sekcji w języku tablicy (`headings`), np. Files → Pliki."""
@@ -230,6 +277,8 @@ class Board:
         for dep in card.dependencies():
             if dep not in by_id:
                 errors.append(tr("kanban.dep.missing", dep=dep))
+            elif same_batch(card, by_id[dep]) and by_id[dep].status == "in-progress":
+                continue  # paczka w toku: wspólna gałąź i bramka — kolejność w paczce (Z39)
             elif by_id[dep].status not in allowed:
                 errors.append(
                     tr(
@@ -252,13 +301,9 @@ class Board:
         if size not in SIZE_ORDER:
             errors.append(tr("kanban.dor.bad_size", sizes="/".join(SIZE_ORDER)))
         elif model and SIZE_ORDER.index(size) > SIZE_ORDER.index(model.get("max_size", "L")):
+            limit = model["max_size"]
             errors.append(
-                tr(
-                    "kanban.dor.size_over_limit",
-                    size=size,
-                    model=meta["model"],
-                    limit=model["max_size"],
-                )
+                tr("kanban.dor.size_over_limit", size=size, model=meta["model"], limit=limit)
             )
         for name in ("Goal", "Context"):
             if not card.section(name):
@@ -281,17 +326,14 @@ class Board:
         ręcznej — karty roju (`worker:`) mają własny limit: liczbę workerów.
         """
         limits = self.config.get("wip", {})
-        active = [c for c in cards if c.status == "in-progress" and c.id != card.id]
         errors = []
-        if "in-progress" in limits and len(active) >= limits["in-progress"]:
-            errors.append(tr("kanban.wip.total", limit=limits["in-progress"]))
-        per_model = limits.get("in-progress-per-model")
-        manual = [c for c in active if not c.meta.get("worker")]
-        if (
-            per_model
-            and sum(c.meta.get("model") == card.meta.get("model") for c in manual) >= per_model
-        ):
-            errors.append(tr("kanban.wip.per_model", model=card.meta.get("model"), limit=per_model))
+        total = wip_limit(limits, "in-progress")
+        if total and checks.wip_units(cards, "in-progress", card) >= total:
+            errors.append(tr("kanban.wip.total", limit=total))
+        per_model = wip_limit(limits, "in-progress-per-model")
+        model = card.meta.get("model", "")
+        if per_model and checks.wip_units(cards, "in-progress", card, model) >= per_model:
+            errors.append(tr("kanban.wip.per_model", model=model, limit=per_model))
         return errors
 
     def review_errors(self, card: Card, cards: list[Card], check_wip: bool = True) -> list[str]:
@@ -301,30 +343,51 @@ class Board:
         ]
         if not card.section("Evidence"):
             errors.append(tr("kanban.review.no_evidence", section=self.heading("Evidence")))
-        limit = self.config.get("wip", {}).get("review")
-        if (
-            check_wip
-            and limit
-            and sum(c.status == "review" and c.id != card.id for c in cards) >= limit
-        ):
+        limit = wip_limit(self.config.get("wip", {}), "review")
+        if check_wip and limit and checks.wip_units(cards, "review", card) >= limit:
             errors.append(tr("kanban.review.wip", limit=limit))
         return errors
 
-    def done_errors(self, card: Card, run_gate: bool) -> list[str]:
+    def done_errors(self, card: Card, run_gate: bool, closed: bool = False) -> list[str]:
         total, open_items = card.checkboxes("DoD")
         errors = [tr("kanban.dod.missing")] if total == 0 else []
         errors += [tr("kanban.dod.open_item", item=i) for i in open_items]
-        reviewer = card.meta.get("reviewer", "")
-        if not reviewer:
-            errors.append(tr("kanban.dod.no_reviewer"))
-        elif reviewer == card.meta.get("model"):
-            errors.append(tr("kanban.dod.self_review"))
+        errors += self.reviewer_errors(card)
+        # check karty w done: `tested_by` tylko po przejściu przez test (#28), ruch zawsze (SB-071)
+        tested = not closed or any("test" in t for t in card.transitions())
+        if "test" in self.columns and tested and not card.meta.get("tested_by"):
+            errors.append(tr("kanban.dod.no_tested_by"))
         if run_gate and not errors:
             errors += self.run_gate(tail_lines=8)
         return errors
 
+    def reviewer_errors(self, card: Card) -> list[str]:
+        """Przegląd niezależny: reviewer wpisany i różny od `model:` i `executor:` (SB-046)."""
+        reviewer = card.meta.get("reviewer", "")
+        if not reviewer:
+            return [tr("kanban.dod.no_reviewer")]
+        if reviewer == card.meta.get("model"):
+            return [tr("kanban.dod.self_review")]
+        if reviewer == card.meta.get("executor"):
+            return [tr("kanban.dod.self_review_executor", executor=reviewer)]
+        return []
+
+    @property
+    def columns(self) -> list[str]:
+        """Kolumny tablicy (z opcjonalną `test`, SB-071)."""
+        return checks.board_columns(self.config)
+
+    def transition_errors(self, card: Card) -> list[str]:
+        since = str(self.config.get("transitions_since", TRANSITIONS_SINCE))
+        return checks.transition_errors(card, since)
+
+    def warnings(self, card: Card, cards: list[Card]) -> list[str]:
+        return checks.warnings(card, cards)
+
     def run_gate(self, tail_lines: int) -> list[str]:
         """Wszystkie polecenia `gate` w katalogu projektu; każdy błąd z ostatnimi liniami."""
+        if os.environ.get("SWARMBOARD_PACKAGE_RULES") == "1" and self.config.get("gate"):
+            return [tr("kanban.dod.gate_blocked")]  # niezaufane repo — bez kodu z repo (SB-029)
         errors = []
         for cmd in self.config.get("gate", []):
             res = subprocess.run(
@@ -340,36 +403,54 @@ class Board:
                 errors.append(tr("kanban.dod.gate_failed", cmd=cmd, code=res.returncode, tail=tail))
         return errors
 
-    def gate_errors(self, card: Card, to: str, cards: list[Card]) -> list[str]:
+    def gate_errors(
+        self, card: Card, to: str, cards: list[Card], run_gate: bool = True
+    ) -> list[str]:
         """
         Błędy blokujące przejście karty do kolumny `to`. Skok o kilka kolumn przechodzi przez
         bramki wszystkich kolumn pośrednich; ruch w lewo — bez bramki.
         """
-        if to not in COLUMNS:
+        columns = self.columns
+        if to not in columns:
             raise KanbanError(
-                tr("kanban.error.unknown_column", column=to, columns=", ".join(COLUMNS))
+                tr("kanban.error.unknown_column", column=to, columns=", ".join(columns))
             )
-        start = COLUMNS.index(card.status) if card.status in COLUMNS else 0
-        target = COLUMNS.index(to)
+        start = columns.index(card.status) if card.status in columns else 0
         errors: list[str] = []
-        for column in COLUMNS[start + 1 : target + 1]:
-            errors += [e for e in self._column_gate(card, column, cards) if e not in errors]
+        for column in columns[start + 1 : columns.index(to) + 1]:
+            gate = self._column_gate(card, column, cards, run_gate, final=column == to)
+            errors += [e for e in gate if e not in errors]
         return errors
 
-    def _column_gate(self, card: Card, to: str, cards: list[Card]) -> list[str]:
-        if to == "ready":
-            return self.ready_errors(card, cards)
+    def _column_gate(
+        self, card: Card, to: str, cards: list[Card], run_gate: bool, final: bool = True
+    ) -> list[str]:
+        if to == "ready":  # + paczka i powód udziału człowieka — tylko przy przejściu (#29)
+            return self.ready_errors(card, cards) + checks.dor_policy_errors(card, self.config)
         if to == "in-progress":
             return (
                 self.ready_errors(card, cards)
                 + self.wip_errors(card, cards)
                 + self._dependency_errors(card, cards, DEPS_AVAILABLE)
             )
+        first = checks.test_first(self.columns)  # test przed przeglądem (#29)
         if to == "review":
-            return self.review_errors(card, cards)
+            untested = first and not card.meta.get("tested_by")
+            return self.review_errors(card, cards) + [tr("kanban.dod.no_tested_by")] * untested
+        others = [c for c in cards if c is not card]
+        if to == "test":  # przegląd zaliczony, miejsce w WIP testu (SB-071)
+            limit = wip_limit(self.config.get("wip", {}), "test")
+            # WIP testu tylko dla karty, która w `test` zostaje — nie przy przejściu do done
+            full = final and limit and checks.wip_units(cards, "test", card) >= limit
+            wip = [tr("kanban.test.wip", limit=limit)] if full else []
+            reviewer = [] if first else self.reviewer_errors(card)  # test po przeglądzie — reviewer
+            return self.review_errors(card, others, check_wip=False) + reviewer + wip
         if to == "done":
-            others = [c for c in cards if c is not card]
-            return self.review_errors(card, others, check_wip=False) + self.done_errors(card, True)
+            return (
+                self.review_errors(card, others, check_wip=False)
+                + self.transition_errors(card)
+                + self.done_errors(card, run_gate)
+            )
         return []
 
     # --- Komendy ---
@@ -391,11 +472,14 @@ class Board:
                 )
             )
         prefix = self.config["prefix"]
+        if not PREFIX.match(str(prefix)):  # ID = prefiks-numer (CARD_ID); inaczej karta nieczytelna
+            raise KanbanError(tr("kanban.error.bad_prefix", prefix=prefix))
         numbers = [
             int(m.group(1))
             for c in self.cards()
             if (m := re.match(rf"^{re.escape(prefix)}-(\d+)$", c.id))
         ]
+        numbers += self.history_numbers(prefix)  # usunięte karty nie oddają ID (SB-049)
         card_id = f"{prefix}-{max(numbers, default=0) + 1:03d}"
         card = Card(
             self.tasks_dir / f"{card_id}.md",
@@ -408,20 +492,43 @@ class Board:
                 "size": size,
                 "priority": priority,
                 "depends": "[]",
+                "batch": "",  # DoR: nazwa paczki albo `none` (#29)
                 "created": time.strftime("%Y-%m-%d"),
             },
             card_template(self.dod_checklist(model), self.headings),
         )
+        card.append_log(tr("kanban.log.created"))  # kiedy założona (SB-052)
         self.tasks_dir.mkdir(parents=True, exist_ok=True)
         card.save()
         return card
 
-    def move(self, card_id: str, to: str) -> list[str]:
+    def history_numbers(self, prefix: str) -> list[int]:
+        """Numery kart z historii gita (wszystkie gałęzie) — także usuniętych z tablicy."""
+        try:
+            res = subprocess.run(
+                ["git", "log", "--all", "--diff-filter=A", "--format=", "--name-only", "--", "."],
+                cwd=self.root,
+                text=True,
+                capture_output=True,
+            )
+        except FileNotFoundError:  # brak gita
+            return []
+        pattern = rf"(?:^|/){re.escape(prefix)}-(\d+)\.md$"
+        return [int(m.group(1)) for m in re.finditer(pattern, res.stdout, re.M)]
+
+    def move(self, card_id: str, to: str, reason: str = "") -> list[str]:
         cards = self.cards()
         card = self.card(card_id, cards)
+        reopen = card.status == "done" and to != "done"
+        if reopen and not reason.strip():  # ponowne otwarcie tylko jawnie (SB-041)
+            return [tr("kanban.error.reopen_reason", card_id=card_id)]
+        skip = to == "done" and card.meta.get("tested_by") == "skip"
+        if skip and not reason.strip():  # akceptacja bez testu — decyzja zapisana (SB-071)
+            return [tr("kanban.error.skip_test_reason", card_id=card_id)]
         errors = self.gate_errors(card, to, cards)
         if not errors:
-            card.move(to)
+            note = tr("kanban.log.reopened", reason=reason.strip()) if reopen else reason.strip()
+            card.move(to, note)
             card.save()
         return errors
 
@@ -430,31 +537,44 @@ class Board:
         cards = self.cards()
         targets = [self.card(card_id, cards)] if card_id else cards
         result: dict[str, list[str]] = {}
+        self.check_warnings = {}
         if not card_id:
             for name, error in self.load_errors.items():
                 result[name] = [error]
         cycle = dependency_cycle(cards)
-        cycle_ids = set(cycle.split(" -> ")) if cycle else set()
+        config_warnings = wip_warnings(self.config.get("wip")) + checks.column_warnings(self.config)
+        if config_warnings and not card_id:
+            self.check_warnings["kanban/config.json"] = config_warnings
         for c in targets:
-            errors = [
-                tr("kanban.check.missing_field", field=key)
-                for key in ("id", "title", "status", "model", "size")
-                if not c.meta.get(key)
-            ]
-            if c.status not in COLUMNS:
-                errors.append(tr("kanban.check.unknown_status", status=c.status))
-            if c.path.name != f"{c.id}.md":
-                errors.append(tr("kanban.check.filename"))
-            if c.status in ("ready", "in-progress"):
-                errors += self.ready_errors(c, cards)
-            if c.status == "done":
-                errors += self.done_errors(c, run_gate=False)
-            if c.id in cycle_ids:
-                errors.append(tr("kanban.check.cycle", cycle=cycle))
-            if sum(x.id == c.id for x in cards) > 1:
-                errors.append(tr("kanban.check.duplicate_id", card_id=c.id))
-            result[c.id or c.path.name] = errors
+            result[c.id or c.path.name] = self.card_errors(c, cards, cycle)
+            self.check_warnings[c.id or c.path.name] = self.warnings(c, cards)
         return result
+
+    def card_errors(self, c: Card, cards: list[Card], cycle: str | None) -> list[str]:
+        """Błędy jednej karty w `check` (cykl zależności liczony raz dla całej tablicy)."""
+        errors = [
+            tr("kanban.check.missing_field", field=key)
+            for key in ("id", "title", "status", "model", "size")
+            if not c.meta.get(key)
+        ]
+        if c.status not in self.columns:
+            errors.append(tr("kanban.check.unknown_status", status=c.status))
+        if c.path.name != f"{c.id}.md":
+            errors.append(tr("kanban.check.filename"))
+        if c.status in ("ready", "in-progress"):
+            errors += self.ready_errors(c, cards)
+        if c.status == "done":
+            errors += self.done_errors(c, run_gate=False, closed=True)
+        if cycle and c.id in cycle.split(" -> "):
+            errors.append(tr("kanban.check.cycle", cycle=cycle))
+        if sum(x.id == c.id for x in cards) > 1:
+            errors.append(tr("kanban.check.duplicate_id", card_id=c.id))
+        executor = c.meta.get("executor")
+        if executor and executor != c.meta.get("model"):  # SB-046
+            errors.append(
+                tr("kanban.check.executor_mismatch", executor=executor, model=c.meta["model"])
+            )
+        return errors + self.transition_errors(c)
 
     def ready_cards(self, model: str, cards: list[Card] | None = None) -> list[Card]:
         """Karty `ready` modelu w kolejności priorytetu (P1 < P2 …), potem id."""
@@ -468,18 +588,11 @@ class Board:
 
     def print_board(self) -> None:
         cards = self.cards()
-        for column in COLUMNS:
+        for column in self.columns:
             items = [c for c in cards if c.status == column]
             print(f"\n■ {column.upper()} ({len(items)})")
             for c in items:
-                deps = c.dependencies()
-                extra = f"  ⇠ {','.join(deps)}" if deps else ""
-                on_worker = c.meta.get("worker") and column == "in-progress"
-                worker = f" @{c.meta['worker']}" if on_worker else ""
-                print(
-                    f"  {c.id}  [{c.meta.get('size', '?')}] {c.meta.get('priority', ''):<3} "
-                    f"{c.meta.get('model', ''):<8} {c.meta.get('title', '')}{worker}{extra}"
-                )
+                print(checks.board_line(c, column))
         print()
 
 
@@ -492,79 +605,6 @@ def priority_rank(priority: str) -> int:
     """P1 < P2 < … < P10 (liczbowo); brak albo inny zapis → na koniec."""
     m = re.fullmatch(r"[Pp](\d+)", priority.strip())
     return int(m.group(1)) if m else 99
-
-
-# Token w backtickach to ścieżka, gdy ma `/` albo jedno z tych rozszerzeń (`Board.cards` — nie)
-FILE_EXTENSIONS = set(
-    "py js mjs cjs ts tsx jsx json md toml yml yaml html css sh txt sql cfg ini lock csv xml svg "
-    "png po env".split()
-)
-
-
-def missing_files(root: Path, files_section: str) -> list[str]:
-    """
-    Ścieżki z sekcji Files, których brak na dysku. Nowy plik oznacza znacznik `(new)`/`(nowy)`,
-    usunięty albo przeniesiony — `(removed)`/`(usunięty)`; w tej samej linii, przy ścieżce.
-    """
-    missing = []
-    for line in files_section.splitlines():
-        may_be_absent = any(marker in line for marker in PATH_MARKERS)
-        for ref in re.findall(r"`([^`]+)`", line):
-            ref = ref.strip()
-            for marker in PATH_MARKERS:
-                ref = ref.removesuffix(marker).strip()
-            path = re.sub(r":\d+(-\d+)?$", "", ref)
-            extension = path.rsplit(".", 1)[-1].lower() if "." in path else ""
-            if " " in path or ("/" not in path and extension not in FILE_EXTENSIONS):
-                continue  # polecenie, nazwa funkcji, atrybut
-            if not may_be_absent and not (root / path).exists():
-                missing.append(path)
-    return missing
-
-
-def dependency_cycle(cards: list[Card]) -> str | None:
-    """Pierwszy cykl zależności między kartami jako `A -> B -> A` (A zależy od B) albo None."""
-    graph = {c.id: c.dependencies() for c in cards if c.id}
-    state: dict[str, int] = {}
-    stack: list[str] = []
-
-    def visit(node: str) -> str | None:
-        state[node] = 1
-        stack.append(node)
-        for dep in graph.get(node, []):
-            if state.get(dep) == 1:
-                return " -> ".join(stack[stack.index(dep) :] + [dep])
-            if dep in graph and not state.get(dep):
-                found = visit(dep)
-                if found:
-                    return found
-        stack.pop()
-        state[node] = 2
-        return None
-
-    for node in graph:
-        if not state.get(node):
-            found = visit(node)
-            if found:
-                return found
-    return None
-
-
-def card_summary(card: Card) -> dict[str, object]:
-    """Karta jako słownik dla `--json` (stabilne pola dla agentów)."""
-    meta = card.meta
-    return {
-        "id": card.id,
-        "title": meta.get("title", ""),
-        "status": card.status,
-        "model": meta.get("model", ""),
-        "size": meta.get("size", ""),
-        "priority": meta.get("priority", ""),
-        "depends": card.dependencies(),
-        "worker": meta.get("worker") or None,
-        "branch": meta.get("branch") or None,
-        "path": str(card.path),
-    }
 
 
 def print_json(data: object) -> None:
@@ -597,7 +637,9 @@ def print_errors(header: str, errors: list[str]) -> None:
 def cmd_board(board: Board, args: argparse.Namespace) -> int:
     if getattr(args, "json", False):
         cards = board.cards()
-        columns = {col: [card_summary(c) for c in cards if c.status == col] for col in COLUMNS}
+        columns = {
+            col: [card_summary(c) for c in cards if c.status == col] for col in board.columns
+        }
         print_json({"columns": columns, "unreadable": board.load_errors})
     else:
         board.print_board()
@@ -605,14 +647,14 @@ def cmd_board(board: Board, args: argparse.Namespace) -> int:
 
 
 def cmd_new(board: Board, args: argparse.Namespace) -> int:
-    card = board.create(args.title, args.model, args.size, args.priority)
+    card = load_workflow().create_card(board, args)
     print(tr("kanban.cli.created", path=card.path.relative_to(board.root)))
     return EXIT_OK
 
 
 def cmd_move(board: Board, args: argparse.Namespace) -> int:
     frm = board.card(args.id).status
-    errors = board.move(args.id, args.to)
+    errors = board.move(args.id, args.to, args.reason or "")
     if errors:
         print_errors(tr("kanban.cli.cannot_move", card_id=args.id, frm=frm, to=args.to), errors)
         return EXIT_FAILED
@@ -620,16 +662,29 @@ def cmd_move(board: Board, args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_set(board: Board, args: argparse.Namespace) -> int:
+    errors = load_workflow().set_meta(board, args.id, args.key, args.value, args.reason or "")
+    if errors:
+        print_errors(tr("kanban.set.refused", card_id=args.id), errors)
+        return EXIT_FAILED
+    print(f"✓ {args.id}: {args.key} = {args.value}")
+    return EXIT_OK
+
+
 def cmd_check(board: Board, args: argparse.Namespace) -> int:
     result = board.check(args.id)
+    warnings = {k: v for k, v in board.check_warnings.items() if v}
     ok = not any(result.values())
     if args.json:
-        print_json({"ok": ok, "cards": result})
+        print_json({"ok": ok, "cards": result, "warnings": warnings})
     else:
-        for card_id, errors in result.items():
-            print(f"{'✗' if errors else '✓'} {card_id}")
+        for card_id in [*(k for k in warnings if k not in result), *result]:
+            errors = result.get(card_id, [])
+            print(f"{'✗' if errors else '!' if warnings.get(card_id) else '✓'} {card_id}")
             for e in errors:
                 print(f"  - {e}")
+            for w in warnings.get(card_id, []):
+                print(f"  ! {w}")
     return EXIT_OK if ok else EXIT_FAILED
 
 
@@ -689,12 +744,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true", help=tr("kanban.cli.json_help"))
     p = sub.add_parser("new", help=tr("kanban.cli.new_help"))
     p.add_argument("title")
-    p.add_argument("--model", default="claude")
-    p.add_argument("--size", default="M", choices=SIZE_ORDER)
-    p.add_argument("--priority", default="P2")
+    p.add_argument("--model")  # domyślnie claude albo model karty z --from
+    p.add_argument("--size", choices=SIZE_ORDER)
+    p.add_argument("--priority")
+    p.add_argument("--from", dest="source")  # temat z karty: model, priorytet, paczka (#31)
     p = sub.add_parser("move", help=tr("kanban.cli.move_help"))
     p.add_argument("id")
-    p.add_argument("to", choices=COLUMNS)
+    p.add_argument("to", choices=checks.ALL_COLUMNS)
+    p.add_argument("--reason", help=tr("kanban.cli.reason_help"))
+    p = sub.add_parser("set", help=tr("kanban.cli.set_help"))
+    p.add_argument("id")
+    p.add_argument("key")
+    p.add_argument("value")
+    p.add_argument("--reason", help=tr("kanban.cli.reason_help"))
+    load_workflow().add_batch_parser(sub)  # paczki kart (SB-064)
     p = sub.add_parser("check", help=tr("kanban.cli.check_help"))
     p.add_argument("id", nargs="?")
     p.add_argument("--json", action="store_true", help=tr("kanban.cli.json_help"))
@@ -714,6 +777,8 @@ COMMANDS = {
     "new": cmd_new,
     "move": cmd_move,
     "check": cmd_check,
+    "set": cmd_set,
+    "batch": lambda board, args: load_workflow().batch_main(board, args),
     "next": cmd_next,
     "submit": cmd_submit,
 }

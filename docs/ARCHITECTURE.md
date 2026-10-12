@@ -13,11 +13,13 @@ Wyjaśnia sposób integracji z interfejsem Messengera, strukturę danych oraz ob
 - [Struktura modułów](#struktura-modułów)
 - [Moduł pamięci (Storage)](#moduł-pamięci-storage)
 - [Moduł detektora DOM (Detector)](#moduł-detektora-dom-detector)
+- [Silnik reguł automatycznego przypisywania (Rules)](#silnik-reguł-automatycznego-przypisywania-rules)
 - [Odporność na dynamiczne klasy CSS Messengera](#odporność-na-dynamiczne-klasy-css-messengera)
 - [Obsługa wirtualnego przewijania (MutationObserver)](#obsługa-wirtualnego-przewijania-mutationobserver)
 - [Warstwa interfejsu użytkownika (UI)](#warstwa-interfejsu-użytkownika-ui)
 - [Diagram przepływu danych](#diagram-przepływu-danych)
 - [Testy jednostkowe](#testy-jednostkowe)
+- [Testy E2E (Playwright)](#testy-e2e-playwright)
 
 ---
 
@@ -43,7 +45,8 @@ graph TD
         subgraph MessengerTab ["Karta: messenger.com"]
             Content["Skrypt główny (content.js)"]
             Detector["Detektor DOM (detector.js)"]
-            UI["Warstwa wizualna (ui.js)"]
+            Rules["Silnik reguł (rules.js)"]
+            UI["Fasada interfejsu (ui.js + ui/*)"]
             DOM["Drzewo DOM Messengera"]
         end
     end
@@ -52,6 +55,9 @@ graph TD
     Popup -->|Odczytuje i zapisuje| Storage
     Content -->|Koordynuje| Detector
     Content -->|Koordynuje| UI
+    Content -->|Ewaluuje wątki| Rules
+    UI -->|Edytor reguł| Rules
+    Rules -->|Odczytuje i zapisuje mf_rules| Storage
     Content -->|Synchronizuje| Storage
     Storage -.->|Zdarzenie onChanged| Content
     Detector -->|Skanuje i obserwuje| DOM
@@ -70,11 +76,24 @@ Tabela przedstawia pliki wchodzące w skład rozszerzenia:
 | [background/background.js](../background/background.js) | Service Worker | Inicjalizuje domyślne foldery po instalacji rozszerzenia. |
 | [src/storage.js](../src/storage.js) | Warstwa danych | Zarządza strukturą folderów i przypisaniami wątków. |
 | [src/detector.js](../src/detector.js) | Silnik detekcji DOM | Odnajduje czaty, linki i punkty wstrzyknięcia interfejsu. |
-| [src/ui.js](../src/ui.js) | Generator interfejsu | Tworzy pasek pigułek, plakietki, menu i okna edycji. |
-| [src/content.js](../src/content.js) | Koordynator strony | Łączy detektor, pamięć oraz interfejs na karcie Messengera. |
+| [src/rules.js](../src/rules.js) | Silnik reguł | Przechowuje reguły (`mf_rules`) i dopasowuje do nich wątki. |
+| [src/ui.js](../src/ui.js) | Fasada interfejsu | Klasa `MessengerUI` (alias `MessengerFoldersUI`) deleguje pracę do modułów `src/ui/*`. |
+| [src/ui/core.js](../src/ui/core.js) | Baza interfejsu | Stałe, ikony SVG (`ICONS`), bezpieczne wstawianie do DOM, powiadomienia toast. |
+| [src/ui/folder-bar.js](../src/ui/folder-bar.js) | Pasek folderów | Dwurzędowy pasek `#mf-folder-bar`: wyszukiwarka, pigułki, przewijanie, liczniki. |
+| [src/ui/folder-modal.js](../src/ui/folder-modal.js) | Okno folderu | Tworzenie i edycja folderu: nazwa, emoji, kolor, wybór rozmów. |
+| [src/ui/thread-menu.js](../src/ui/thread-menu.js) | Menu wątku | Menu przypisania, plakietka w wierszu czatu, pigułka w nagłówku rozmowy. |
+| [src/ui/settings-modal.js](../src/ui/settings-modal.js) | Okno ustawień | Zakładki: foldery, rozmowy, kopia zapasowa oraz reguły z edytorem. |
+| [src/content.js](../src/content.js) | Koordynator strony | Łączy detektor, pamięć, silnik reguł oraz interfejs na karcie Messengera. |
 | [src/content.css](../src/content.css) | Arkusz stylów | Nadaje wygląd komponentom i wspiera motyw ciemny. |
 | [popup/popup.js](../popup/popup.js) | Logika okna popup | Obsługuje edycję folderów oraz eksport i import JSON. |
-| [tests/test_storage_detector.js](../tests/test_storage_detector.js) | Testy jednostkowe | Sprawdza poprawność logiki magazynu danych i detektora. |
+| [tests/test_storage_detector.js](../tests/test_storage_detector.js) | Testy jednostkowe | Sprawdza magazyn danych, detektor i funkcje koordynatora. |
+| [tests/test_ui.js](../tests/test_ui.js) | Testy jednostkowe | Sprawdza warstwę interfejsu na atrapach DOM. |
+| [tests/test_rules.js](../tests/test_rules.js) | Testy jednostkowe | Sprawdza operatory, priorytety, ochronę regex i zapis reguł. |
+
+Skrypty zawartości ładują się w kolejności z `manifest.json`: `src/storage.js`, `src/detector.js`,
+`src/rules.js`, `src/ui/core.js`, `src/ui/folder-bar.js`, `src/ui/folder-modal.js`,
+`src/ui/thread-menu.js`, `src/ui/settings-modal.js`, `src/ui.js`, `src/content.js`. Moduły nie używają `import` — każdy rejestruje
+swoją klasę w `globalThis` (i w `module.exports` dla testów w Node), a następne pliki ją odczytują.
 
 ---
 
@@ -119,10 +138,27 @@ const STORAGE_KEYS = {
        "name": "Jan Kowalski",
        "avatar": "https://...",
        "assignedAt": 1728500000000,
-       "updatedAt": 1728500000000
+       "updatedAt": 1728500000000,
+       "autoAssigned": true
      }
    }
    ```
+   Pole `autoAssigned` ma wartość `true`, gdy przypisanie wykonała reguła
+   (metoda `applyAutoAssignments`, opis w sekcji o silniku reguł).
+
+   Pole `avatar` przechodzi przez `sanitizeAvatarUrl()` przy wczytaniu (`init`, `onChanged`),
+   imporcie JSON i każdym zapisie. Zostaje tylko adres `https://` z hostów CDN Messengera
+   i Facebooka (`*.fbcdn.net`, `*.fbsbx.com`, bez portu i danych logowania) albo
+   `data:image/png|jpeg|gif|webp;base64,…`. Inny adres zamienia się na pusty tekst, bo
+   `img.src` wysłałby żądanie do dowolnego hosta. Okno ustawień sprawdza awatar jeszcze raz
+   przed wstawieniem do `img.src`.
+
+   Identyfikator wątku (`isSafeThreadId`) to niepusty tekst do 256 znaków inny niż `__proto__`,
+   `constructor` i `prototype`. Nie musi składać się z cyfr — Facebook używa też adresów
+   `/messages/t/<nazwa.użytkownika>`. Import pomija wątki z niepoprawnym identyfikatorem.
+
+Reguły automatycznego przypisywania leżą pod osobnym kluczem `mf_rules`, którym zarządza
+[src/rules.js](../src/rules.js). Eksport i import JSON obejmują tylko foldery i przypisania — bez reguł.
 
 ### Synchronizacja w czasie rzeczywistym
 
@@ -155,6 +191,154 @@ Metoda `findFolderBarInjectionPoint()` automatycznie lokalizuje najlepsze miejsc
 3. W ostateczności umieszcza pasek nad pierwszym widocznym wierszem rozmowy.
 
 Dzięki temu pasek pojawia się zawsze w logicznym miejscu, niezależnie od wersji interfejsu.
+
+### Wykrywanie nieprzeczytanych rozmów
+
+Metoda `isThreadUnread(rowElement, linkElement)` zwraca `true`, gdy wiersz wygląda na nieprzeczytany.
+Nie czyta klas CSS ani `getComputedStyle` (brak wymuszonego przeliczania układu). Sprawdza po kolei
+(pierwszy trafny sygnał wygrywa):
+1. `[data-testid*="unread" i]` na wierszu lub potomku,
+2. potomek z `aria-label` zawierającym „nieprzeczytan” / „unread”,
+3. `aria-label` samego wiersza lub linku,
+4. niebieska kropka (`[style*="rgb(0, 132, 255)"]`, `#0084ff`) poza awatarem (patrz niżej),
+5. `data-unread="true"`.
+
+Awatarem w rozumieniu `_isAvatarElement` jest: `img`, `image`, `svg`, element z `role="img"`, element
+zawierający `<img>` / `<image>` w środku albo element z obrazem w tle. Liczą się wyłącznie
+właściwości tła, czyli `background` / `background-image` z `url(...)`; `url()` w innej właściwości
+(np. `mask-image`) nie czyni elementu awatarem, więc niebieska kropka z takim stylem pozostaje kropką.
+
+Akcje „Oznacz jako nieprzeczytane” / „Mark as unread” (przyciski, pozycje menu, etykiety z
+„oznacz” / „mark as”) są pomijane (`_isActionElement`, `_hasActionLabel`), bo nie opisują stanu
+rozmowy. Granicą rozpoznawania akcji jest wiersz: przycisk (`button`, `[role="button"]`,
+`[role="menuitem"]`) wyłącza kandydata tylko wtedy, gdy leży **wewnątrz** wiersza (np. menu wątku).
+Sam wiersz będący przyciskiem albo opakowany w przycisk (przodek pasujący do `ACTION_SELECTOR`, czyli
+`button`, `[role="button"]` lub `[role="menuitem"]`) jest nadal oceniany — klikalny wiersz to nie
+akcja. Etykieta rozróżnia akcję od stanu: „Oznacz jako nieprzeczytane” to akcja, a „Oznaczony jako
+nieprzeczytane” to stan wątku i pozostaje sygnałem.
+`scanChatList()` zapisuje wynik w polu `isUnread` każdego wątku.
+
+**Ograniczenia:**
+- Heurystyka widzi **tylko wiersze obecne w DOM**. Messenger wirtualizuje listę, więc nieprzeczytane
+  rozmowy poza przewiniętym fragmentem nie są liczone, dopóki się nie wyrenderują.
+- Opiera się na atrybutach i etykietach, które Meta może zmienić; błąd daje zaniżony lub zawyżony
+  licznik, ale nie wpływa na przypisania folderów.
+- Rozpoznaje etykiety polskie i angielskie.
+
+---
+
+## Silnik reguł automatycznego przypisywania (Rules)
+
+Klasa `MessengerRulesEngine` w pliku [src/rules.js](../src/rules.js) przechowuje reguły
+i dopasowuje do nich wątki. Nie dotyka DOM — dane wątków dostaje od koordynatora
+[src/content.js](../src/content.js), a edytor reguł jest częścią
+[src/ui/settings-modal.js](../src/ui/settings-modal.js) (zakładka **⚡ Reguły**).
+
+### Model danych reguły
+
+Reguły leżą w `chrome.storage.local` pod kluczem `mf_rules` jako tablica obiektów:
+
+```json
+{
+  "id": "rule_1728500000000_ab12c",
+  "name": "Projekty firmowe",
+  "enabled": true,
+  "priority": 10,
+  "folderId": "work",
+  "matchMode": "all",
+  "conditions": [
+    { "field": "name", "operator": "contains", "value": "Projekt, Budowa" },
+    { "field": "threadId", "operator": "regex", "value": "^1000\\d+$" }
+  ],
+  "overwriteManual": false,
+  "createdAt": 1728500000000,
+  "updatedAt": 1728500000000
+}
+```
+
+Każdy odczyt i zapis przechodzi przez normalizację (`normalizeRule`, `normalizeCondition`):
+- `field`: `name` albo `threadId`; starszy alias `threadName` zamienia się na `name`.
+- `operator`: `contains`, `startsWith`, `endsWith`, `exact` (alias `equals`) lub `regex`;
+  nieznany operator zamienia się na `contains`.
+- `priority`: liczba albo niepusty tekst liczbowy (`parsePriority`), w innym razie `10`,
+  przycięta do zakresu 0–100 (`normalizePriority`, używane też przez edytor reguł).
+  Niższa wartość oznacza wyższy priorytet.
+- `createdAt`, `updatedAt`: liczba większa od zera; `null`, `''` i brak wartości oznaczają czas
+  zapisu. `saveRule()` przy edycji zachowuje `createdAt` zapisanej reguły i zawsze ustawia nowy
+  `updatedAt`.
+- `matchMode`: `all` (wszystkie warunki) albo `any` (dowolny warunek).
+- `name` jest przycinana do 50 znaków; brak `id` oznacza wygenerowanie nowego.
+
+### Ewaluacja
+
+`evaluateThread(thread, rules, folders)` zwraca identyfikator folderu albo `null`:
+1. Odrzuca reguły wyłączone, bez warunków, bez folderu docelowego oraz — gdy zna listę folderów —
+   wskazujące nieistniejący folder.
+2. Sortuje reguły rosnąco po priorytecie — wygrywa pierwsza pasująca.
+3. Bez `overwriteManual` pomija wątki, które mają już folder inny niż `uncategorized`.
+4. Porównuje tekst bez rozróżniania wielkości liter. W `contains` przecinek rozdziela
+   alternatywne wartości.
+
+Koordynator [src/content.js](../src/content.js) uruchamia ewaluację (`evaluateRulesNonBlocking`)
+przy starcie, po mutacjach listy czatów, po nawigacji SPA, po zapisie w edytorze reguł
+(`ui.onRulesChanged`) i po zmianie `mf_rules` w `chrome.storage.onChanged`:
+- Tylko jedna ewaluacja naraz; kolejne wywołanie ustawia flagę i uruchamia się po zakończeniu bieżącego.
+- Pamięć podręczna (do 1000 kluczy `threadId:nazwa:wersjaReguł`) pomija wątki już ocenione.
+- Wątki są przetwarzane porcjami po 20; między porcjami skrypt oddaje sterowanie
+  przeglądarce (`requestIdleCallback`), aby nie blokować przewijania.
+- Wynik zapisuje jedna operacja `storage.applyAutoAssignments()`. Metoda aktualizuje pamięć
+  podręczną magazynu przed zapisem i pomija wątki, których folder zmienił się w trakcie
+  ewaluacji — ręczne przypisanie zrobione w tym czasie wygrywa z regułą. Dotyczy to także reguł
+  z `overwriteManual: true`: decyzja policzona na starszym stanie nie nadpisuje świeższej akcji
+  użytkownika. Reguła zadziała przy kolejnej ewaluacji (zmiana nazwy wątku albo reguł).
+
+### Ochrona wyrażeń regularnych
+
+Operator `regex` wykonuje wzorzec użytkownika w skrypcie zawartości, a JavaScript nie pozwala
+przerwać trwającego dopasowania. Źle zbudowany wzorzec mógłby więc zablokować kartę Messengera
+(ReDoS). Ochronę daje `validateRegexPattern()` w `src/rules.js`, a dokładniej analiza struktury
+wzorca w `analyzeRegexPattern()`. Funkcja zwraca komunikat po polsku albo `null` i odrzuca wzorzec,
+gdy:
+- jest dłuższy niż `MAX_REGEX_PATTERN_LENGTH` (250 znaków),
+- powtarza zmienną liczbę razy grupę z alternatywą albo zmiennym kwantyfikatorem, np. `(a|a)*$`,
+  `(a|ab)*c`, `(a+)+`, `((a*)b)*`, `(?:a|b)+` (nawrót wykładniczy przy każdej długości tekstu),
+- ma kwantyfikator tuż po kwantyfikatorze, np. `a++` (leniwe `*?`, `+?`, `??`, `{n,m}?` są poprawne),
+- przekracza budżet kosztu dla nazwy długości `REGEX_REFERENCE_TEXT_LENGTH` (100 znaków),
+- nie kompiluje się (`SyntaxError` jest przechwytywany).
+
+**Budżet kosztu** nie opiera się na liście znanych złych wzorców. `analyzeRegexPattern()` liczy
+dwie wartości. Pierwsza to „punkty wyboru”: każdy `?` i każdy `|` podwaja liczbę ścieżek, a
+skończone `{n,m}` dodaje log2(m−n+1). Grupa powtórzona stałą liczbę razy, np. `(\d{1,3}\.){3}`,
+mnoży swoje punkty. Druga wartość to liczba nieograniczonych powtórzeń `*`, `+`, `{n,}`.
+`estimateRegexCostLog2()` szacuje koszt jako
+`2^punkty × C(n + u, u + 1)` (≈ n^(u+1) / (u+1)!) dla tekstu długości n i u powtórzeń.
+Kotwica `^` bez `|` na najwyższym poziomie zdejmuje jeden czynnik n, bo dopasowanie ma jedną
+pozycję startu. Koszt nie może przekroczyć `MAX_REGEX_COST_LOG2` (2·10⁶ kroków; w V8 to rząd
+kilkudziesięciu ms — typowo poniżej 50 ms na rozgrzanym silniku, a przy zimnym starcie do ok. 60 ms). Przykłady:
+- `a?`×40+`b` i `(a|aa)`×41+`b` są odrzucane,
+- `.*foo.*bar.*` jest odrzucany (3 powtórzenia), a równoważne przy `test()` `foo.*bar` jest przyjmowane,
+- `^\d+-\d+-\d+$` (zakotwiczony) jest przyjmowany.
+
+`matchCondition` nie obcina tekstu. Dla wzorca, który przeszedł walidację, sprawdza koszt dla
+rzeczywistej długości tekstu i zwraca `false` tylko wtedy, gdy tekst jest dłuższy, niż budżet
+przewiduje. Dla jednego powtórzenia (np. `ticket-\d+$`) granica to ok. 2000 znaków, dla dwóch
+ok. 230 znaków. Nazwy wątków są znacznie krótsze. Analizy wzorców są przechowywane w pamięci
+podręcznej, bo `matchCondition` jest wywoływane dla każdego wątku przy każdym skanie.
+
+Walidacja działa w trzech miejscach:
+- edytor reguł (`src/ui/settings-modal.js`) pokazuje komunikat pod warunkiem (`role="alert"`,
+  `textContent`) i nie zapisuje reguły,
+- `saveRule()` rzuca wyjątek dla każdego niepoprawnego wzorca w zapisywanej regule,
+- `saveRules()` rzuca wyjątek dla nowych i zmienionych wzorców. Wzorzec zapisany wcześniej (ta sama
+  reguła i wartość) nie blokuje przełączania ani usuwania innych reguł, a `matchCondition` i tak
+  go nie wykona.
+
+Taka reguła (np. `(foo|bar)+` zapisane przed wprowadzeniem budżetu) nie działa po cichu: lista
+reguł w oknie ustawień pokazuje pod nią „Nieaktywna: …” z powodem z `describeRuleProblem()`.
+Ta sama funkcja zgłasza regułę, której folder docelowy usunięto. Edytor takiej reguły nie wybiera
+wtedy pierwszego folderu z listy, tylko pustą opcję, którą trzeba zmienić przed zapisem. Lista
+folderów docelowych pomija „Wszystkie” i „Inne”. Podgląd liczby dopasowań w edytorze liczy wątki
+przez `evaluateThread()`, więc uwzględnia ochronę ręcznych przypisań (`overwriteManual`).
 
 ---
 
@@ -222,7 +406,23 @@ Aby zapewnić płynne działanie, detektor tworzy obiekt `MutationObserver`:
 
 ## Warstwa interfejsu użytkownika (UI)
 
-Klasa [`MessengerUI`](../src/ui.js) w pliku [src/ui.js](../src/ui.js) tworzy wszystkie elementy graficzne:
+Interfejs jest podzielony na moduły w katalogu `src/ui/`. Plik [src/ui.js](../src/ui.js) to
+fasada: klasa `MessengerUI` (eksportowana też jako `MessengerFoldersUI`) tworzy komponenty,
+przekazuje im siebie jako kontekst (`storage`, `detector`, `rulesEngine`, callbacki) i deleguje
+do nich metody publiczne. Koordynator [src/content.js](../src/content.js) zna tylko fasadę.
+
+| Moduł | Eksport | Odpowiedzialność |
+| :--- | :--- | :--- |
+| [src/ui/core.js](../src/ui/core.js) | `MessengerUICore` (obiekt) | Stałe, ikony `ICONS`, `_escapeHtml`, wstawianie ikon bez zmiennych w `innerHTML`, `ToastManager`. |
+| [src/ui/folder-bar.js](../src/ui/folder-bar.js) | `FolderBarComponent` | Pasek `#mf-folder-bar`, aktualizacja pigułek w miejscu, liczniki rozmów i nieprzeczytanych. |
+| [src/ui/folder-modal.js](../src/ui/folder-modal.js) | `FolderModalComponent` | Okno `.mf-modal`: nazwa z podglądem, emoji, paleta kolorów, wybór rozmów. |
+| [src/ui/thread-menu.js](../src/ui/thread-menu.js) | `ThreadMenuComponent` | Menu `.mf-dropdown-menu` z pozycjonowaniem, plakietka wiersza, pigułka nagłówka. |
+| [src/ui/settings-modal.js](../src/ui/settings-modal.js) | `SettingsModalComponent` | Okno `.mf-modal-wide` z zakładkami: foldery, rozmowy, kopia zapasowa, reguły. |
+
+Sama fasada zachowuje logikę wspólną dla komponentów: filtrowanie wierszy czatów
+(`filterChatRows`), globalne zdarzenia (zamykanie menu i okien) oraz powiadomienia (`showToast`).
+
+Elementy widoczne dla użytkownika:
 
 - **Moduł paska folderów (`#mf-folder-bar`)**:
   Dwurzędowy kontener umieszczony nad listą czatów:
@@ -234,7 +434,38 @@ Klasa [`MessengerUI`](../src/ui.js) w pliku [src/ui.js](../src/ui.js) tworzy wsz
   Wyskakujące menu z wbudowaną wyszukiwarką.
   Inteligentnie dopasowuje swoją pozycję, aby nie wychodzić poza krawędź ekranu.
 - **Okno edycji i zarządzania folderami (`.mf-modal`, `.mf-settings-modal`)**:
-  Centrum zarządzania folderami, przypisywania czatów, wyboru emoji i kolorów oraz kopii zapasowej.
+  Centrum zarządzania folderami, przypisywania czatów, wyboru emoji i kolorów, kopii zapasowej
+  oraz reguł automatycznego przypisywania (zakładka **⚡ Reguły** z edytorem i podglądem liczby
+  pasujących czatów).
+
+### Liczniki nieprzeczytanych (przepływ)
+
+1. [src/content.js](../src/content.js) wywołuje `calculateUnreadCounts(wykryteWątki, mapaWątków, foldery)`.
+   Funkcja zlicza unikalne wątki z `isUnread` i zwraca `{ all, [folderId] }`; wątek bez
+   przypisania liczy się do `uncategorized`. Każdy folder ma wartość początkową `0`.
+2. Przeliczenie następuje przy starcie (zimny start), po każdej partii mutacji DOM
+   (`detector.setupObserver`, throttle 250 ms), po nawigacji SPA, po zmianie `chrome.storage`
+   i po automatycznym przypisaniu przez reguły.
+3. Wynik trafia do `ui.updateFolderCounts(wątki, nieprzeczytane)` → `FolderBarComponent`, który
+   w miejscu aktualizuje odznakę `.mf-folder-unread-badge` (`textContent`, `99+` powyżej 99,
+   `aria-label` „N nieprzeczytanych”) i usuwa ją przy zerze. Brak paska powoduje jego
+   ponowne wstrzyknięcie (`renderAndInjectBar`).
+
+Liczniki nie są zapisywane w magazynie — wynikają wyłącznie z bieżącego DOM.
+
+### Obsługa klawiatury
+
+- **`Alt+1…9`, `Alt+0`** — `MessengerUI._handleFolderShortcut()` w [src/ui.js](../src/ui.js) podpina
+  nasłuch `keydown` na `document` i klika pigułkę wskazaną przez `resolveFolderShortcut()` z
+  [src/ui/core.js](../src/ui/core.js). Cyfrę czyta z `event.code` (`Digit0…9`), bo na macOS
+  `Option+1` daje inny `event.key`. Odrzuca `Ctrl`/`Meta`/`Shift`, AltGraph, kompozycję IME,
+  otwarty modal oraz pola do pisania (`isTypingTarget`: `input`, `textarea`, `contenteditable`,
+  `role="textbox"`).
+- **Strzałki, `Home`, `End`** — nasłuch na `#mf-folder-bar` w
+  [src/ui/folder-bar.js](../src/ui/folder-bar.js) przenosi fokus między widocznymi pigułkami z
+  zawijaniem (roving tabindex); folder zmienia dopiero `Enter`, `Spacja` lub kliknięcie.
+- **`Esc`** zamyka menu lub okno (fasada), a w wyszukiwarce folderów czyści zapytanie; `Enter` w
+  wyszukiwarce włącza pierwszą widoczną pigułkę.
 
 ### Zgodność z motywem jasnym i ciemnym
 
@@ -292,7 +523,8 @@ sequenceDiagram
 
 ## Testy jednostkowe
 
-Projekt zawiera zautomatyzowany zestaw testów w pliku [tests/test_storage_detector.js](../tests/test_storage_detector.js).
+Projekt zawiera zautomatyzowane testy w plikach [tests/test_storage_detector.js](../tests/test_storage_detector.js),
+[tests/test_ui.js](../tests/test_ui.js) i [tests/test_rules.js](../tests/test_rules.js).
 Testy nie wymagają zewnętrznych bibliotek i uruchamiają się bezpośrednio w środowisku Node.js.
 
 ### Zakres testów
@@ -310,13 +542,43 @@ Testy nie wymagają zewnętrznych bibliotek i uruchamiają się bezpośrednio w 
 3. **Detektor DOM (`MessengerDOMDetector`)**:
    - Rozpoznawanie wszystkich wariantów adresów URL wątków.
    - Odróżnianie znaczników czasu i liczników od nazwisk kontaktów.
+   - Heurystyka `isThreadUnread()` i pole `isUnread` w `scanChatList()`.
+4. **Silnik reguł (`MessengerRulesEngine`)**:
+   - Operatory, tryby `all`/`any`, priorytety (w tym `0`) i reguły wyłączone.
+   - Odrzucanie niepoprawnych i niebezpiecznych wyrażeń regularnych.
+   - Ochrona ręcznych przypisań oraz zapis reguł w `chrome.storage.local`.
+5. **Interfejs (`tests/test_ui.js`)**: odznaki nieprzeczytanych, `resolveFolderShortcut()` i nawigacja
+   strzałkami po pasku.
 
 ### Uruchomienie testów
 
 Aby uruchomić testy jednostkowe, wykonaj polecenie w katalogu projektu:
 
 ```bash
-node tests/test_storage_detector.js
+npm test
 ```
 
 Wynik testów potwierdza pełną sprawność logiki biznesowej rozszerzenia.
+
+## Testy E2E (Playwright)
+
+Testy E2E ładują rozpakowane rozszerzenie do bezgłowego Chromium (`playwright.config.js`) i
+uruchamiają je na statycznej, zanonimizowanej kopii DOM Messengera
+([tests/fixtures/messenger.html](../tests/fixtures/messenger.html)). Moduł
+[tests/e2e/helpers.js](../tests/e2e/helpers.js) przechwytuje adresy `https://www.messenger.com/**`
+i blokuje każde inne żądanie, więc testy działają w 100% offline. Wyniki Playwright trafiają do
+`node_modules/.cache/playwright-results`.
+
+| Scenariusze | Zakres |
+|---|---|
+| E2E-01…03 | wstrzyknięcie paska, modal tworzenia folderu, przełączanie aktywnego folderu |
+| E2E-04…05 | przypisanie wątku z menu kontekstowego, filtrowanie listy czatów |
+| E2E-06…08 | trwałość stanu po przeładowaniu, współpraca z wyszukiwarką Messengera, usuwanie folderu |
+| E2E-09 | zero żądań sieciowych |
+| E2E-10…14 | reguły automatycznego przypisywania: tworzenie, start z regułami, priorytety, ręczne przypisania, niepoprawne i ReDoS-owe wyrażenia regularne |
+
+```bash
+npm run test:e2e
+```
+
+Testy E2E nie są częścią `npm run verify` (wymagają przeglądarki Playwright).
