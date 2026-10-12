@@ -697,6 +697,15 @@ function runDetectorTests() {
     false,
     'Etykieta akcji „Oznacz…” na wierszu nadal wyklucza nieprzeczytanie'
   );
+  // Bloker z raportu: także wiersz leżący w przycisku (a nie tylko on sam) — krok 1 patrzy
+  // wyłącznie na etykietę wiersza, więc przodek `[role="button"]` nie może wyłączyć wskaźnika.
+  const rowInButton = mockElement('div', { role: 'row', 'data-testid': 'unread_row' }, [threadLink()]);
+  mockElement('div', { role: 'button' }, [rowInButton]);
+  assert.strictEqual(
+    detector.isThreadUnread(rowInButton),
+    true,
+    'Wiersz z data-testid unread leżący w [role="button"] nadal jest nieprzeczytany'
+  );
 
   // Pkt 3: etykieta stanu „Oznaczony…” to stan, nie akcja „Oznacz…”
   assert.strictEqual(
