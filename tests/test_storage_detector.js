@@ -682,6 +682,15 @@ function runDetectorTests() {
     'Awatar z komentarzem CSS przed background: url() nie jest kropką'
   );
 
+  // MF-031 pkt 2: komentarz CSS wewnątrz adresu w url("…") nie psuje rozpoznania awatara
+  assert.strictEqual(
+    detector.isThreadUnread(
+      row(mockElement('div', { style: 'background: url("a/*b*/c.png"); border: 2px solid #0084ff' }))
+    ),
+    false,
+    'Awatar z komentarzem CSS wewnątrz url("…") nie jest kropką'
+  );
+
   // MF-027 pkt 3: przycisk wokół całego wiersza nie wyłącza heurystyki wskaźników
   const wrappedRow = row(threadLink({}, [mockElement('span', { 'data-testid': 'unread-dot' })]));
   mockElement('div', { role: 'button' }, [wrappedRow]);

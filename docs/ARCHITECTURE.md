@@ -212,9 +212,10 @@ Akcje „Oznacz jako nieprzeczytane” / „Mark as unread” (przyciski, pozycj
 „oznacz” / „mark as”) są pomijane (`_isActionElement`, `_hasActionLabel`), bo nie opisują stanu
 rozmowy. Granicą rozpoznawania akcji jest wiersz: przycisk (`button`, `[role="button"]`,
 `[role="menuitem"]`) wyłącza kandydata tylko wtedy, gdy leży **wewnątrz** wiersza (np. menu wątku).
-Sam wiersz będący przyciskiem albo opakowany w przycisk (przodek z `[role="button"]`) jest nadal
-oceniany — klikalny wiersz to nie akcja. Etykieta rozróżnia akcję od stanu: „Oznacz jako
-nieprzeczytane” to akcja, a „Oznaczony jako nieprzeczytane” to stan wątku i pozostaje sygnałem.
+Sam wiersz będący przyciskiem albo opakowany w przycisk (przodek pasujący do `ACTION_SELECTOR`, czyli
+`button`, `[role="button"]` lub `[role="menuitem"]`) jest nadal oceniany — klikalny wiersz to nie
+akcja. Etykieta rozróżnia akcję od stanu: „Oznacz jako nieprzeczytane” to akcja, a „Oznaczony jako
+nieprzeczytane” to stan wątku i pozostaje sygnałem.
 `scanChatList()` zapisuje wynik w polu `isUnread` każdego wątku.
 
 **Ograniczenia:**
