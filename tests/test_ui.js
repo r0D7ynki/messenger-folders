@@ -698,11 +698,10 @@ const assertPillSubtreeHasNoPayload = (pill, context) => {
       false,
       `${context}: źródło potomka zawiera „onerror”`
     );
-    assert.strictEqual(
-      String(node.textContent || '').includes('onerror'),
-      false,
-      `${context}: tekst potomka zawiera „onerror”`
-    );
+    // MF-032: brak asercji na textContent — tekst ustawiony przez textContent jest inertny
+    // (przeglądarka nie parsuje go jako HTML), a nazwy folderów to dane niezaufane i mogą
+    // legalnie zawierać „onerror”. Surowe wstrzyknięcie nadal wykrywa asercja na innerHTML
+    // tego węzła, w którym zostało zapisane — także zagnieżdżonego w pigułce.
     node.children.forEach(walk);
   };
   walk(pill);
@@ -760,6 +759,37 @@ assert.strictEqual(
   'Mapa liczników { folderId: liczba }'
 );
 console.log('✓ updateFolderCounts() rozpoznaje rekordy wątków i liczniki per wpis.');
+
+// MF-032: nazwa folderu to dana niezaufana i może zawierać „onerror”. Tekst wstawiony przez
+// textContent jest inertny, więc asercja XSS nie może dawać tu fałszywego alarmu.
+console.log('Test: asercja XSS bez fałszywego alarmu dla tekstu przez textContent (MF-032)...');
+const onerrorNamedFolders = sampleFolders.map((f) => (f.id === 'work' ? { ...f, name: maliciousFolder.name } : f));
+unreadBarComp.render(onerrorNamedFolders, 'work', { work: 4 }, { work: 3 });
+
+const onerrorNameEl = workPill().querySelector('.mf-folder-name');
+assert.strictEqual(
+  onerrorNameEl.textContent,
+  maliciousFolder.name,
+  'Nazwa folderu trafia do pigułki przez textContent'
+);
+assert.ok(onerrorNameEl.textContent.includes('onerror'), 'Nazwa folderu zawiera „onerror”');
+assert.strictEqual(onerrorNameEl.innerHTML, '', 'Nazwa folderu nie jest wpisywana przez innerHTML');
+assertPillSubtreeHasNoPayload(workPill(), 'Nazwa folderu z „onerror” przez textContent');
+
+// Kontrola: helper nadal wykrywa surowy payload wstawiony przez innerHTML do ZAGNIEŻDŻONEGO
+// elementu pigułki (regresja symulowana w sekcji Dowód karty MF-032), więc osłabienie asercji
+// na textContent nie otwiera luki w wykrywaniu wstrzyknięć.
+const injectedPill = new MockElement('div');
+const injectedBadge = new MockElement('span');
+injectedBadge.className = 'mf-folder-unread-badge';
+injectedBadge.innerHTML = maliciousFolder.name;
+injectedPill.appendChild(injectedBadge);
+assert.throws(
+  () => assertPillSubtreeHasNoPayload(injectedPill, 'Kontrola zagnieżdżonego innerHTML'),
+  /onerror/,
+  'Helper musi wykryć payload wstawiony przez innerHTML do zagnieżdżonego elementu'
+);
+console.log('✓ Asercja XSS: tekst przez textContent przechodzi, zagnieżdżony innerHTML z payloadem pada.');
 
 // 14. Dostępność klawiaturowa paska folderów: tablist, roving tabindex, strzałki (MF-013)
 console.log('Test 14: pasek folderów jako tablist (roving tabindex, strzałki, Home/End)...');
