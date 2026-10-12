@@ -685,6 +685,28 @@ if (!global.document.getElementById('mf-folder-bar')) {
 }
 const workPill = () => global.document.getElementById('mf-folder-bar').querySelectorAll('.mf-folder-pill')[1];
 const unreadBadgeOf = (pill) => pill.querySelector('.mf-folder-unread-badge');
+
+// MF-029 pkt 1-2: regresja może wstawić licznik przez innerHTML do zagnieżdżonego elementu,
+// więc sprawdzamy całe poddrzewo pigułki (rekurencyjnie po children), a nie tylko źródło
+// zapisane setterem mocka na samej pigułce.
+const assertPillSubtreeHasNoPayload = (pill, context) => {
+  const walk = (node) => {
+    assert.notStrictEqual(node.tagName, 'IMG', `${context}: potomek <img> w pigułce`);
+    assert.strictEqual(node.hasAttribute('onerror'), false, `${context}: atrybut onerror w pigułce`);
+    assert.strictEqual(
+      String(node.innerHTML || '').includes('onerror'),
+      false,
+      `${context}: źródło potomka zawiera „onerror”`
+    );
+    assert.strictEqual(
+      String(node.textContent || '').includes('onerror'),
+      false,
+      `${context}: tekst potomka zawiera „onerror”`
+    );
+    node.children.forEach(walk);
+  };
+  walk(pill);
+};
 assert.strictEqual(workPill().dataset.folderId, 'work', 'Druga pigułka to folder "work"');
 assert.strictEqual(unreadBadgeOf(workPill()), null, 'Brak odznaki przy 0 nieprzeczytanych');
 
@@ -709,14 +731,10 @@ assert.strictEqual(unreadBadgeOf(workPill()), null, 'Odznaka znika po spadku lic
 
 unreadBarComp.updateFolderCounts({ work: 2 }, { work: '<img src=x onerror=alert(1)>' });
 
-// MF-027 pkt 4: mock nie parsuje niedomkniętego <img …>, więc samo „brak <img>” nie wykryłoby regresji.
-// Sprawdzamy źródło odznaki i pigułki — asercje padają, gdy licznik trafia do DOM przez innerHTML.
-assert.strictEqual(
-  unreadBadgeOf(workPill())?.innerHTML ?? '',
-  '',
-  'Licznik <img onerror> nie trafia do odznaki przez innerHTML'
-);
-assert.strictEqual(workPill().innerHTML.includes('onerror'), false, 'Payload z onerror nie trafia do źródła pigułki');
+// MF-027 pkt 4 / MF-029 pkt 1-2: mock nie parsuje niedomkniętego <img …>, więc samo „brak <img>”
+// nie wykryłoby regresji. Sprawdzamy całe poddrzewo pigułki — asercje padają także wtedy, gdy
+// licznik trafia przez innerHTML do zagnieżdżonego elementu, a nie do samej pigułki.
+assertPillSubtreeHasNoPayload(workPill(), 'Licznik <img onerror>');
 assert.strictEqual(unreadBadgeOf(workPill()), null, 'Nieliczbowa wartość licznika nie tworzy odznaki');
 
 // Zachowanie, nie tekst źródła: złośliwy licznik nie tworzy żadnych elementów w pigułce
