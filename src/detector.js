@@ -257,8 +257,9 @@
       }
       // Awatar-div z obrazem w tle (bez <img>). Liczą się wyłącznie właściwości tła:
       // np. mask-image: url(...) albo clip-path nie czynią elementu obrazem, więc
-      // niebieska kropka z takim stylem pozostaje kropką.
-      const style = element.getAttribute?.('style') || '';
+      // niebieska kropka z takim stylem pozostaje kropką. Komentarze CSS usuwamy przed
+      // dopasowaniem, bo `/*x*/background: url(...)` to legalna deklaracja tła.
+      const style = (element.getAttribute?.('style') || '').replace(/\/\*[\s\S]*?\*\//g, '');
       if (/(?:^|;)\s*background(?:-image)?\s*:[^;]*url\(/i.test(style)) {
         return true;
       }
