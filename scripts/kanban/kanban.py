@@ -63,7 +63,7 @@ DEPS_AVAILABLE = {"review", "test", "done"}  # `test` — kod już scalony (SB-0
 
 def same_batch(card: Card, other: Card) -> bool:
     """Obie karty w tej samej paczce (`batch:`)."""
-    return bool(card.meta.get("batch")) and card.meta.get("batch") == other.meta.get("batch")
+    return bool(checks.batch_of(card)) and checks.batch_of(card) == checks.batch_of(other)
 
 
 # Kanoniczne nagłówki sekcji → polskie nagłówki (starsze polskie karty nadal działają)
@@ -300,13 +300,9 @@ class Board:
         if size not in SIZE_ORDER:
             errors.append(tr("kanban.dor.bad_size", sizes="/".join(SIZE_ORDER)))
         elif model and SIZE_ORDER.index(size) > SIZE_ORDER.index(model.get("max_size", "L")):
+            limit = model["max_size"]
             errors.append(
-                tr(
-                    "kanban.dor.size_over_limit",
-                    size=size,
-                    model=meta["model"],
-                    limit=model["max_size"],
-                )
+                tr("kanban.dor.size_over_limit", size=size, model=meta["model"], limit=limit)
             )
         for name in ("Goal", "Context"):
             if not card.section(name):
@@ -428,25 +424,26 @@ class Board:
     def _column_gate(
         self, card: Card, to: str, cards: list[Card], run_gate: bool, final: bool = True
     ) -> list[str]:
-        if to == "ready":
-            return self.ready_errors(card, cards)
+        if to == "ready":  # + paczka i powód udziału człowieka — tylko przy przejściu (#29)
+            return self.ready_errors(card, cards) + checks.dor_policy_errors(card, self.config)
         if to == "in-progress":
             return (
                 self.ready_errors(card, cards)
                 + self.wip_errors(card, cards)
                 + self._dependency_errors(card, cards, DEPS_AVAILABLE)
             )
+        first = checks.test_first(self.columns)  # test przed przeglądem (#29)
         if to == "review":
-            return self.review_errors(card, cards)
+            untested = first and not card.meta.get("tested_by")
+            return self.review_errors(card, cards) + [tr("kanban.dod.no_tested_by")] * untested
         others = [c for c in cards if c is not card]
         if to == "test":  # przegląd zaliczony, miejsce w WIP testu (SB-071)
             limit = wip_limit(self.config.get("wip", {}), "test")
             # WIP testu tylko dla karty, która w `test` zostaje — nie przy przejściu do done
             full = final and limit and checks.wip_units(cards, "test", card) >= limit
             wip = [tr("kanban.test.wip", limit=limit)] if full else []
-            return (
-                self.review_errors(card, others, check_wip=False) + self.reviewer_errors(card) + wip
-            )
+            reviewer = [] if first else self.reviewer_errors(card)  # test po przeglądzie — reviewer
+            return self.review_errors(card, others, check_wip=False) + reviewer + wip
         if to == "done":
             return (
                 self.review_errors(card, others, check_wip=False)
@@ -494,6 +491,7 @@ class Board:
                 "size": size,
                 "priority": priority,
                 "depends": "[]",
+                "batch": "",  # DoR: nazwa paczki albo `none` (#29)
                 "created": time.strftime("%Y-%m-%d"),
             },
             card_template(self.dod_checklist(model), self.headings),

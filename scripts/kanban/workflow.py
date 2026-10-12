@@ -15,8 +15,10 @@ from pathlib import Path
 from typing import Any
 
 try:  # w pakiecie swarmboard
+    from .checks import NO_BATCH, batch_decided, batch_of, test_first
     from .i18n import tr
 except ImportError:  # kopia w projekcie — katalog skryptu jest już w sys.path (kanban.py)
+    from checks import NO_BATCH, batch_decided, batch_of, test_first  # type: ignore[no-redef]
     from i18n import tr  # type: ignore[no-redef]
 
 
@@ -225,9 +227,10 @@ def submit(board: Any, card_id: str) -> list[str]:
         return errors
     if outside:  # tryb domyślny: ostrzeżenie w Logu karty (SB-040)
         card.append_log(tr("kanban.log.scope_outside", files=", ".join(outside)))
-    card.move("review", tr("kanban.log.submitted"))
+    to = "test" if test_first(board.columns) else "review"  # test przed przeglądem (#29)
+    card.move(to, tr("kanban.log.submitted"))
     card.save()
-    failed = commit_card(board, card, f"chore(kanban): {card.id} → review")
+    failed = commit_card(board, card, f"chore(kanban): {card.id} → {to}")
     return [tr("kanban.start.commit_failed", error=failed)] if failed else []
 
 
@@ -244,6 +247,7 @@ META_VALUES = {
     "branch": re.compile(r"^[\w./-]+$"),
     "priority": re.compile(r"^[Pp]\d+$"),
     "batch": re.compile(r"^[\w.-]+$"),  # paczka kart (SB-064); pusta wartość = bez paczki
+    "tested_by": re.compile(r"^[\w.@-]+$"),  # kto przetestował (#29)
 }
 
 
@@ -295,10 +299,15 @@ def module_of(paths: list[str]) -> str:
 
 
 def plan_batches(board: Any, model: str) -> dict[str, list[Any]]:
-    """Propozycja paczek: karty ready modelu bez `batch:` z tego samego modułu (co najmniej 2)."""
+    """
+    Propozycja paczek: karty modelu w backlog/ready bez decyzji o paczce (puste `batch:`; `none`
+    to decyzja) z tego samego modułu, co najmniej 2 — planista przed wejściem do ready (#29).
+    """
     groups: dict[str, list[Any]] = {}
-    for card in board.ready_cards(model):
-        if card.meta.get("batch"):
+    for card in board.cards():
+        if card.meta.get("model") != model or card.status not in ("backlog", "ready"):
+            continue
+        if batch_decided(card):
             continue
         paths = [p for p, _ in board.section_paths(card.section("Files"), any_name=True)]
         groups.setdefault(slugify(module_of(paths)), []).append(card)
@@ -326,14 +335,18 @@ def batch_branch(name: str) -> str:
 def start_batch(board: Any, name: str, model: str) -> list[str]:
     """Karty ready paczki modelu → jedna gałąź `batch-<nazwa>` i in-progress, jeden commit."""
     cards = board.cards()
-    ready = [
-        c
-        for c in cards
-        if c.meta.get("batch") == name and c.status == "ready" and c.meta.get("model") == model
-    ]
+    if name.lower() == NO_BATCH:  # `none` = karty bez paczki, nie paczka (#29)
+        return [tr("kanban.batch.none_name", none=NO_BATCH)]
+    members = [c for c in cards if batch_of(c) == name and c.meta.get("model") == model]
+    ready = [c for c in members if c.status == "ready"]
     if not ready:
         return [tr("kanban.batch.empty", batch=name, status="ready")]
-    errors = batch_start_errors(board, ready, cards)
+    # Paczka startuje cała — karta jeszcze przed ready czeka razem z nią (#29)
+    errors = [
+        tr("kanban.batch.not_ready", card_id=c.id, status=c.status)
+        for c in members
+        if c.status == "backlog"
+    ] + batch_start_errors(board, ready, cards)
     main = main_branch(board)
     if main is None:
         errors.append(tr("kanban.start.no_main_branch"))
@@ -362,7 +375,7 @@ def start_batch(board: Any, name: str, model: str) -> list[str]:
 def submit_batch(board: Any, name: str) -> list[str]:
     """Paczka → review: kryteria i Dowód każdej karty, zakres = suma Files, JEDNA bramka."""
     cards = board.cards()
-    batch = [c for c in cards if c.meta.get("batch") == name and c.status == "in-progress"]
+    batch = [c for c in cards if batch_of(c) == name and c.status == "in-progress"]
     refused = submit_refused(board, name, batch)
     if refused:
         return refused
@@ -371,14 +384,15 @@ def submit_batch(board: Any, name: str) -> list[str]:
         return [tr("kanban.submit.scope_outside", files=", ".join(outside))]
     errors = [f"{c.id}: {e}" for c in batch for e in board.review_errors(c, cards)]
     errors = errors or board.run_gate(tail_lines=20)
+    to = "test" if test_first(board.columns) else "review"  # test przed przeglądem (#29)
     if errors:
         return errors
     for card in batch:
         if outside:
             card.append_log(tr("kanban.log.scope_outside", files=", ".join(outside)))
-        card.move("review", tr("kanban.log.batch_submitted", batch=name, count=len(batch)))
+        card.move(to, tr("kanban.log.batch_submitted", batch=name, count=len(batch)))
         card.save()
-    failed = commit_cards(board, batch, f"chore(kanban): paczka {name} → review")
+    failed = commit_cards(board, batch, f"chore(kanban): paczka {name} → {to}")
     return [tr("kanban.start.commit_failed", error=failed)] if failed else []
 
 
@@ -397,19 +411,22 @@ def submit_refused(board: Any, name: str, batch: list[Any]) -> list[str]:
     return []
 
 
-def move_batch(board: Any, name: str, to: str, reason: str = "") -> list[str]:
-    """Wszystkie karty paczki do kolumny — bramki kart, a bramka projektu RAZ dla całej paczki."""
+def move_batch(board: Any, name: str, to: str, reason: str = "", tested_by: str = "") -> list[str]:
+    """
+    Wszystkie karty paczki do kolumny — bramki kart, a bramka projektu RAZ dla całej paczki;
+    `tested_by` — kto przetestował paczkę (test człowieka przed przeglądem, #29).
+    """
     cards = board.cards()
-    batch = [c for c in cards if c.meta.get("batch") == name and c.status != to]
+    batch = [c for c in cards if batch_of(c) == name and c.status != to]
     if not batch:
         return [tr("kanban.batch.empty", batch=name, status="≠ " + to)]
-    errors = []
-    for card in batch:
-        if card.status == "done" and not reason.strip():
-            errors.append(tr("kanban.error.reopen_reason", card_id=card.id))
-        if to == "done" and card.meta.get("tested_by") == "skip" and not reason.strip():
-            errors.append(tr("kanban.error.skip_test_reason", card_id=card.id))
-        errors += [f"{card.id}: {e}" for e in board.gate_errors(card, to, cards, run_gate=False)]
+    if tested_by and to not in ("review", "done"):  # podpis testu tylko przy wyjściu z testu
+        return [tr("kanban.batch.tested_by_target", to=to)]
+    if tested_by and not META_VALUES["tested_by"].match(tested_by):
+        return [tr("kanban.set.bad_value", name="tested_by", value=tested_by)]
+    for card in batch if tested_by else []:
+        card.meta["tested_by"] = tested_by
+    errors = [e for card in batch for e in batch_card_errors(board, card, cards, to, reason)]
     if not errors and to == "done":  # bramka projektu raz dla całej paczki
         errors = board.run_gate(tail_lines=8)
     if errors:
@@ -418,6 +435,16 @@ def move_batch(board: Any, name: str, to: str, reason: str = "") -> list[str]:
         card.move(to, tr("kanban.log.batch_moved", batch=name, reason=reason.strip()).strip())
         card.save()
     return []
+
+
+def batch_card_errors(board: Any, card: Any, cards: list[Any], to: str, reason: str) -> list[str]:
+    """Bramka jednej karty paczki (bez bramki projektu) i wymagane powody."""
+    errors = []
+    if card.status == "done" and not reason.strip():
+        errors.append(tr("kanban.error.reopen_reason", card_id=card.id))
+    if to == "done" and card.meta.get("tested_by") == "skip" and not reason.strip():
+        errors.append(tr("kanban.error.skip_test_reason", card_id=card.id))
+    return errors + [f"{card.id}: {e}" for e in board.gate_errors(card, to, cards, run_gate=False)]
 
 
 def add_batch_parser(sub: Any) -> None:
@@ -436,6 +463,7 @@ def add_batch_parser(sub: Any) -> None:
     move.add_argument("name")
     move.add_argument("to")
     move.add_argument("--reason", default="")
+    move.add_argument("--tested-by", default="")
 
 
 def batch_main(board: Any, args: Any) -> int:
@@ -452,7 +480,7 @@ def batch_main(board: Any, args: Any) -> int:
     elif args.batch_cmd == "submit":
         errors = submit_batch(board, args.name)
     else:
-        errors = move_batch(board, args.name, args.to, args.reason)
+        errors = move_batch(board, args.name, args.to, args.reason, args.tested_by)
     for error in errors:
         print(f"  - {error}", file=sys.stderr)
     if not errors:

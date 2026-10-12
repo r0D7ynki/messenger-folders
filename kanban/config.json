@@ -1,12 +1,12 @@
 {
-  "swarmboard_tool_hash": "b8c6f0726403fc728ae33a07f37093917319346e9959985496ad3b19fa4b56df",
+  "swarmboard_tool_hash": "4d9ff27403ce14ecdd2a219b1b755c0fa282b1a9f2a284cc60f16b02b025f0e2",
   "prefix": "MF",
   "columns": [
     "backlog",
     "ready",
     "in-progress",
-    "review",
     "test",
+    "review",
     "done"
   ],
   "wip": {
@@ -63,5 +63,5 @@
   ],
   "headings": "pl",
   "tool_dir": "scripts/kanban",
-  "swarmboard_version": "0.6.25"
+  "swarmboard_version": "0.6.28"
 }

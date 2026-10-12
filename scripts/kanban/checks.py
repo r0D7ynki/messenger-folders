@@ -18,6 +18,9 @@ except ImportError:  # kopia w projekcie — katalog skryptu jest już w sys.pat
 COLUMNS = ["backlog", "ready", "in-progress", "review", "done"]
 # Opcjonalna kolumna `test` (SB-071, `"test_column": true`): test/akceptacja po przeglądzie kodu
 ALL_COLUMNS = ["backlog", "ready", "in-progress", "review", "test", "done"]
+# Test przed przeglądem (#29): `test` przed `review` w liście `columns` — paczka testowana, potem
+# przeglądana; do `review` potrzebne `tested_by:`
+TEST_FIRST = ["backlog", "ready", "in-progress", "test", "review", "done"]
 
 
 def wip_units(cards: list[Any], status: str, card: Any, model: str | None = None) -> int:
@@ -26,12 +29,12 @@ def wip_units(cards: list[Any], status: str, card: Any, model: str | None = None
     nie zajmuje drugiego miejsca. `model` — tylko praca ręczna tego modelu (bez kart roju).
     """
     units = {
-        c.meta.get("batch") or c.id
+        batch_of(c) or c.id
         for c in cards
         if c.status == status
         and (model is None or (c.meta.get("model") == model and not c.meta.get("worker")))
     }
-    units.discard(card.meta.get("batch") or card.id)
+    units.discard(batch_of(card) or card.id)
     return len(units)
 
 
@@ -41,11 +44,20 @@ def board_columns(config: dict) -> list[str]:
     `"test"` w liście `columns` (tam właściciel jej szuka; SB-084).
     """
     listed = config.get("columns") if isinstance(config.get("columns"), list) else []
+    if "test" in listed and "review" in listed and listed.index("test") < listed.index("review"):
+        return TEST_FIRST
     return ALL_COLUMNS if config.get("test_column") is True or "test" in listed else COLUMNS
+
+
+def test_first(columns: list[str]) -> bool:
+    """Kolejność etapów in-progress → test → review (#29)."""
+    return "test" in columns and columns.index("test") < columns.index("review")
 
 
 def test_column_line(config: dict) -> str:
     """`sb doctor`: czy kolumna `test` jest włączona i jak ją włączyć."""
+    if test_first(board_columns(config)):
+        return f"✓ {tr('cli.doctor.test_first_on')}"
     if "test" in board_columns(config):
         return f"✓ {tr('cli.doctor.test_column_on')}"
     return f"· {tr('cli.doctor.test_column_off')}"
@@ -84,7 +96,7 @@ AUTOMATIC_KEYS = (
     "bridge.log.requeued",
 )
 # Metadane zmieniane `kanban.py set` (także w done) — wpis „klucz: stara → nowa” nie jest pracą
-META_KEYS = ("branch", "priority", "batch")
+META_KEYS = ("branch", "priority", "batch", "tested_by")
 MANUAL_META = re.compile(rf"^(?:{'|'.join(META_KEYS)}): \S+ → \S+")
 
 
@@ -211,9 +223,10 @@ def card_summary(card: Any) -> dict[str, object]:
         "worker": meta.get("worker") or None,
         "branch": meta.get("branch") or None,
         "executor": meta.get("executor") or None,
-        "batch": meta.get("batch") or None,
+        "batch": batch_of(card),
         "tested_by": meta.get("tested_by") or None,
         "human_review": needs_human(card),
+        "human_test": needs_human_test(card),
         "review_fail": meta.get("review_fail") or None,  # ✗ FAIL — decyzja człowieka (SB-081)
         "path": str(card.path),
     }
@@ -221,18 +234,59 @@ def card_summary(card: Any) -> dict[str, object]:
 
 # Karta wymaga człowieka (SB-076): nagłówek `human_review: true` albo kryterium „(ręcznie)”
 MANUAL_CRITERION = re.compile(r"^- \[[ xX]\] .*\((?:ręcznie|manual)\)", re.M | re.I)
+NO_BATCH = "none"  # `batch: none` — świadoma decyzja w DoR: karta bez paczki (#29)
+HUMAN_KEYS = ("human_review", "human_test")  # udział człowieka deklarowany w DoR z powodem (#29)
+
+
+def batch_decided(card: Any) -> bool:
+    """Planista zdecydował o paczce (nazwa albo `none`) — wymóg DoR i pominięcie w `batch plan`."""
+    return bool(str(card.meta.get("batch") or "").strip())
+
+
+def batch_of(card: Any) -> str | None:
+    """Nazwa paczki karty; puste i `none` (bez względu na wielkość liter) — karta bez paczki."""
+    value = str(card.meta.get("batch") or "").strip()
+    return None if value.lower() in ("", NO_BATCH) else value
+
+
+def human_flag(card: Any, key: str) -> tuple[bool, str]:
+    """`human_review: true — powód` → (True, „powód”); brak albo `false` → (False, …)."""
+    match = re.match(r"([A-Za-z0-9]*)[\s—–:,;._-]*(.*)", str(card.meta.get(key, "")).strip())
+    word, reason = (match.group(1), match.group(2).strip()) if match else ("", "")
+    reason = reason if re.search(r"[^\W\d_]", reason) else ""  # sama interpunkcja to nie powód
+    return word.lower() in ("true", "yes", "1", "tak"), reason
 
 
 def needs_human(card: Any) -> bool:
     """Decyzja człowieka wymagana przez kartę — rój nie przenosi jej sam do done."""
-    if str(card.meta.get("human_review", "")).strip().lower() in ("true", "yes", "1"):
+    if human_flag(card, "human_review")[0]:
         return True
     return bool(MANUAL_CRITERION.search(card.section("Acceptance criteria")))
 
 
+def needs_human_test(card: Any) -> bool:
+    """Test w kolumnie `test` robi człowiek (`human_test: true — powód`); domyślnie agent (#29)."""
+    return human_flag(card, "human_test")[0]
+
+
+def dor_policy_errors(card: Any, config: dict) -> list[str]:
+    """
+    Decyzje planisty przy wejściu do `ready` (#29): paczka (`batch:` nazwa albo `none`) i powód
+    udziału człowieka. Tylko przy przejściu — karty już dalej na tablicy zostają ważne.
+    """
+    errors = []
+    if config.get("require_batch", True) and not batch_decided(card):
+        errors.append(tr("kanban.dor.no_batch", none=NO_BATCH))
+    for key in HUMAN_KEYS:
+        flag, reason = human_flag(card, key)
+        if flag and not reason:
+            errors.append(tr("kanban.dor.human_without_reason", field=key))
+    return errors
+
+
 def human_marker(card: Any, column: str) -> str:
-    """Oznaczenie na tablicy: 👤 (karta dla człowieka); w review/test — czeka na człowieka."""
-    if not needs_human(card):
+    """Oznaczenie na tablicy: 👤 (przegląd albo test człowieka); w review/test — czeka na niego."""
+    if not needs_human(card) and not needs_human_test(card):
         return ""
     return tr("kanban.board.waits_human") if column in ("review", "test") else "👤"
 
@@ -250,7 +304,7 @@ def board_line(card: Any, column: str) -> str:
     meta = card.meta
     deps = card.dependencies()
     extra = f"  ⇠ {','.join(deps)}" if deps else ""
-    batch = f"  [{meta['batch']}]" if meta.get("batch") else ""
+    batch = f"  [{batch_of(card)}]" if batch_of(card) else ""
     agent = f"  {agent_marker(card)}" if column == "in-progress" and agent_marker(card) else ""
     human = f"  {human_marker(card, column)}" if human_marker(card, column) else ""
     if column == "review" and meta.get("review_fail"):  # przegląd FAIL po limicie prób (SB-081)
