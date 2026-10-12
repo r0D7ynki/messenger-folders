@@ -215,12 +215,18 @@
     /**
      * Sprawdza, czy element jest akcją (przycisk, pozycja menu, „Oznacz … jako nieprzeczytane”),
      * a nie wskaźnikiem stanu wątku.
+     * Wspinaczka po przodkach kończy się na wierszu: akcją jest tylko przycisk leżący wewnątrz
+     * wiersza (np. menu wątku). Sam wiersz ani jego przodkowie — gdy Messenger opakuje cały wiersz
+     * w `[role="button"]` — nie wyłączają heurystyki wskaźników.
      * @param {Element} element Badany element.
+     * @param {Element|null} [rowElement=null] Element wiersza czatu — granica wspinaczki.
      * @returns {boolean} Czy element należy pominąć jako akcję.
      */
-    _isActionElement(element) {
-      if (element.closest?.(ACTION_SELECTOR) || element.matches?.(ACTION_SELECTOR)) {
-        return true;
+    _isActionElement(element, rowElement = null) {
+      for (let node = element; node && node !== rowElement; node = node.parentElement) {
+        if (node.matches?.(ACTION_SELECTOR)) {
+          return true;
+        }
       }
       const label = `${element.getAttribute?.('aria-label') || ''} ${element.getAttribute?.('data-testid') || ''}`;
       return ACTION_LABEL_PATTERN.test(label);
@@ -237,8 +243,11 @@
       if (tag === 'IMG' || tag === 'IMAGE' || tag === 'SVG' || element.getAttribute?.('role') === 'img') {
         return true;
       }
-      // Awatar-div z obrazem w tle (bez <img>)
-      if (/url\(/i.test(element.getAttribute?.('style') || '')) {
+      // Awatar-div z obrazem w tle (bez <img>). Liczą się wyłącznie właściwości tła:
+      // np. mask-image: url(...) albo clip-path nie czynią elementu obrazem, więc
+      // niebieska kropka z takim stylem pozostaje kropką.
+      const style = element.getAttribute?.('style') || '';
+      if (/(?:^|;)\s*background(?:-image)?\s*:[^;]*url\(/i.test(style)) {
         return true;
       }
       return Boolean(element.querySelector?.('img, image'));
@@ -255,7 +264,7 @@
     _hasIndicator(rowElement, selector, accept = () => true) {
       const candidates = rowElement.querySelectorAll?.(selector) || [];
       for (const element of candidates) {
-        if (!this._isActionElement(element) && accept(element)) {
+        if (!this._isActionElement(element, rowElement) && accept(element)) {
           return true;
         }
       }
@@ -288,7 +297,7 @@
       // 1. Atrybut testowy nieprzeczytania (bez klas CSS — zasada 4 AGENTS.md)
       const testIdSelector = '[data-testid*="unread" i]';
       if (
-        (rowElement.matches?.(testIdSelector) && !this._isActionElement(rowElement)) ||
+        (rowElement.matches?.(testIdSelector) && !this._isActionElement(rowElement, rowElement)) ||
         this._hasIndicator(rowElement, testIdSelector)
       ) {
         return true;

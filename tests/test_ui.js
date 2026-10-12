@@ -708,6 +708,15 @@ unreadBarComp.updateFolderCounts({ work: 2 }, { work: 0 });
 assert.strictEqual(unreadBadgeOf(workPill()), null, 'Odznaka znika po spadku licznika do 0');
 
 unreadBarComp.updateFolderCounts({ work: 2 }, { work: '<img src=x onerror=alert(1)>' });
+
+// MF-027 pkt 4: mock nie parsuje niedomkniętego <img …>, więc samo „brak <img>” nie wykryłoby regresji.
+// Sprawdzamy źródło odznaki i pigułki — asercje padają, gdy licznik trafia do DOM przez innerHTML.
+assert.strictEqual(
+  unreadBadgeOf(workPill())?.innerHTML ?? '',
+  '',
+  'Licznik <img onerror> nie trafia do odznaki przez innerHTML'
+);
+assert.strictEqual(workPill().innerHTML.includes('onerror'), false, 'Payload z onerror nie trafia do źródła pigułki');
 assert.strictEqual(unreadBadgeOf(workPill()), null, 'Nieliczbowa wartość licznika nie tworzy odznaki');
 
 // Zachowanie, nie tekst źródła: złośliwy licznik nie tworzy żadnych elementów w pigułce
