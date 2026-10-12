@@ -200,11 +200,21 @@ Nie czyta klas CSS ani `getComputedStyle` (brak wymuszonego przeliczania układu
 1. `[data-testid*="unread" i]` na wierszu lub potomku,
 2. potomek z `aria-label` zawierającym „nieprzeczytan” / „unread”,
 3. `aria-label` samego wiersza lub linku,
-4. niebieska kropka (`[style*="rgb(0, 132, 255)"]`, `#0084ff`) poza awatarem,
+4. niebieska kropka (`[style*="rgb(0, 132, 255)"]`, `#0084ff`) poza awatarem (patrz niżej),
 5. `data-unread="true"`.
 
+Awatarem w rozumieniu `_isAvatarElement` jest: `img`, `image`, `svg`, element z `role="img"`, element
+zawierający `<img>` / `<image>` w środku albo element z obrazem w tle. Liczą się wyłącznie
+właściwości tła, czyli `background` / `background-image` z `url(...)`; `url()` w innej właściwości
+(np. `mask-image`) nie czyni elementu awatarem, więc niebieska kropka z takim stylem pozostaje kropką.
+
 Akcje „Oznacz jako nieprzeczytane” / „Mark as unread” (przyciski, pozycje menu, etykiety z
-„oznacz” / „mark as”) są pomijane (`_isActionElement`), bo nie opisują stanu rozmowy.
+„oznacz” / „mark as”) są pomijane (`_isActionElement`, `_hasActionLabel`), bo nie opisują stanu
+rozmowy. Granicą rozpoznawania akcji jest wiersz: przycisk (`button`, `[role="button"]`,
+`[role="menuitem"]`) wyłącza kandydata tylko wtedy, gdy leży **wewnątrz** wiersza (np. menu wątku).
+Sam wiersz będący przyciskiem albo opakowany w przycisk (przodek z `[role="button"]`) jest nadal
+oceniany — klikalny wiersz to nie akcja. Etykieta rozróżnia akcję od stanu: „Oznacz jako
+nieprzeczytane” to akcja, a „Oznaczony jako nieprzeczytane” to stan wątku i pozostaje sygnałem.
 `scanChatList()` zapisuje wynik w polu `isUnread` każdego wątku.
 
 **Ograniczenia:**
