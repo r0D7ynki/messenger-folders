@@ -731,23 +731,39 @@ test.describe('Messenger Folders E2E Test Suite (MF-006)', () => {
     }
   });
 
-  test('E2E-16: Unread badge disappears after a row becomes read (DOM mutation)', async () => {
-    const allBadge = page.locator('.mf-folder-pill[data-folder-id="all"] .mf-folder-unread-badge');
-    const uncategorizedBadge = page.locator('.mf-folder-pill[data-folder-id="uncategorized"] .mf-folder-unread-badge');
+  test('E2E-16: Unread badges disappear and reappear with unread rows (DOM mutation)', async () => {
+    const allPill = page.locator('.mf-folder-pill[data-folder-id="all"]');
+    const uncategorizedPill = page.locator('.mf-folder-pill[data-folder-id="uncategorized"]');
+    const allBadge = allPill.locator('.mf-folder-unread-badge');
+    const uncategorizedBadge = uncategorizedPill.locator('.mf-folder-unread-badge');
     // Wiersz czatu o podanym identyfikatorze wątku
     const rowOf = (threadId) => page.locator('[role="row"]').filter({ has: page.locator(`a[href*="/t/${threadId}"]`) });
     await expect(allBadge).toHaveText('3');
 
-    // Odczytanie wiadomości: Messenger usuwa z wiersza wskaźnik nieprzeczytania
+    // 1. Odczytanie jednego z trzech wątków: Messenger usuwa z wiersza wskaźnik nieprzeczytania,
+    // więc licznik spada, ale odznaka na pigułce nadal istnieje (to jeszcze nie ścieżka usuwania)
     await rowOf('100000000001')
       .locator('.chat-unread-badge')
       .evaluate((badge) => badge.remove());
 
-    // Obserwator mutacji przelicza liczniki i usuwa odznaki z pigułek
     await expect(allBadge).toHaveText('2');
     await expect(uncategorizedBadge).toHaveText('2');
 
-    // Mutacja w drugą stronę: nowy wskaźnik nieprzeczytania w wierszu Anny Projektowej
+    // 2. Odczytanie wszystkich pozostałych wątków: licznik spada do zera, więc odznaki muszą
+    // zniknąć z pigułek — na pigułce nie może zostać „0” ani stara liczba
+    await page.locator('.chat-unread-badge').evaluateAll((badges) => badges.forEach((badge) => badge.remove()));
+
+    await expect(page.locator('.chat-unread-badge')).toHaveCount(0);
+    await expect(allBadge).toHaveCount(0);
+    await expect(uncategorizedBadge).toHaveCount(0);
+    // Pigułki nadal istnieją (zniknęły tylko odznaki) i podpowiedź nie wspomina już nieprzeczytanych
+    await expect(allPill).toBeVisible();
+    await expect(uncategorizedPill).toBeVisible();
+    await expect(allPill).toHaveAttribute('title', /^Wszystkie \(\d+ rozmów\)$/);
+    await expect(uncategorizedPill).toHaveAttribute('title', /^Inne \(\d+ rozmów\)$/);
+
+    // 3. Mutacja w drugą stronę: nowy wskaźnik nieprzeczytania w wierszu Anny Projektowej
+    // tworzy odznakę od zera (licznik rośnie z 0 na 1)
     await rowOf('100000000002')
       .locator('.chat-meta')
       .evaluate((meta) => {
@@ -758,8 +774,9 @@ test.describe('Messenger Folders E2E Test Suite (MF-006)', () => {
         meta.appendChild(badge);
       });
 
-    await expect(allBadge).toHaveText('3');
-    await expect(uncategorizedBadge).toHaveText('3');
+    await expect(allBadge).toHaveText('1');
+    await expect(allBadge).toHaveAttribute('aria-label', '1 nieprzeczytanych');
+    await expect(uncategorizedBadge).toHaveText('1');
   });
 
   test('E2E-17: Alt+1 and Alt+0 switch folders and are ignored inside a text field', async () => {
