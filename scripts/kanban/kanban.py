@@ -351,12 +351,14 @@ class Board:
             errors.append(tr("kanban.review.wip", limit=limit))
         return errors
 
-    def done_errors(self, card: Card, run_gate: bool) -> list[str]:
+    def done_errors(self, card: Card, run_gate: bool, closed: bool = False) -> list[str]:
         total, open_items = card.checkboxes("DoD")
         errors = [tr("kanban.dod.missing")] if total == 0 else []
         errors += [tr("kanban.dod.open_item", item=i) for i in open_items]
         errors += self.reviewer_errors(card)
-        if "test" in self.columns and not card.meta.get("tested_by"):  # SB-071
+        # check karty w done: `tested_by` tylko po przejściu przez test (#28), ruch zawsze (SB-071)
+        tested = not closed or any("test" in t for t in card.transitions())
+        if "test" in self.columns and tested and not card.meta.get("tested_by"):
             errors.append(tr("kanban.dod.no_tested_by"))
         if run_gate and not errors:
             errors += self.run_gate(tail_lines=8)
@@ -563,7 +565,7 @@ class Board:
         if c.status in ("ready", "in-progress"):
             errors += self.ready_errors(c, cards)
         if c.status == "done":
-            errors += self.done_errors(c, run_gate=False)
+            errors += self.done_errors(c, run_gate=False, closed=True)
         if cycle and c.id in cycle.split(" -> "):
             errors.append(tr("kanban.check.cycle", cycle=cycle))
         if sum(x.id == c.id for x in cards) > 1:
