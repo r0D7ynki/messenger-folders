@@ -15,3 +15,6 @@ pnpm-workspace.yaml
 test-results/
 playwright-report/
 blob-report/
+
+# środowisko projektowe swarmboard (sb)
+.venvs/

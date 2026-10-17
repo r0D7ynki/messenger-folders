@@ -406,10 +406,7 @@ class Board:
     def gate_errors(
         self, card: Card, to: str, cards: list[Card], run_gate: bool = True
     ) -> list[str]:
-        """
-        Błędy blokujące przejście karty do kolumny `to`. Skok o kilka kolumn przechodzi przez
-        bramki wszystkich kolumn pośrednich; ruch w lewo — bez bramki.
-        """
+        """Błędy przejścia do `to`: skok przez bramki kolumn pośrednich, w lewo — bez bramki."""
         columns = self.columns
         if to not in columns:
             raise KanbanError(
@@ -528,7 +525,7 @@ class Board:
         errors = self.gate_errors(card, to, cards)
         if not errors:
             note = tr("kanban.log.reopened", reason=reason.strip()) if reopen else reason.strip()
-            card.move(to, note)
+            card.move(to, checks.reset_stages(card, self.columns, to, note))  # #33
             card.save()
         return errors
 
@@ -647,7 +644,9 @@ def cmd_board(board: Board, args: argparse.Namespace) -> int:
 
 
 def cmd_new(board: Board, args: argparse.Namespace) -> int:
-    card = load_workflow().create_card(board, args)
+    card, errors = load_workflow().create_card(board, args)
+    if errors:  # złe `--depends` (#34) — bez karty
+        return print_errors(tr("kanban.cli.new_refused"), errors) or EXIT_FAILED
     print(tr("kanban.cli.created", path=card.path.relative_to(board.root)))
     return EXIT_OK
 
@@ -748,6 +747,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--size", choices=SIZE_ORDER)
     p.add_argument("--priority")
     p.add_argument("--from", dest="source")  # temat z karty: model, priorytet, paczka (#31)
+    p.add_argument("--depends", default="")  # ID kart po przecinku, walidacja jak `set` (#34)
     p = sub.add_parser("move", help=tr("kanban.cli.move_help"))
     p.add_argument("id")
     p.add_argument("to", choices=checks.ALL_COLUMNS)

@@ -8,6 +8,7 @@ kanban.py dałby drugą klasę `KanbanError`, której `main()` by nie złapał. 
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
@@ -15,10 +16,26 @@ from pathlib import Path
 from typing import Any
 
 try:  # w pakiecie swarmboard
-    from .checks import NO_BATCH, batch_decided, batch_of, test_first
+    from .checks import (
+        NO_BATCH,
+        batch_decided,
+        batch_of,
+        budget_limit,
+        dependency_cycle,
+        reset_stages,
+        test_first,
+    )
     from .i18n import tr
 except ImportError:  # kopia w projekcie — katalog skryptu jest już w sys.path (kanban.py)
-    from checks import NO_BATCH, batch_decided, batch_of, test_first  # type: ignore[no-redef]
+    from checks import (  # type: ignore[no-redef]
+        NO_BATCH,
+        batch_decided,
+        batch_of,
+        budget_limit,
+        dependency_cycle,
+        reset_stages,
+        test_first,
+    )
     from i18n import tr  # type: ignore[no-redef]
 
 
@@ -249,7 +266,29 @@ META_VALUES = {
     "batch": re.compile(r"^[\w.-]+$"),  # paczka kart (SB-064); pusta wartość = bez paczki
     "tested_by": re.compile(r"^[\w.@-]+$"),  # kto przetestował (#29)
     "question": re.compile(r"^\S.*$"),  # pytanie do właściciela — karta czeka na człowieka (#31)
+    "depends": re.compile(r"^\[?\s*[\w-]+(\s*,\s*[\w-]+)*\s*\]?$"),  # ID kart (#34)
 }
+
+
+def checked_depends(board: Any, card: Any, value: str) -> tuple[str, list[str]]:
+    """
+    `depends` karty (#34): lista ID (`A,B` albo `[A, B]`) → `[A, B]`; błąd, gdy ID nie istnieje,
+    karta zależy od siebie albo powstaje cykl zależności.
+    """
+    from_cards = [c for c in board.cards() if c.id != card.id]
+    ids = list(dict.fromkeys(i for i in re.split(r"[\s,\[\]]+", value) if i))
+    known = {c.id for c in from_cards}
+    unknown = [i for i in ids if i not in known and i != card.id]
+    if unknown:
+        return value, [tr("kanban.set.depends_unknown", ids=", ".join(unknown))]
+    normalized = f"[{', '.join(ids)}]"
+    old = card.meta.get("depends", "[]")
+    card.meta["depends"] = normalized
+    cycle = (
+        dependency_cycle([*from_cards, card]) if card.id not in ids else f"{card.id} -> {card.id}"
+    )
+    card.meta["depends"] = old
+    return normalized, [tr("kanban.check.cycle", cycle=cycle)] if cycle else []
 
 
 def followup_batch(source: Any) -> str:
@@ -261,7 +300,7 @@ def followup_batch(source: Any) -> str:
     return f"{batch}-followup" if batch else NO_BATCH
 
 
-def create_card(board: Any, args: Any) -> Any:
+def create_card(board: Any, args: Any) -> tuple[Any, list[str]]:
     """
     `new` (#31): z `--from <ID>` karta dziedziczy model, priorytet i paczkę karty źródłowej,
     rozmiar S, `source:` i wpis w Logu; bez — model claude, rozmiar M, priorytet P2.
@@ -270,24 +309,37 @@ def create_card(board: Any, args: Any) -> Any:
     meta = source.meta if source else {}
     model = args.model or meta.get("model") or "claude"
     size = args.size or ("S" if source else "M")
+    depends = ",".join(filter(None, [source.id if source else "", getattr(args, "depends", "")]))
+    if depends:  # walidacja przed utworzeniem — bez pustej karty po błędzie (#34)
+        draft = type("Draft", (), {"id": "", "meta": {}})()
+        _, errors = checked_depends(board, draft, depends)
+        if errors:
+            return None, errors
     card = board.create(args.title, model, size, args.priority or meta.get("priority") or "P2")
+    if depends:
+        card.meta["depends"] = checked_depends(board, card, depends)[0]
+        card.save()
     if source:
         card.meta["batch"] = followup_batch(source)
         card.meta["source"] = f"{source.id} manual -"
         card.append_log(tr("kanban.log.created_from", card_id=source.id))
         card.save()
-    return card
+    return card, []
 
 
 def set_meta(board: Any, card_id: str, key: str, value: str, reason: str = "") -> list[str]:
     """Zmiana metadanej karty z wpisem administracyjnym w Logu (bez bramek; także po done)."""
     if key not in META_VALUES:
         return [tr("kanban.set.bad_key", name=key, keys=", ".join(META_VALUES))]
-    clearable = key in ("batch", "question")  # pusta wartość = bez paczki / pytanie zamknięte
+    clearable = key in ("batch", "question", "depends")  # pusta = bez paczki / pytania / zależności
     if (value or not clearable) and not META_VALUES[key].match(value) or "\n" in reason:
         return [tr("kanban.set.bad_value", name=key, value=value)]
     card = board.card(card_id)
     old = card.meta.get(key, "")
+    if key == "depends":
+        value, errors = checked_depends(board, card, value)
+        if errors:
+            return errors
     card.meta[key] = value
     entry = tr("kanban.log.meta", name=key, old=old or "—", new=value or "—", reason=reason)
     card.append_log(entry.rstrip())
@@ -327,20 +379,154 @@ def module_of(paths: list[str]) -> str:
     return max(set(folders), key=folders.count) if folders else "."
 
 
-def plan_batches(board: Any, model: str) -> dict[str, list[Any]]:
+BATCH_MAX = 4  # domyślnie: większa paczka to dłuższa sesja, więcej kontekstu i ryzyko rebase
+
+
+def listed(value: Any) -> list:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError("not a list")
+    return value
+
+
+def release_of(board: Any) -> tuple[dict[str, str], list[str]]:
+    """
+    Karta → wydanie (grupa wydania) z `kanban/releases/*.json`; różne wydania — różne paczki.
+    Drugi element: nazwy uszkodzonych manifestów — plan ich nie zgaduje (granica wydania).
+    """
+    found: dict[str, str] = {}
+    invalid: list[str] = []
+    for path in sorted((board.root / "kanban" / "releases").glob("*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict) or not isinstance(data.get("scope", {}), dict):
+                raise ValueError("not an object")
+            release = str(data.get("id") or path.stem)
+            for card in listed(data.get("scope", {}).get("cards")):
+                found.setdefault(str(card), release)
+            for group in listed(data.get("release_groups")):
+                if not isinstance(group, dict):
+                    raise ValueError("group not an object")
+                for card in listed(group.get("cards")):
+                    found[str(card)] = f"{release}/{group.get('id')}"
+        except (OSError, ValueError):
+            invalid.append(path.name)
+    return found, invalid
+
+
+def code_paths(board: Any, card: Any) -> list[str]:
+    paths = [p for p, _ in board.section_paths(card.section("Files"), any_name=True)]
+    return [p for p in paths if not p.startswith(("tests/", "docs/", "kanban/"))]
+
+
+def plan_batches(board: Any, model: str) -> dict[str, list[Any]] | None:
     """
     Propozycja paczek: karty modelu w backlog/ready bez decyzji o paczce (puste `batch:`; `none`
-    to decyzja) z tego samego modułu, co najmniej 2 — planista przed wejściem do ready (#29).
+    to decyzja) z tego samego modułu i wydania, co najmniej 2 — planista przed ready (#29).
+    Bez kart z niespełnioną zależnością spoza paczki (DAG) i najwyżej `batch_max` kart (SB-135).
     """
-    groups: dict[str, list[Any]] = {}
-    for card in board.cards():
+    cards = board.cards()
+    done = {c.id for c in cards if c.status == "done"}
+    limit = board.config.get("batch_max", BATCH_MAX)
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
+        limit = BATCH_MAX
+    releases, invalid = release_of(board)
+    if invalid:  # a broken manifest would silently erase a release boundary
+        print(tr("kanban.batch.release_invalid", files=", ".join(invalid)), file=sys.stderr)
+        return None
+    taken = {batch_of(c) for c in cards}  # existing batches keep their own names
+    proposals: dict[str, list[Any]] = {}
+    for (module, _), members in sorted(candidate_groups(board, cards, model, releases).items()):
+        for chunk in pack(board, dag_closed(members, done), limit):
+            name, n = module, 2
+            while name in proposals or name in taken:
+                name, n = f"{module}-{n}", n + 1
+            proposals[name] = chunk
+    return proposals
+
+
+def pack(board: Any, members: list[Any], limit: int) -> list[list[Any]]:
+    """
+    Paczki po `limit` kart złożone z całych składowych zależności: karta i jej zależność w grupie
+    zawsze trafiają razem, więc dwie paczki nigdy nie czekają na siebie nawzajem. Składowa
+    większa niż limit nie jest proponowana (decyzja planisty); paczka ma co najmniej 2 karty.
+    """
+    by_id = {c.id: c for c in members}
+    parent = {c.id: c.id for c in members}
+
+    def root(card_id: str) -> str:
+        while parent[card_id] != card_id:
+            card_id = parent[card_id]
+        return card_id
+
+    for card in members:
+        for dep in card.dependencies():
+            if dep in by_id:
+                parent[root(card.id)] = root(dep)
+    components: dict[str, list[Any]] = {}
+    for card in sorted(members, key=lambda c: (code_paths(board, c)[:1], c.id)):
+        components.setdefault(root(card.id), []).append(card)
+    chunks: list[list[Any]] = []
+    current: list[Any] = []
+    for component in components.values():
+        if len(component) > limit:  # no silent gap: the planner decides such chains by hand
+            ids = ", ".join(c.id for c in component)
+            print(tr("kanban.batch.too_large", cards=ids, limit=limit), file=sys.stderr)
+            continue
+        if len(current) + len(component) > limit:
+            chunks.append(current)
+            current = []
+        current += component
+    chunks.append(current)
+    return [chunk for chunk in chunks if len(chunk) > 1]
+
+
+def candidate_groups(
+    board: Any, cards: list[Any], model: str, releases: dict[str, str]
+) -> dict[tuple[str, str], list]:
+    """Karty bez decyzji o paczce pogrupowane po module i wydaniu (granice wydań, SB-135)."""
+    groups: dict[tuple[str, str], list[Any]] = {}
+    for card in cards:
         if card.meta.get("model") != model or card.status not in ("backlog", "ready"):
             continue
         if batch_decided(card):
             continue
         paths = [p for p, _ in board.section_paths(card.section("Files"), any_name=True)]
-        groups.setdefault(slugify(module_of(paths)), []).append(card)
-    return {name: cards for name, cards in groups.items() if len(cards) > 1}
+        groups.setdefault((slugify(module_of(paths)), releases.get(card.id, "")), []).append(card)
+    return groups
+
+
+def dag_closed(members: list[Any], done: set[str]) -> list[Any]:
+    """Bez kart, których niespełniona zależność leży poza paczką — zatrzymałaby jej start."""
+    while True:
+        ids = {c.id for c in members}
+        kept = [c for c in members if set(c.dependencies()) <= done | ids]
+        if len(kept) == len(members):
+            return kept
+        members = kept
+
+
+def batch_details(board: Any, cards: list[Any]) -> str:
+    """Wspólne pliki kodu, profil modelu i szacowany budżet paczki (SB-135)."""
+    seen: dict[str, int] = {}
+    for card in cards:
+        for path in set(code_paths(board, card)):
+            seen[path] = seen.get(path, 0) + 1
+    shared = ", ".join(sorted(p for p, n in seen.items() if n > 1)) or "—"
+    profiles = sorted(
+        {
+            "/".join(
+                str(c.meta.get(k))
+                for k in ("implementation_model", "implementation_effort")
+                if c.meta.get(k)
+            )
+            or str(c.meta.get("model") or "?")
+            for c in cards
+        }
+    )
+    budget = f"{sum(budget_limit(board.config, c) for c in cards):,}".replace(",", " ")
+    return tr("kanban.batch.details", shared=shared, profile=", ".join(profiles), budget=budget)
 
 
 def batch_start_errors(board: Any, ready: list[Any], cards: list[Any]) -> list[str]:
@@ -461,7 +647,8 @@ def move_batch(board: Any, name: str, to: str, reason: str = "", tested_by: str 
     if errors:
         return errors
     for card in batch:
-        card.move(to, tr("kanban.log.batch_moved", batch=name, reason=reason.strip()).strip())
+        note = tr("kanban.log.batch_moved", batch=name, reason=reason.strip()).strip()
+        card.move(to, reset_stages(card, board.columns, to, note))  # ruch w lewo — etapy od nowa
         card.save()
     return []
 
@@ -499,8 +686,11 @@ def batch_main(board: Any, args: Any) -> int:
     """Wykonanie polecenia paczki; kody wyjścia jak w kanban.py (0 ok, 1 bramka, 3 brak kart)."""
     if args.batch_cmd == "plan":
         groups = plan_batches(board, args.model)
+        if groups is None:  # broken release manifest: a validation error, not "nothing to plan"
+            return 1
         for name, cards in groups.items():
             print(tr("kanban.batch.proposal", batch=name, cards=", ".join(c.id for c in cards)))
+            print(f"  {batch_details(board, cards)}")
             for card in cards if args.apply else []:
                 set_meta(board, card.id, "batch", name, tr("kanban.batch.planned"))
         return 0 if groups else 3

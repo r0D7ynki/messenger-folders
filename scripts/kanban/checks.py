@@ -49,6 +49,27 @@ def board_columns(config: dict) -> list[str]:
     return ALL_COLUMNS if config.get("test_column") is True or "test" in listed else COLUMNS
 
 
+# Pola etapów (#33): kto testował / przeglądał i stan przeglądu — tylko dla bieżącego przejścia
+STAGE_FIELDS = {"test": ("tested_by",), "review": ("reviewer", "review_fail", "attempts")}
+
+
+def reset_stages(card: Any, columns: list[str], to: str, note: str = "") -> str:
+    """
+    Ruch w lewo (także ponowne otwarcie `done`, #33): pola etapów, które karta przejdzie od nowa
+    (kolumna etapu nie wcześniej niż cel), usunięte z nagłówka; zwraca notatkę do Logu z usuniętymi
+    wartościami (historia zostaje).
+    """
+    frm = card.status
+    if frm not in columns or to not in columns or columns.index(to) >= columns.index(frm):
+        return note
+    removed = []
+    for stage, keys in STAGE_FIELDS.items():
+        if stage in columns and columns.index(stage) >= columns.index(to):
+            removed += [f"{k}: {card.meta.pop(k)}" for k in keys if str(card.meta.get(k) or "")]
+    cleared = tr("kanban.log.stage_reset", fields=", ".join(removed)) if removed else ""
+    return "; ".join(part for part in (note, cleared) if part)
+
+
 def test_first(columns: list[str]) -> bool:
     """Kolejność etapów in-progress → test → review (#29)."""
     return "test" in columns and columns.index("test") < columns.index("review")
@@ -96,7 +117,7 @@ AUTOMATIC_KEYS = (
     "bridge.log.requeued",
 )
 # Metadane zmieniane `kanban.py set` (także w done) — wpis „klucz: stara → nowa” nie jest pracą
-META_KEYS = ("branch", "priority", "batch", "tested_by", "question")
+META_KEYS = ("branch", "priority", "batch", "tested_by", "question", "depends")
 MANUAL_META = re.compile(rf"^(?:{'|'.join(META_KEYS)}): .* → ")  # wartości ze spacjami (question)
 
 
@@ -314,3 +335,41 @@ def board_line(card: Any, column: str) -> str:
         f"  {card.id}  [{meta.get('size', '?')}] {meta.get('priority', ''):<3} "
         f"{meta.get('model', ''):<8} {meta.get('title', '')}{batch}{human}{agent}{extra}"
     )
+
+
+# --- Budżet tokenów karty (wspólny dla `sb cost` i planu paczek; kopiowany do projektów) ---
+
+DEFAULT_BUDGET = {
+    "sizes": {"S": 200_000, "M": 600_000, "L": 1_500_000},
+    "priority": {"P1": 1.5, "P2": 1.25, "P3": 1.0, "P4": 0.75},
+    "impact": {"high": 1.5, "medium": 1.0, "low": 0.5},
+    "warn": 0.75,
+}
+
+
+def number(value, default: float) -> float:
+    return value if isinstance(value, int | float) and not isinstance(value, bool) else default
+
+
+def budget_config(config: dict) -> dict:
+    """Skala budżetu: domyślne + `budget` z konfiguracji; wartości nieliczbowe ignorowane."""
+    custom = config.get("budget") if isinstance(config.get("budget"), dict) else {}
+    scale = {}
+    for key in ("sizes", "priority", "impact"):
+        override = custom.get(key) if isinstance(custom.get(key), dict) else {}
+        defaults = DEFAULT_BUDGET[key]
+        scale[key] = {k: number(override.get(k), v) for k, v in defaults.items()}
+        scale[key] |= {
+            k: v for k, v in override.items() if k not in defaults and number(v, -1) >= 0
+        }
+    scale["warn"] = number(custom.get("warn"), DEFAULT_BUDGET["warn"])
+    return scale
+
+
+def budget_limit(config: dict, card) -> int:
+    """Budżet tokenów karty: rozmiar × priorytet × wpływ."""
+    scale = budget_config(config)
+    base = scale["sizes"].get(card.meta.get("size", ""), scale["sizes"]["M"])
+    priority = scale["priority"].get(card.meta.get("priority", ""), 1.0)
+    impact = scale["impact"].get(card.meta.get("impact") or "medium", 1.0)
+    return int(base * priority * impact)
