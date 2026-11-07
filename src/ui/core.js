@@ -249,6 +249,60 @@
     defaultToastManager.show(message, duration);
   }
 
+  // 5. Skróty klawiszowe przełączania folderów (Alt+1…9, Alt+0)
+
+  /** Tagi pól formularza, w których użytkownik pisze. */
+  const TYPING_TAGS = Object.freeze(['INPUT', 'TEXTAREA', 'SELECT']);
+
+  /**
+   * Sprawdza, czy element (albo jego przodek) przyjmuje wpisywany tekst:
+   * `input`, `textarea`, `select`, `contenteditable` lub `role="textbox"`.
+   * @param {Element|null} element
+   * @returns {boolean}
+   */
+  function isTypingTarget(element) {
+    let node = element;
+    while (node) {
+      if (node.tagName && TYPING_TAGS.includes(String(node.tagName).toUpperCase())) return true;
+      if (node.isContentEditable === true) return true;
+      if (typeof node.getAttribute === 'function') {
+        const editable = node.getAttribute('contenteditable');
+        if (editable !== null && editable !== undefined && String(editable).toLowerCase() !== 'false') return true;
+        if (node.getAttribute('role') === 'textbox') return true;
+      }
+      node = node.parentElement || null;
+    }
+    return false;
+  }
+
+  /**
+   * Zamienia zdarzenie klawiatury na ID folderu do włączenia.
+   * `Alt+0` → `'all'`, `Alt+N` → N-ty folder użytkownika (lista bez `'all'`).
+   * Cyfra rozpoznawana po `event.code` (macOS: Option+1 daje `event.key === '¡'`).
+   * Ignoruje AltGraph, `Ctrl`, `Meta` i `Shift`.
+   * @param {KeyboardEvent} event
+   * @param {Array<string>} folderIds - ID folderów w kolejności paska
+   * @returns {string|null}
+   */
+  function resolveFolderShortcut(event, folderIds) {
+    if (!event || !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return null;
+    if (event.isComposing) return null;
+    if (typeof event.getModifierState === 'function' && event.getModifierState('AltGraph')) return null;
+
+    let digit = null;
+    const codeMatch = /^Digit([0-9])$/.exec(event.code || '');
+    if (codeMatch) {
+      digit = Number(codeMatch[1]);
+    } else if (!event.code && /^[0-9]$/.test(event.key || '')) {
+      digit = Number(event.key);
+    }
+    if (digit === null) return null;
+    if (digit === 0) return 'all';
+
+    const userIds = (Array.isArray(folderIds) ? folderIds : []).filter((id) => id && id !== 'all');
+    return userIds[digit - 1] || null;
+  }
+
   // Złożenie publicznego interfejsu modułu MessengerUICore
   const MessengerUICore = {
     ICONS,
@@ -265,7 +319,9 @@
     _setButtonContent: setButtonContent,
     createElement,
     ToastManager,
-    showToast
+    showToast,
+    isTypingTarget,
+    resolveFolderShortcut
   };
 
   // Rejestracja globalna w przeglądarce

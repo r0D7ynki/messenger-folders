@@ -48,8 +48,9 @@ test.describe('Messenger Folders E2E Test Suite (MF-006)', () => {
       await expect(pill).toBeVisible();
     }
 
-    // Przycisk dodawania nowego folderu
-    const addBtn = scrollContainer.locator('.mf-folder-add-btn');
+    // Przycisk dodawania nowego folderu — rodzeństwo tablisty w rzędzie pigułek
+    // (od MF-013 nie leży wewnątrz kontenera pigułek, bo tablist zawiera wyłącznie role="tab")
+    const addBtn = pillsRow.locator('.mf-folder-add-btn');
     await expect(addBtn).toBeVisible();
 
     // Domyślnie aktywny jest folder 'all'
@@ -704,5 +705,136 @@ test.describe('Messenger Folders E2E Test Suite (MF-006)', () => {
     await settingsModal.locator('.mf-modal-close-btn').click();
     await expect(page.locator('.mf-modal-overlay')).toBeHidden();
     expect(pageErrors).toHaveLength(0);
+  });
+
+  test('E2E-15: Unread badges on folder pills and the total on "All"', async () => {
+    // Fixture zawiera trzy wątki z odznaką nieprzeczytania (100000000001, 100000000003,
+    // 100000000005) oraz wątek 100000000006, który ma wyłącznie akcję „Oznacz jako
+    // nieprzeczytane” — przypadek fałszywie pozytywny z przeglądu MF-011, który nie może
+    // zawyżyć liczników. Wszystkie wątki są nieprzypisane, więc trafiają do folderu „Inne”.
+    const allPill = page.locator('.mf-folder-pill[data-folder-id="all"]');
+    const allBadge = allPill.locator('.mf-folder-unread-badge');
+    await expect(allBadge).toBeVisible();
+    await expect(allBadge).toHaveText('3');
+    await expect(allBadge).toHaveAttribute('aria-label', '3 nieprzeczytanych');
+    // Podpowiedź pigułki również opisuje liczbę nieprzeczytanych
+    await expect(allPill).toHaveAttribute('title', /3 nieprzeczytanych/);
+
+    // Suma na „Wszystkie” pokrywa się z licznikiem folderu domyślnego
+    const uncategorizedBadge = page.locator('.mf-folder-pill[data-folder-id="uncategorized"] .mf-folder-unread-badge');
+    await expect(uncategorizedBadge).toHaveText('3');
+
+    // Foldery bez nieprzeczytanych wątków nie mają odznaki
+    for (const folderId of ['important', 'work', 'friends', 'groups']) {
+      const pill = page.locator(`.mf-folder-pill[data-folder-id="${folderId}"]`);
+      await expect(pill.locator('.mf-folder-unread-badge')).toHaveCount(0);
+    }
+  });
+
+  test('E2E-16: Unread badges disappear and reappear with unread rows (DOM mutation)', async () => {
+    const allPill = page.locator('.mf-folder-pill[data-folder-id="all"]');
+    const uncategorizedPill = page.locator('.mf-folder-pill[data-folder-id="uncategorized"]');
+    const allBadge = allPill.locator('.mf-folder-unread-badge');
+    const uncategorizedBadge = uncategorizedPill.locator('.mf-folder-unread-badge');
+    // Wiersz czatu o podanym identyfikatorze wątku
+    const rowOf = (threadId) => page.locator('[role="row"]').filter({ has: page.locator(`a[href*="/t/${threadId}"]`) });
+    await expect(allBadge).toHaveText('3');
+
+    // 1. Odczytanie jednego z trzech wątków: Messenger usuwa z wiersza wskaźnik nieprzeczytania,
+    // więc licznik spada, ale odznaka na pigułce nadal istnieje (to jeszcze nie ścieżka usuwania)
+    await rowOf('100000000001')
+      .locator('.chat-unread-badge')
+      .evaluate((badge) => badge.remove());
+
+    await expect(allBadge).toHaveText('2');
+    await expect(uncategorizedBadge).toHaveText('2');
+
+    // 2. Odczytanie wszystkich pozostałych wątków: licznik spada do zera, więc odznaki muszą
+    // zniknąć z pigułek — na pigułce nie może zostać „0” ani stara liczba
+    await page.locator('.chat-unread-badge').evaluateAll((badges) => badges.forEach((badge) => badge.remove()));
+
+    await expect(page.locator('.chat-unread-badge')).toHaveCount(0);
+    await expect(allBadge).toHaveCount(0);
+    await expect(uncategorizedBadge).toHaveCount(0);
+    // Pigułki nadal istnieją (zniknęły tylko odznaki) i podpowiedź nie wspomina już nieprzeczytanych
+    await expect(allPill).toBeVisible();
+    await expect(uncategorizedPill).toBeVisible();
+    await expect(allPill).toHaveAttribute('title', /^Wszystkie \(\d+ rozmów\)$/);
+    await expect(uncategorizedPill).toHaveAttribute('title', /^Inne \(\d+ rozmów\)$/);
+
+    // 3. Mutacja w drugą stronę: nowy wskaźnik nieprzeczytania w wierszu Anny Projektowej
+    // tworzy odznakę od zera (licznik rośnie z 0 na 1)
+    await rowOf('100000000002')
+      .locator('.chat-meta')
+      .evaluate((meta) => {
+        const badge = meta.ownerDocument.createElement('span');
+        badge.className = 'chat-unread-badge';
+        badge.setAttribute('aria-label', '1 nieprzeczytana wiadomość');
+        badge.textContent = '1';
+        meta.appendChild(badge);
+      });
+
+    await expect(allBadge).toHaveText('1');
+    await expect(allBadge).toHaveAttribute('aria-label', '1 nieprzeczytanych');
+    await expect(uncategorizedBadge).toHaveText('1');
+  });
+
+  test('E2E-17: Alt+1 and Alt+0 switch folders and are ignored inside a text field', async () => {
+    const allPill = page.locator('.mf-folder-pill[data-folder-id="all"]');
+    const importantPill = page.locator('.mf-folder-pill[data-folder-id="important"]');
+    await expect(allPill).toHaveClass(/mf-active/);
+
+    // Alt+1 → pierwszy folder użytkownika (lista bez „Wszystkie”), czyli „Ważne”
+    await page.keyboard.press('Alt+1');
+    await expect(importantPill).toHaveClass(/mf-active/);
+    await expect(importantPill).toHaveAttribute('aria-selected', 'true');
+    await expect(allPill).not.toHaveClass(/mf-active/);
+    await expect.poll(() => getStorageData(page, 'mf_active_folder')).toBe('important');
+
+    // Alt+0 → „Wszystkie”
+    await page.keyboard.press('Alt+0');
+    await expect(allPill).toHaveClass(/mf-active/);
+    await expect(importantPill).not.toHaveClass(/mf-active/);
+    await expect.poll(() => getStorageData(page, 'mf_active_folder')).toBe('all');
+
+    // Fokus w polu tekstowym: skrót nie przełącza folderu i nie wpisuje znaku
+    const searchInput = page.locator('.search-section input[type="search"]');
+    await searchInput.click();
+    await expect(searchInput).toBeFocused();
+    await page.keyboard.press('Alt+1');
+    await expect(searchInput).toHaveValue('');
+    await expect(allPill).toHaveClass(/mf-active/);
+    await expect(importantPill).not.toHaveClass(/mf-active/);
+    expect(await getStorageData(page, 'mf_active_folder')).toBe('all');
+  });
+
+  test('E2E-18: ArrowRight and ArrowLeft move focus between pills with wrapping', async () => {
+    const pill = (id) => page.locator(`.mf-folder-pill[data-folder-id="${id}"]`);
+
+    // Punkt startowy: fokus na pierwszej pigułce paska
+    await pill('all').focus();
+    await expect(pill('all')).toBeFocused();
+
+    // ArrowRight przechodzi w prawo zgodnie z kolejnością pigułek
+    await page.keyboard.press('ArrowRight');
+    await expect(pill('important')).toBeFocused();
+    await page.keyboard.press('ArrowRight');
+    await expect(pill('work')).toBeFocused();
+
+    // ArrowLeft wraca w lewo
+    await page.keyboard.press('ArrowLeft');
+    await expect(pill('important')).toBeFocused();
+    await page.keyboard.press('ArrowLeft');
+    await expect(pill('all')).toBeFocused();
+
+    // Zawijanie w obie strony
+    await page.keyboard.press('ArrowLeft');
+    await expect(pill('uncategorized')).toBeFocused();
+    await page.keyboard.press('ArrowRight');
+    await expect(pill('all')).toBeFocused();
+
+    // Strzałki przenoszą wyłącznie fokus — nie zmieniają aktywnego folderu
+    await expect(pill('all')).toHaveClass(/mf-active/);
+    expect(await getStorageData(page, 'mf_active_folder')).toBe('all');
   });
 });

@@ -27,6 +27,75 @@
     { id: 'uncategorized', name: 'Inne', icon: '📁', color: '#6B7280', isSystem: true }
   ];
 
+  // Hosty CDN Messengera/Facebooka, z których wolno wczytać awatar (także subdomeny)
+  const AVATAR_HOSTS = ['fbcdn.net', 'fbsbx.com'];
+  // Awatar osadzony w danych: tylko obrazy rastrowe w base64
+  const AVATAR_DATA_URL = /^data:image\/(?:png|jpe?g|gif|webp);base64,[a-z0-9+/=\s]+$/i;
+  // Klucze, których zapis do zwykłego obiektu zmienia jego prototyp zamiast dodać właściwość
+  const UNSAFE_THREAD_IDS = new Set(['__proto__', 'constructor', 'prototype']);
+
+  /**
+   * Zwraca adres awatara, jeśli wolno go wczytać, inaczej pusty tekst (zasada „zero sieci”:
+   * awatar z danych lub importu JSON nie może wysłać żądania do dowolnego hosta).
+   * Dozwolone: `https://` z hostów AVATAR_HOSTS oraz `data:image/…;base64,`.
+   * @param {*} url Adres awatara.
+   * @returns {string} Bezpieczny adres albo ''.
+   */
+  function sanitizeAvatarUrl(url) {
+    if (typeof url !== 'string') return '';
+    const trimmed = url.trim();
+    if (!trimmed) return '';
+    if (AVATAR_DATA_URL.test(trimmed)) return trimmed;
+    let parsed;
+    try {
+      parsed = new URL(trimmed);
+    } catch (_) {
+      return '';
+    }
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.port) return '';
+    const host = parsed.hostname.toLowerCase();
+    return AVATAR_HOSTS.some((allowed) => host === allowed || host.endsWith(`.${allowed}`)) ? parsed.href : '';
+  }
+
+  /**
+   * Sprawdza identyfikator wątku: niepusty tekst do 256 znaków, który nie jest kluczem
+   * prototypu (`__proto__` zapisany przez przypisanie podmieniłby prototyp mapy wątków).
+   * Nie wymaga samych cyfr — Facebook używa też adresów /messages/t/<nazwa.użytkownika>.
+   * @param {*} threadId Identyfikator wątku.
+   * @returns {boolean}
+   */
+  function isSafeThreadId(threadId) {
+    if (typeof threadId !== 'string') return false;
+    const clean = threadId.trim();
+    return clean.length > 0 && clean.length <= 256 && !UNSAFE_THREAD_IDS.has(clean);
+  }
+
+  /**
+   * Zwraca kopię mapy wątków bez niebezpiecznych identyfikatorów i rekordów niebędących obiektami,
+   * z awatarami przepuszczonymi przez sanitizeAvatarUrl.
+   * @param {*} rawThreads Mapa wątków z pamięci albo importu.
+   * @returns {Object}
+   */
+  function sanitizeThreads(rawThreads) {
+    const result = {};
+    if (!rawThreads || typeof rawThreads !== 'object' || Array.isArray(rawThreads)) return result;
+    for (const [threadId, threadData] of Object.entries(rawThreads)) {
+      if (!isSafeThreadId(threadId) || !threadData || typeof threadData !== 'object' || Array.isArray(threadData)) {
+        continue;
+      }
+      result[threadId] = { ...threadData, avatar: sanitizeAvatarUrl(threadData.avatar) };
+    }
+    return result;
+  }
+
+  /**
+   * Zwraca chrome.runtime.lastError albo null — także gdy `chrome` nie jest zadeklarowane.
+   * @returns {Object|null}
+   */
+  function getRuntimeLastError() {
+    return typeof chrome !== 'undefined' && chrome && chrome.runtime ? chrome.runtime.lastError || null : null;
+  }
+
   class MessengerFoldersStorage {
     /**
      * Tworzy instancję modułu pamięci.
@@ -68,8 +137,9 @@
       return new Promise((resolve, reject) => {
         try {
           this._storage.get(keys, (items) => {
-            if (chrome?.runtime?.lastError) {
-              reject(new Error(chrome.runtime.lastError.message));
+            const lastError = getRuntimeLastError();
+            if (lastError) {
+              reject(new Error(lastError.message));
             } else {
               resolve(items || {});
             }
@@ -91,8 +161,9 @@
       return new Promise((resolve, reject) => {
         try {
           this._storage.set(items, () => {
-            if (chrome?.runtime?.lastError) {
-              reject(new Error(chrome.runtime.lastError.message));
+            const lastError = getRuntimeLastError();
+            if (lastError) {
+              reject(new Error(lastError.message));
             } else {
               resolve();
             }
@@ -124,7 +195,7 @@
       }
 
       if (changes[STORAGE_KEYS.THREADS]) {
-        this._threads = changes[STORAGE_KEYS.THREADS].newValue || {};
+        this._threads = sanitizeThreads(changes[STORAGE_KEYS.THREADS].newValue);
         hasRelevantChanges = true;
       }
 
@@ -173,7 +244,7 @@
         updates[STORAGE_KEYS.THREADS] = {};
         this._threads = {};
       } else {
-        this._threads = stored[STORAGE_KEYS.THREADS];
+        this._threads = sanitizeThreads(stored[STORAGE_KEYS.THREADS]);
       }
 
       if (Object.keys(updates).length > 0) {
@@ -426,7 +497,7 @@
         await this.init();
       }
 
-      if (!threadId || typeof threadId !== 'string') {
+      if (!isSafeThreadId(threadId)) {
         throw new Error('Identyfikator wątku jest wymagany.');
       }
 
@@ -441,7 +512,7 @@
         ...existing,
         folderId,
         name: (metadata && metadata.name) || existing.name || '',
-        avatar: (metadata && metadata.avatar) || existing.avatar || '',
+        avatar: sanitizeAvatarUrl((metadata && metadata.avatar) || existing.avatar),
         assignedAt: existing.assignedAt || Date.now(),
         updatedAt: Date.now()
       };
@@ -463,6 +534,70 @@
       this._threads = updatedThreads;
       await this._set({ [STORAGE_KEYS.THREADS]: updatedThreads });
       return { threadId: cleanThreadId, ...updatedRecord };
+    }
+
+    /**
+     * Zapisuje wsadowo automatyczne przypisania z reguł (oznaczone `autoAssigned: true`).
+     * Pamięć podręczna jest aktualizowana synchronicznie przed zapisem, więc
+     * getAllThreadsSync() od razu zwraca nowe przypisania. Przypisanie jest pomijane,
+     * gdy folder wątku zmienił się od chwili ewaluacji (`expectedFolderId`) — np.
+     * użytkownik przypisał wątek ręcznie, zanim reguły skończyły pracę. Dotyczy to także reguł
+     * z `overwriteManual: true`: ostatnia akcja użytkownika wygrywa z decyzją policzoną na starszym
+     * stanie, a reguła zadziała przy kolejnej ewaluacji (zmiana nazwy wątku albo reguł).
+     * @param {Array<Object>} assignments Lista { threadId, folderId, expectedFolderId, metadata }.
+     * @returns {Promise<Array<string>>} Identyfikatory faktycznie przypisanych wątków.
+     */
+    async applyAutoAssignments(assignments) {
+      if (!this._isInitialized) {
+        await this.init();
+      }
+
+      if (!Array.isArray(assignments) || assignments.length === 0) {
+        return [];
+      }
+
+      const now = Date.now();
+      const updatedThreads = { ...this._threads };
+      const applied = [];
+
+      for (const item of assignments) {
+        if (
+          !item ||
+          !item.threadId ||
+          !isSafeThreadId(String(item.threadId)) ||
+          !item.folderId ||
+          typeof item.folderId !== 'string'
+        ) {
+          continue;
+        }
+
+        const cleanThreadId = String(item.threadId).trim();
+        const existing = updatedThreads[cleanThreadId] || {};
+        const currentFolderId = existing.folderId || null;
+        if (currentFolderId !== (item.expectedFolderId || null)) {
+          continue;
+        }
+
+        const metadata = item.metadata || {};
+        updatedThreads[cleanThreadId] = {
+          ...existing,
+          folderId: item.folderId,
+          name: metadata.name || existing.name || '',
+          avatar: sanitizeAvatarUrl(metadata.avatar || existing.avatar),
+          assignedAt: existing.assignedAt || now,
+          updatedAt: now,
+          autoAssigned: true
+        };
+        applied.push(cleanThreadId);
+      }
+
+      if (applied.length === 0) {
+        return applied;
+      }
+
+      this._threads = updatedThreads;
+      await this._set({ [STORAGE_KEYS.THREADS]: updatedThreads });
+      return applied;
     }
 
     /**
@@ -623,15 +758,8 @@
         }
       }
 
-      const rawThreads =
-        parsed.threads && typeof parsed.threads === 'object' && !Array.isArray(parsed.threads) ? parsed.threads : {};
-      const importedThreads = {};
-
-      for (const [threadId, threadData] of Object.entries(rawThreads)) {
-        if (threadData && typeof threadData === 'object' && !Array.isArray(threadData)) {
-          importedThreads[threadId] = threadData;
-        }
-      }
+      // Wątki z niebezpiecznym ID są pomijane, awatary spoza dozwolonych hostów — czyszczone
+      const importedThreads = sanitizeThreads(parsed.threads);
 
       const activeFolder =
         typeof parsed.activeFolder === 'string' && importedFolders.some((f) => f.id === parsed.activeFolder)
@@ -670,6 +798,9 @@
   }
 
   // Udostępnienie klasy w zasięgu globalnym oraz jako moduł CommonJS
+  MessengerFoldersStorage.sanitizeAvatarUrl = sanitizeAvatarUrl;
+  MessengerFoldersStorage.isSafeThreadId = isSafeThreadId;
+
   if (typeof global !== 'undefined') {
     global.MessengerFoldersStorage = MessengerFoldersStorage;
     global.DEFAULT_FOLDERS = DEFAULT_FOLDERS;
@@ -679,7 +810,9 @@
     module.exports = {
       MessengerFoldersStorage,
       DEFAULT_FOLDERS,
-      STORAGE_KEYS
+      STORAGE_KEYS,
+      sanitizeAvatarUrl,
+      isSafeThreadId
     };
   }
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -11,6 +11,12 @@
 (function (global) {
   'use strict';
 
+  /** Selektor elementów interaktywnych (akcje), których potomkowie nie są wskaźnikami stanu. */
+  const ACTION_SELECTOR = 'button, [role="button"], [role="menuitem"]';
+
+  /** Etykieta akcji „Oznacz … jako nieprzeczytane” / „Mark as unread” — ze słowem, nie z „Oznaczony…”. */
+  const ACTION_LABEL_PATTERN = /(?<!\p{L})(?:oznacz|mark[\s_-]*as)(?!\p{L})/iu;
+
   class MessengerDOMDetector {
     /**
      * Tworzy instancję detektora DOM.
@@ -207,6 +213,150 @@
     }
 
     /**
+     * Sprawdza, czy etykieta elementu (aria-label, data-testid) opisuje akcję
+     * „Oznacz … jako nieprzeczytane” / „Mark as unread” — nie stan wątku.
+     * @private
+     * @param {Element} element Badany element.
+     * @returns {boolean} Czy etykieta wskazuje akcję.
+     */
+    _hasActionLabel(element) {
+      const label = `${element.getAttribute?.('aria-label') || ''} ${element.getAttribute?.('data-testid') || ''}`;
+      return ACTION_LABEL_PATTERN.test(label);
+    }
+
+    /**
+     * Sprawdza, czy element jest akcją (przycisk, pozycja menu, „Oznacz … jako nieprzeczytane”),
+     * a nie wskaźnikiem stanu wątku.
+     * Wspinaczka po przodkach kończy się na wierszu: akcją jest tylko przycisk leżący wewnątrz
+     * wiersza (np. menu wątku). Sam wiersz ani jego przodkowie — gdy Messenger opakuje cały wiersz
+     * w `[role="button"]` — nie wyłączają heurystyki wskaźników, bo klikalny wiersz to nie akcja
+     * „Oznacz…”. Dla samego wiersza liczy się więc wyłącznie etykieta akcji.
+     * @param {Element} element Badany element.
+     * @param {Element|null} [rowElement=null] Element wiersza czatu — granica wspinaczki.
+     * @returns {boolean} Czy element należy pominąć jako akcję.
+     */
+    _isActionElement(element, rowElement = null) {
+      for (let node = element; node && node !== rowElement; node = node.parentElement) {
+        if (node.matches?.(ACTION_SELECTOR)) {
+          return true;
+        }
+      }
+      return this._hasActionLabel(element);
+    }
+
+    /**
+     * Sprawdza, czy element ze stylem w kolorze Messengera to awatar (obrazek albo jego ramka),
+     * a nie kropka nieprzeczytania.
+     * @param {Element} element Badany element.
+     * @returns {boolean} Czy element jest awatarem.
+     */
+    _isAvatarElement(element) {
+      const tag = (element.tagName || '').toUpperCase();
+      if (tag === 'IMG' || tag === 'IMAGE' || tag === 'SVG' || element.getAttribute?.('role') === 'img') {
+        return true;
+      }
+      // Awatar-div z obrazem w tle (bez <img>). Liczą się wyłącznie właściwości tła:
+      // np. mask-image: url(...) albo clip-path nie czynią elementu obrazem, więc
+      // niebieska kropka z takim stylem pozostaje kropką. Komentarze CSS usuwamy przed
+      // dopasowaniem, bo `/*x*/background: url(...)` to legalna deklaracja tła.
+      const style = (element.getAttribute?.('style') || '').replace(/\/\*[\s\S]*?\*\//g, '');
+      if (/(?:^|;)\s*background(?:-image)?\s*:[^;]*url\(/i.test(style)) {
+        return true;
+      }
+      return Boolean(element.querySelector?.('img, image'));
+    }
+
+    /**
+     * Szuka wśród potomków wiersza pierwszego elementu pasującego do selektora, który nie jest akcją
+     * i spełnia dodatkowy warunek.
+     * @param {Element} rowElement Element wiersza czatu.
+     * @param {string} selector Selektor atrybutów.
+     * @param {(element: Element) => boolean} [accept] Dodatkowy warunek akceptacji.
+     * @returns {boolean} Czy znaleziono wskaźnik.
+     */
+    _hasIndicator(rowElement, selector, accept = () => true) {
+      const candidates = rowElement.querySelectorAll?.(selector) || [];
+      for (const element of candidates) {
+        if (!this._isActionElement(element, rowElement) && accept(element)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    /**
+     * Sprawdza, czy dany wątek posiada nieprzeczytane wiadomości.
+     * Stosuje kaskadę selektorów heurystycznych bez wywoływania getComputedStyle,
+     * aby uniknąć wymuszonego przeliczania układu (layout thrashing / reflow).
+     * Nie opiera się na klasach CSS Messengera i pomija akcje „Oznacz jako nieprzeczytane”
+     * (przyciski, pozycje menu, etykiety z „oznacz”/„mark as”).
+     *
+     * Kaskada sprawdzania:
+     * 1. [data-testid*="unread" i] na wierszu lub elemencie potomnym
+     * 2. [aria-label*="nieprzeczytan" i], [aria-label*="unread" i] (element potomny)
+     * 3. Atrybut aria-label na linkElement oraz rowElement
+     * 4. Wizualny wskaźnik kropki: [style*="rgb(0, 132, 255)"], [style*="#0084ff" i] (poza awatarami)
+     * 5. Atrybut stanu: [data-unread="true"]
+     *
+     * @param {Element} rowElement Element wiersza czatu.
+     * @param {Element|null} [linkElement=null] Opcjonalny element linku wątku.
+     * @returns {boolean} Czy wątek zawiera nieprzeczytane wiadomości.
+     */
+    isThreadUnread(rowElement, linkElement = null) {
+      if (!rowElement || typeof rowElement.querySelector !== 'function') {
+        return false;
+      }
+
+      // 1. Atrybut testowy nieprzeczytania (bez klas CSS — zasada 4 AGENTS.md)
+      // Sam wiersz nie jest akcją, nawet gdy jest klikalny albo leży w przycisku — akcje są
+      // wyłącznie wewnątrz wiersza. Wyklucza go tylko etykieta „Oznacz … jako nieprzeczytane”.
+      const testIdSelector = '[data-testid*="unread" i]';
+      if (
+        (rowElement.matches?.(testIdSelector) && !this._hasActionLabel(rowElement)) ||
+        this._hasIndicator(rowElement, testIdSelector)
+      ) {
+        return true;
+      }
+
+      // 2. Element potomny z atrybutem aria-label wskazującym na nieprzeczytane wiadomości
+      if (this._hasIndicator(rowElement, '[aria-label*="nieprzeczytan" i], [aria-label*="unread" i]')) {
+        return true;
+      }
+
+      // 3. Sprawdzenie atrybutu aria-label na samym linku lub wierszu
+      const rowLabel = (rowElement.getAttribute?.('aria-label') || '').toLowerCase();
+      const linkLabel = (linkElement?.getAttribute?.('aria-label') || '').toLowerCase();
+      const combinedLabel = `${rowLabel} ${linkLabel}`;
+      if (combinedLabel.includes('nieprzeczytan') || combinedLabel.includes('unread')) {
+        if (!ACTION_LABEL_PATTERN.test(combinedLabel)) {
+          return true;
+        }
+      }
+
+      // 4. Wizualny wskaźnik kropki (blue dot indicator: rgb(0, 132, 255) lub #0084ff), z pominięciem awatarów
+      if (
+        this._hasIndicator(
+          rowElement,
+          '[style*="rgb(0, 132, 255)"], [style*="#0084ff" i]',
+          (element) => !this._isAvatarElement(element)
+        )
+      ) {
+        return true;
+      }
+
+      // 5. Atrybut danych data-unread="true" na wierszu lub elemencie potomnym
+      if (
+        rowElement.getAttribute?.('data-unread') === 'true' ||
+        rowElement.matches?.('[data-unread="true"]') ||
+        Boolean(rowElement.querySelector?.('[data-unread="true"]'))
+      ) {
+        return true;
+      }
+
+      return false;
+    }
+
+    /**
      * Odczytuje adres URL awatara z wiersza czatu.
      * @param {Element} rowElement Element wiersza czatu.
      * @returns {string} Adres URL awatara lub pusty ciąg.
@@ -365,13 +515,15 @@
 
           const name = this.extractThreadName(rowElement, link);
           const avatar = this.extractThreadAvatar(rowElement);
+          const isUnread = this.isThreadUnread(rowElement, link);
 
           detectedThreads.push({
             threadId,
             rowElement,
             linkElement: link,
             name,
-            avatar
+            avatar,
+            isUnread: Boolean(isUnread)
           });
         }
       }
